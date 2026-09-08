@@ -13,7 +13,9 @@ import {
   DatabaseBackup,
   Menu,
   X,
-  Sparkles
+  Sparkles,
+  LogOut,
+  User
 } from 'lucide-react';
 import { ActiveTab, CurrencyMode } from '../types';
 
@@ -28,6 +30,8 @@ interface NavigationProps {
   onOpenNewTransaction: () => void;
   onExportExcel: () => void;
   onOpenBackupModal: () => void;
+  userEmail?: string;
+  onLogout?: () => void;
 }
 
 export const NAV_TABS = [
@@ -80,6 +84,8 @@ export const Sidebar: React.FC<NavigationProps> = ({
   onOpenNewTransaction,
   onExportExcel,
   onOpenBackupModal,
+  userEmail,
+  onLogout,
 }) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -185,6 +191,26 @@ export const Sidebar: React.FC<NavigationProps> = ({
           <div className="text-xs text-slate-400">نسخه ۴.۲.۰ • فعال</div>
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
         </div>
+
+        {/* User Account & Logout in Sidebar */}
+        {onLogout && (
+          <div className="pt-2 border-t border-slate-800/80">
+            {userEmail && (
+              <div className="px-2 py-1 text-[11px] text-slate-400 truncate flex items-center gap-1.5 font-mono mb-1.5" title={userEmail}>
+                <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <span className="truncate" dir="ltr">{userEmail}</span>
+              </div>
+            )}
+            <button
+              id="sidebar-logout-btn"
+              onClick={onLogout}
+              className="w-full p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>خروج از حساب کاربری</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -242,6 +268,8 @@ interface TopHeaderProps {
   onOpenNewTransaction: () => void;
   onExportExcel: () => void;
   onOpenBackupModal: () => void;
+  userEmail?: string;
+  onLogout?: () => void;
 }
 
 /**
@@ -257,6 +285,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenNewTransaction,
   onExportExcel,
   onOpenBackupModal,
+  userEmail,
+  onLogout,
 }) => {
   const currentTabMeta = TAB_META[activeTab] || {
     title: 'سامانه مدیریت مالی',
@@ -311,6 +341,30 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <PlusCircle className="w-4 h-4" />
           <span>+ ثبت تراکنش</span>
         </button>
+
+        {/* Supabase User & Logout */}
+        {onLogout && (
+          <div className="flex items-center gap-2 border-r border-slate-200 pr-2.5 mr-1">
+            {userEmail && (
+              <div 
+                className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 border border-slate-200/80 rounded-lg text-slate-700 text-xs font-mono font-medium max-w-[210px] truncate"
+                title={`کاربر وارد شده: ${userEmail}`}
+              >
+                <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
+                <span className="truncate" dir="ltr">{userEmail}</span>
+              </div>
+            )}
+            <button
+              id="header-logout-btn"
+              onClick={onLogout}
+              className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="خروج امن از سامانه (Supabase Logout)"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>خروج</span>
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

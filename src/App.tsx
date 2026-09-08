@@ -55,11 +55,67 @@ import {
   PERSIAN_MONTHS 
 } from './utils/formatters';
 
+import { 
+  supabase, 
+  isSupabaseConfigured, 
+  User, 
+  Session 
+} from './lib/supabase';
+import { AuthScreen } from './components/AuthScreen';
+import { Building2, Loader2 } from 'lucide-react';
+
 export default function App() {
   const [companyName] = useState<string>(INITIAL_COMPANY_NAME);
   const [selectedYear, setSelectedYear] = useState<number>(INITIAL_YEAR);
   const [currencyMode, setCurrencyMode] = useState<CurrencyMode>('rial');
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+
+  // Supabase Authentication state
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+
+  // Monitor Supabase auth session
+  useEffect(() => {
+    if (!supabase) {
+      setIsAuthLoading(false);
+      return;
+    }
+
+    // Check active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsAuthLoading(false);
+    }).catch((err) => {
+      console.error('Supabase getSession error:', err);
+      setIsAuthLoading(false);
+    });
+
+    // Listen for auth state transitions (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+      setIsAuthLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error('Sign out error:', err);
+      }
+    }
+    setUser(null);
+    setSession(null);
+    showToast('با موفقیت از سامانه خارج شدید.');
+  };
 
   // Core Data States (persisted to localStorage)
   const [transactions, setTransactions] = useState<FinancialTransaction[]>(() => {
@@ -398,6 +454,37 @@ export default function App() {
     showToast('داده‌های نمونه اولیه با موفقیت بازنشانی شدند.');
   };
 
+  // 1. Loading screen while restoring Supabase session
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white" dir="rtl">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xl shadow-blue-500/20 border border-blue-400/30">
+            <Building2 className="w-7 h-7 animate-pulse" />
+          </div>
+          <div className="flex items-center gap-2 text-slate-300 text-sm font-medium">
+            <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+            <span>در حال بررسی نشست کاربری با Supabase...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Strict authentication guard: No part of the app is rendered until the user is signed in
+  if (!user) {
+    return (
+      <AuthScreen 
+        onAuthSuccess={() => {
+          supabase?.auth.getSession().then(({ data: { session } }) => {
+            setSession(session);
+            setUser(session?.user ?? null);
+          });
+        }} 
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col md:flex-row overflow-x-hidden selection:bg-blue-100 selection:text-blue-900 font-sans" dir="rtl" id="main-app">
       
@@ -413,6 +500,8 @@ export default function App() {
         onOpenNewTransaction={handleOpenNewTransaction}
         onExportExcel={handleExportExcel}
         onOpenBackupModal={() => setIsBackupModalOpen(true)}
+        userEmail={user.email}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Column */}
@@ -428,6 +517,8 @@ export default function App() {
           onOpenNewTransaction={handleOpenNewTransaction}
           onExportExcel={handleExportExcel}
           onOpenBackupModal={() => setIsBackupModalOpen(true)}
+          userEmail={user.email}
+          onLogout={handleLogout}
         />
 
         {/* Main Content Area */}
