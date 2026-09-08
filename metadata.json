@@ -1,0 +1,6 @@
+{
+  "name": "مدیریت مالی آینده نگاران خلاق",
+  "description": "سامانه مدیریت درآمدها، هزینه‌ها، حقوق کارمندان، سهامداران، تسهیلات و خروجی اکسل شرکت آینده نگاران خلاق",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
