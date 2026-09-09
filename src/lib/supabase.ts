@@ -1,18 +1,8 @@
 import { createClient, SupabaseClient, User, Session, AuthError } from '@supabase/supabase-js';
 
-// Retrieve credentials according to the requested environment variable pattern
-const rawUrl = 
-  (typeof process !== 'undefined' && process.env?.SUPABASE_URL) ||
-  ((import.meta as any).env?.VITE_SUPABASE_URL as string) ||
-  '';
-
-const rawKey = 
-  (typeof process !== 'undefined' && process.env?.SUPABASE_ANON_KEY) ||
-  ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string) ||
-  '';
-
-export const SUPABASE_URL: string = rawUrl.trim();
-export const SUPABASE_ANON_KEY: string = rawKey.trim();
+// Retrieve credentials strictly from Vite environment variables
+export const SUPABASE_URL: string = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+export const SUPABASE_ANON_KEY: string = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
 export const isSupabaseConfigured = Boolean(
   SUPABASE_URL && 

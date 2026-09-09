@@ -47,7 +47,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
 
     if (!isSupabaseConfigured || !supabase) {
       setErrorMessage(
-        'متغیرهای محیطی SUPABASE_URL یا SUPABASE_ANON_KEY هنوز در تنظیمات محیط پروژه ست نشده‌اند. لطفاً ابتدا مقادیر معتبر پروژه سوپابیس را در متغیرهای محیطی تنظیم نمایید.'
+        'متغیرهای محیطی VITE_SUPABASE_URL یا VITE_SUPABASE_ANON_KEY هنوز در تنظیمات محیط پروژه ست نشده‌اند. لطفاً ابتدا مقادیر معتبر پروژه سوپابیس را در متغیرهای محیطی تنظیم نمایید.'
       );
       return;
     }
@@ -170,8 +170,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
               <div className="space-y-1">
                 <div className="font-bold text-amber-300">نیاز به پیکربندی Supabase:</div>
                 <p className="text-amber-200/90 leading-relaxed text-[11px]">
-                  متغیرهای محیطی <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">SUPABASE_URL</code> و{' '}
-                  <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">SUPABASE_ANON_KEY</code> هنوز در متغیرهای محیطی ست نشده‌اند. پس از تنظیم در پنل Settings، ورود با سوپابیس فعال خواهد شد.
+                  متغیرهای محیطی <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">VITE_SUPABASE_URL</code> و{' '}
+                  <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">VITE_SUPABASE_ANON_KEY</code> هنوز در متغیرهای محیطی ست نشده‌اند. پس از تنظیم در پنل Settings، ورود با سوپابیس فعال خواهد شد.
                 </p>
               </div>
             </div>
