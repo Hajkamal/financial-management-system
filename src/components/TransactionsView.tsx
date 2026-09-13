@@ -29,9 +29,11 @@ import {
   EXPENSE_CATEGORY_CONFIG,
   BASINA_SUBCATEGORY_CONFIG,
   INFRASTRUCTURE_SUBCATEGORY_CONFIG,
-  toPersianDigits
+  toPersianDigits,
+  exportTransactionsToExcel
 } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import { FileSpreadsheet } from 'lucide-react';
 
 interface TransactionsViewProps {
   transactions: FinancialTransaction[];
@@ -40,6 +42,8 @@ interface TransactionsViewProps {
   onOpenNewTransaction: () => void;
   onEditTransaction: (tx: FinancialTransaction) => void;
   onDeleteTransaction: (id: string) => void;
+  companyName?: string;
+  onShowToast?: (msg: string) => void;
 }
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({
@@ -49,6 +53,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   onOpenNewTransaction,
   onEditTransaction,
   onDeleteTransaction,
+  companyName = 'آینده نگاران خلاق',
+  onShowToast,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | TransactionType>('all');
@@ -107,13 +113,27 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onOpenNewTransaction}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>ثبت سند جدید</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              exportTransactionsToExcel(companyName, selectedYear, transactions);
+              if (onShowToast) onShowToast(`فایل اکسل تراکنش‌های سال مالی ${selectedYear} با موفقیت دانلود شد.`);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+            title={`دانلود فایل اکسل تراکنش‌های سال ${selectedYear}`}
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>خروجی اکسل تراکنش‌ها</span>
+          </button>
+
+          <button
+            onClick={onOpenNewTransaction}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>ثبت سند جدید</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Toolbar */}

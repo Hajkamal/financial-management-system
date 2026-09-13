@@ -1,7 +1,39 @@
-import { Employee, SalaryMatrixItem, CompanyMember, Loan, FinancialTransaction } from '../types';
+import { Employee, SalaryMatrixItem, CompanyMember, Loan, FinancialTransaction, FiscalYear } from '../types';
 
 export const INITIAL_COMPANY_NAME = 'آینده نگاران خلاق';
 export const INITIAL_YEAR = 1404;
+
+export const INITIAL_FISCAL_YEARS: FiscalYear[] = [
+  {
+    year: 1403,
+    title: 'سال مالی ۱۴۰۳',
+    startDate: '۱۴۰۳/۰۱/۰۱',
+    endDate: '۱۴۰۳/۱۲/۲۹',
+    isClosed: true,
+    closedAt: '۱۴۰۳/۱۲/۲۹',
+    notes: 'سال مالی منتهی به اسفند ۱۴۰۳ به صورت کامل بسته و دفاتر قطعی شده‌اند.',
+    openingBalance: 0,
+    closingBalance: 4200000000,
+  },
+  {
+    year: 1404,
+    title: 'سال مالی ۱۴۰۴ (جاری)',
+    startDate: '۱۴۰۴/۰۱/۰۱',
+    endDate: '۱۴۰۴/۱۲/۲۹',
+    isClosed: false,
+    notes: 'سال مالی جاری شرکت با تمرکز بر گسترش خدمات هوش مصنوعی باسینا.',
+    openingBalance: 4200000000,
+  },
+  {
+    year: 1405,
+    title: 'سال مالی ۱۴۰۵',
+    startDate: '۱۴۰۵/۰۱/۰۱',
+    endDate: '۱۴۰۵/۱۲/۲۹',
+    isClosed: false,
+    notes: 'سال مالی آتی جهت برنامه‌ریزی بودجه و جذب سرمایه مرحله A.',
+    openingBalance: 0,
+  }
+];
 
 export const INITIAL_EMPLOYEES: Employee[] = [
   {

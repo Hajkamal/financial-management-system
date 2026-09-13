@@ -11,7 +11,8 @@ import {
   Trash2, 
   ArrowUpRight, 
   Wallet,
-  Coins
+  Coins,
+  FileSpreadsheet
 } from 'lucide-react';
 import { 
   CompanyMember, 
@@ -23,7 +24,8 @@ import {
 import { 
   formatCurrency, 
   toPersianDigits, 
-  PERSIAN_MONTHS 
+  PERSIAN_MONTHS,
+  exportMembersToExcel
 } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { AmountInput } from './AmountInput';
@@ -43,6 +45,8 @@ interface MembersViewProps {
     title: string;
     description?: string;
   }) => void;
+  companyName?: string;
+  onShowToast?: (msg: string) => void;
 }
 
 export const MembersView: React.FC<MembersViewProps> = ({
@@ -53,6 +57,8 @@ export const MembersView: React.FC<MembersViewProps> = ({
   onSaveMember,
   onDeleteMember,
   onAddMemberPayoutTransaction,
+  companyName = 'آینده نگاران خلاق',
+  onShowToast,
 }) => {
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<CompanyMember | null>(null);
@@ -177,7 +183,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <div className={`px-3 py-2 rounded-xl border text-xs font-bold ${
             totalSharePercentage === 100 
               ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
@@ -187,6 +193,18 @@ export const MembersView: React.FC<MembersViewProps> = ({
             <strong>{toPersianDigits(totalSharePercentage)}%</strong>
             {totalSharePercentage === 100 && ' (تکمیل ۱۰۰٪)'}
           </div>
+
+          <button
+            onClick={() => {
+              exportMembersToExcel(companyName, selectedYear, members, transactions);
+              if (onShowToast) onShowToast(`فایل اکسل سهامداران و برداشت‌ها برای سال مالی ${selectedYear} دانلود شد.`);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+            title={`دانلود فایل اکسل سهامداران و برداشت‌ها سال ${selectedYear}`}
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>خروجی اکسل سهامداران</span>
+          </button>
 
           <button
             onClick={handleOpenAdd}

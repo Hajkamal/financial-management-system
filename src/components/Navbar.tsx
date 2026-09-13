@@ -15,9 +15,12 @@ import {
   X,
   Sparkles,
   LogOut,
-  User
+  User,
+  CalendarCheck,
+  Lock,
+  Settings2
 } from 'lucide-react';
-import { ActiveTab, CurrencyMode } from '../types';
+import { ActiveTab, CurrencyMode, FiscalYear } from '../types';
 
 interface NavigationProps {
   companyName: string;
@@ -32,6 +35,7 @@ interface NavigationProps {
   onOpenBackupModal: () => void;
   userEmail?: string;
   onLogout?: () => void;
+  fiscalYears?: FiscalYear[];
 }
 
 export const NAV_TABS = [
@@ -41,6 +45,7 @@ export const NAV_TABS = [
   { id: 'employees' as ActiveTab, label: 'مدیریت پرسنل', icon: Users2 },
   { id: 'loans' as ActiveTab, label: 'تسهیلات و اقساط', icon: Landmark },
   { id: 'members' as ActiveTab, label: 'سهامداران و اعضا', icon: UserCheck },
+  { id: 'fiscal-years' as ActiveTab, label: 'سال‌های مالی', icon: CalendarCheck },
 ];
 
 export const TAB_META: Record<ActiveTab, { title: string; subtitle: string }> = {
@@ -67,6 +72,10 @@ export const TAB_META: Record<ActiveTab, { title: string; subtitle: string }> = 
   'members': {
     title: 'سهامداران و اعضای شرکت',
     subtitle: 'سهم‌الشرکه، واریزی‌های سرمایه، سود پرداختی و برداشتی‌ها'
+  },
+  'fiscal-years': {
+    title: 'مدیریت سال‌های مالی و دوره‌ها',
+    subtitle: 'تعریف سال جدید، بستن سال مالی، انتقال مانده به دوره بعد و قفل اسناد'
   }
 };
 
@@ -86,6 +95,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
   onOpenBackupModal,
   userEmail,
   onLogout,
+  fiscalYears,
 }) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -154,21 +164,39 @@ export const Sidebar: React.FC<NavigationProps> = ({
       <div className="p-4 border-t border-slate-800 space-y-2 bg-slate-900/60">
         {/* Year toggle */}
         <div className="bg-slate-800 p-2 rounded-lg flex items-center justify-between text-xs">
-          <span className="text-slate-400">سال مالی:</span>
           <div className="flex items-center gap-1">
-            {[1403, 1404, 1405].map((yr) => (
-              <button
-                key={yr}
-                onClick={() => setSelectedYear(yr)}
-                className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                  selectedYear === yr
-                    ? 'bg-blue-600 text-white font-bold'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {yr}
-              </button>
-            ))}
+            <span className="text-slate-400">سال مالی:</span>
+            <button
+              onClick={() => setActiveTab('fiscal-years')}
+              className="p-1 text-slate-400 hover:text-blue-400 rounded hover:bg-slate-700 transition-colors"
+              title="مدیریت سال‌های مالی"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="flex items-center gap-1 overflow-x-auto max-w-[140px] py-0.5">
+            {(fiscalYears && fiscalYears.length > 0 
+              ? [...fiscalYears].sort((a, b) => a.year - b.year)
+              : [1403, 1404, 1405].map(y => ({ year: y, isClosed: false }))
+            ).map((fy) => {
+              const yr = typeof fy === 'number' ? fy : fy.year;
+              const isClosed = typeof fy === 'object' && fy.isClosed;
+              return (
+                <button
+                  key={yr}
+                  onClick={() => setSelectedYear(yr)}
+                  className={`px-2 py-0.5 rounded text-xs transition-colors shrink-0 flex items-center gap-0.5 ${
+                    selectedYear === yr
+                      ? 'bg-blue-600 text-white font-bold'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title={isClosed ? `سال مالی ${yr} (بسته شده)` : `سال مالی ${yr}`}
+                >
+                  <span>{yr}</span>
+                  {isClosed && <span className="text-[9px]">🔒</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -270,6 +298,7 @@ interface TopHeaderProps {
   onOpenBackupModal: () => void;
   userEmail?: string;
   onLogout?: () => void;
+  fiscalYears?: FiscalYear[];
 }
 
 /**
@@ -287,23 +316,33 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenBackupModal,
   userEmail,
   onLogout,
+  fiscalYears,
 }) => {
   const currentTabMeta = TAB_META[activeTab] || {
     title: 'سامانه مدیریت مالی',
     subtitle: `شرکت ${companyName} • سال مالی ${selectedYear}`
   };
 
+  const currentFiscalYear = fiscalYears?.find(y => y.year === selectedYear);
+  const isYearClosed = currentFiscalYear?.isClosed || false;
+
   return (
     <header className="min-h-20 bg-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between px-6 lg:px-8 py-4 gap-4" id="app-header">
       {/* Title & Period */}
       <div className="flex flex-col">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <h1 className="text-2xl font-black text-slate-800 tracking-tight">
             {currentTabMeta.title}
           </h1>
-          <span className="hidden sm:inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
             سال مالی {selectedYear}
           </span>
+          {isYearClosed && (
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-300 flex items-center gap-1 shadow-2xs">
+              <Lock className="w-3 h-3 text-amber-600" />
+              <span>سال مالی بسته شده (قطعی)</span>
+            </span>
+          )}
         </div>
         <div className="text-slate-400 text-xs sm:text-sm mt-0.5">
           {currentTabMeta.subtitle}

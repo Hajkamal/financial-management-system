@@ -22,6 +22,12 @@ import {
   LoansView 
 } from './components/LoansView';
 import { 
+  FiscalYearsView 
+} from './components/FiscalYearsView';
+import { 
+  ExportExcelModal 
+} from './components/ExportExcelModal';
+import { 
   TransactionModal 
 } from './components/TransactionModal';
 import { 
@@ -37,7 +43,8 @@ import {
   CompanyMember, 
   Loan, 
   PersianMonthNumber,
-  MemberPayoutType
+  MemberPayoutType,
+  FiscalYear
 } from './types';
 
 import { 
@@ -47,7 +54,8 @@ import {
   INITIAL_SALARY_MATRIX, 
   INITIAL_MEMBERS, 
   INITIAL_LOANS, 
-  INITIAL_TRANSACTIONS 
+  INITIAL_TRANSACTIONS,
+  INITIAL_FISCAL_YEARS
 } from './data/initialData';
 
 import { 
@@ -163,10 +171,20 @@ export default function App() {
     }
   });
 
+  const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>(() => {
+    try {
+      const saved = localStorage.getItem('ayandeh_fiscal_years');
+      return saved ? JSON.parse(saved) : INITIAL_FISCAL_YEARS;
+    } catch {
+      return INITIAL_FISCAL_YEARS;
+    }
+  });
+
   // Modals state
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<FinancialTransaction | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -198,6 +216,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('ayandeh_loans', JSON.stringify(loans));
   }, [loans]);
+
+  useEffect(() => {
+    localStorage.setItem('ayandeh_fiscal_years', JSON.stringify(fiscalYears));
+  }, [fiscalYears]);
 
   // Transactions Handlers
   const handleOpenNewTransaction = () => {
@@ -410,23 +432,95 @@ export default function App() {
     showToast(`قسط تسهیلات با موفقیت واریز و در هزینه‌ها ثبت شد.`);
   };
 
-  // Excel Export
-  const handleExportExcel = () => {
-    try {
-      exportToExcel(
-        companyName,
-        selectedYear,
-        transactions,
-        employees,
-        salaryMatrix,
-        members,
-        loans
-      );
-      showToast('فایل اکسل جامع چند شیتی با موفقیت تولید و دانلود شد.');
-    } catch (err) {
-      console.error(err);
-      alert('خطا در خروجی اکسل.');
+  // Fiscal Year Handlers
+  const handleAddFiscalYear = (yearData: Omit<FiscalYear, 'isClosed'> & { isClosed?: boolean }) => {
+    const newYear: FiscalYear = {
+      ...yearData,
+      isClosed: yearData.isClosed ?? false,
+    };
+    setFiscalYears(prev => {
+      const filtered = prev.filter(y => y.year !== newYear.year);
+      return [...filtered, newYear].sort((a, b) => a.year - b.year);
+    });
+  };
+
+  const handleUpdateFiscalYear = (year: number, updated: Partial<FiscalYear>) => {
+    setFiscalYears(prev => prev.map(fy => fy.year === year ? { ...fy, ...updated } : fy));
+  };
+
+  const handleDeleteFiscalYear = (year: number) => {
+    setFiscalYears(prev => prev.filter(fy => fy.year !== year));
+    if (selectedYear === year) {
+      const remaining = fiscalYears.filter(fy => fy.year !== year);
+      if (remaining.length > 0) {
+        setSelectedYear(remaining[0].year);
+      }
     }
+  };
+
+  const handleCloseFiscalYear = (
+    sourceYear: number, 
+    targetYear: number, 
+    createOpeningTx: boolean, 
+    openingAmount: number
+  ) => {
+    // 1. Mark source year as closed and guarantee target year exists
+    setFiscalYears(prev => {
+      const hasTarget = prev.some(y => y.year === targetYear);
+      const updated = prev.map(fy => {
+        if (fy.year === sourceYear) {
+          return { ...fy, isClosed: true, closedAt: new Date().toISOString() };
+        }
+        return fy;
+      });
+
+      if (!hasTarget) {
+        const newTarget: FiscalYear = {
+          year: targetYear,
+          title: `سال مالی ${targetYear}`,
+          startDate: `${targetYear}/01/01`,
+          endDate: `${targetYear}/12/29`,
+          openingBalance: openingAmount,
+          isClosed: false
+        };
+        return [...updated, newTarget].sort((a, b) => a.year - b.year);
+      }
+      return updated;
+    });
+
+    // 2. Automatically generate opening transaction in target year
+    if (createOpeningTx && openingAmount !== 0) {
+      const isProfit = openingAmount >= 0;
+      const openingTx: FinancialTransaction = {
+        id: `tx-opening-${targetYear}-${Date.now()}`,
+        type: isProfit ? 'income' : 'expense',
+        category: isProfit ? 'other_income' : 'office_site',
+        amount: Math.abs(openingAmount),
+        year: targetYear,
+        month: 1,
+        day: 1,
+        dateString: `${targetYear}/01/01`,
+        title: `مانده افتتاحیه و ${isProfit ? 'سود انباشته' : 'تراز منفی'} انتقالی از سال مالی ${sourceYear}`,
+        description: `سند افتتاحیه اتوماتیک در زمان بستن دفاتر سال مالی ${sourceYear}`,
+        recipientOrPayer: 'تراز اختتامیه سال قبل',
+        trackingCode: `OPN-${sourceYear}->${targetYear}`,
+      };
+      setTransactions(prev => [openingTx, ...prev]);
+    }
+
+    // 3. Switch active fiscal year to targetYear
+    setSelectedYear(targetYear);
+    showToast(`سال مالی ${sourceYear} با موفقیت بسته شد و به سال مالی ${targetYear} منتقل شدید.`);
+  };
+
+  const handleReopenFiscalYear = (year: number) => {
+    setFiscalYears(prev => prev.map(fy => fy.year === year ? { ...fy, isClosed: false } : fy));
+    showToast(`دفاتر سال مالی ${year} با موفقیت بازگشایی گردید.`);
+  };
+
+  // Excel Export Modal Trigger
+  const handleExportExcel = () => {
+    setIsExportModalOpen(true);
   };
 
   // Restore and Reset
@@ -502,6 +596,7 @@ export default function App() {
         onOpenBackupModal={() => setIsBackupModalOpen(true)}
         userEmail={user.email}
         onLogout={handleLogout}
+        fiscalYears={fiscalYears}
       />
 
       {/* Main Content Column */}
@@ -519,6 +614,7 @@ export default function App() {
           onOpenBackupModal={() => setIsBackupModalOpen(true)}
           userEmail={user.email}
           onLogout={handleLogout}
+          fiscalYears={fiscalYears}
         />
 
         {/* Main Content Area */}
@@ -542,6 +638,8 @@ export default function App() {
               onOpenNewTransaction={handleOpenNewTransaction}
               onEditTransaction={handleEditTransaction}
               onDeleteTransaction={handleDeleteTransaction}
+              companyName={companyName}
+              onShowToast={showToast}
             />
           )}
 
@@ -559,6 +657,8 @@ export default function App() {
               onDeleteTransaction={handleDeleteTransaction}
               onNavigateToEmployees={() => setActiveTab('employees')}
               onNavigateToMembers={() => setActiveTab('members')}
+              companyName={companyName}
+              onShowToast={showToast}
             />
           )}
 
@@ -570,6 +670,8 @@ export default function App() {
               currencyMode={currencyMode}
               onSaveEmployee={handleSaveEmployee}
               onDeleteEmployee={handleDeleteEmployee}
+              companyName={companyName}
+              onShowToast={showToast}
             />
           )}
 
@@ -582,6 +684,8 @@ export default function App() {
               onSaveMember={handleSaveMember}
               onDeleteMember={handleDeleteMember}
               onAddMemberPayoutTransaction={handleAddMemberPayoutTransaction}
+              companyName={companyName}
+              onShowToast={showToast}
             />
           )}
 
@@ -594,6 +698,23 @@ export default function App() {
               onSaveLoan={handleSaveLoan}
               onDeleteLoan={handleDeleteLoan}
               onPayInstallment={handlePayLoanInstallment}
+              companyName={companyName}
+              onShowToast={showToast}
+            />
+          )}
+
+          {activeTab === 'fiscal-years' && (
+            <FiscalYearsView
+              fiscalYears={fiscalYears}
+              selectedYear={selectedYear}
+              currencyMode={currencyMode}
+              transactions={transactions}
+              onSelectYear={setSelectedYear}
+              onAddFiscalYear={handleAddFiscalYear}
+              onUpdateFiscalYear={handleUpdateFiscalYear}
+              onDeleteFiscalYear={handleDeleteFiscalYear}
+              onCloseFiscalYear={handleCloseFiscalYear}
+              onReopenFiscalYear={handleReopenFiscalYear}
             />
           )}
         </main>
@@ -633,6 +754,21 @@ export default function App() {
         selectedYear={selectedYear}
         onRestoreData={handleRestoreData}
         onResetToDefaults={handleResetToDefaults}
+      />
+
+      {/* Comprehensive & Specific Section Excel Export Modal */}
+      <ExportExcelModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        companyName={companyName}
+        selectedYear={selectedYear}
+        fiscalYears={fiscalYears}
+        transactions={transactions}
+        employees={employees}
+        salaryMatrix={salaryMatrix}
+        members={members}
+        loans={loans}
+        onShowToast={showToast}
       />
 
       {/* Toast Notification */}

@@ -10,7 +10,8 @@ import {
   ArrowUpDown,
   Download,
   Users2,
-  Briefcase
+  Briefcase,
+  FileSpreadsheet
 } from 'lucide-react';
 import { 
   Employee, 
@@ -24,7 +25,8 @@ import {
 import { 
   PERSIAN_MONTHS, 
   formatCurrency, 
-  toPersianDigits 
+  toPersianDigits,
+  exportSalaryMatrixToExcel 
 } from '../utils/formatters';
 import { AmountInput } from './AmountInput';
 import { MemberSalarySection } from './MemberSalarySection';
@@ -52,6 +54,8 @@ interface SalaryMatrixViewProps {
   onDeleteTransaction: (id: string) => void;
   onNavigateToEmployees: () => void;
   onNavigateToMembers?: () => void;
+  companyName?: string;
+  onShowToast?: (msg: string) => void;
 }
 
 export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
@@ -67,6 +71,8 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
   onDeleteTransaction,
   onNavigateToEmployees,
   onNavigateToMembers,
+  companyName = 'آینده نگاران خلاق',
+  onShowToast,
 }) => {
   // Sub-tab: 'staff' (Employees Matrix) or 'members' (Company Members Salary & Withdrawals)
   const [payrollSubTab, setPayrollSubTab] = useState<'staff' | 'members'>('staff');
@@ -216,13 +222,25 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <div className="bg-emerald-50 border border-emerald-200/80 px-4 py-2 rounded-xl text-xs">
             <span className="text-emerald-700 block font-medium">جمع کل حقوق‌های سال {selectedYear}:</span>
             <span className="text-base font-black text-emerald-900">
               {formatCurrency(totalAllSalariesYear, currencyMode)}
             </span>
           </div>
+
+          <button
+            onClick={() => {
+              exportSalaryMatrixToExcel(companyName, selectedYear, employees, salaryMatrix);
+              if (onShowToast) onShowToast(`ماتریس حقوق سال مالی ${selectedYear} با موفقیت در قالب اکسل دانلود شد.`);
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
+            title={`دانلود اکسل ماتریس حقوق سال ${selectedYear}`}
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>خروجی اکسل ماتریس حقوق</span>
+          </button>
 
           <button
             onClick={onNavigateToEmployees}

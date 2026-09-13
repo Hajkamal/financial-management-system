@@ -122,10 +122,23 @@ export interface FinancialTransaction {
 
 export type CurrencyMode = 'rial' | 'toman';
 
+export interface FiscalYear {
+  year: number;              // مثلا 1404
+  title: string;             // مثلا سال مالی ۱۴۰۴
+  startDate: string;         // مثلا ۱۴۰۴/۰۱/۰۱
+  endDate: string;           // مثلا ۱۴۰۴/۱۲/۲۹
+  isClosed: boolean;         // آیا سال مالی بسته شده؟
+  closedAt?: string;         // تاریخ بسته شدن
+  notes?: string;            // توضیحات و یادداشت
+  openingBalance?: number;   // مانده افتتاحیه به ریال
+  closingBalance?: number;   // مانده نهایی اختتامیه به ریال
+}
+
 export type ActiveTab = 
   | 'dashboard'
   | 'transactions'
   | 'salary-matrix'
   | 'employees'
   | 'members'
-  | 'loans';
+  | 'loans'
+  | 'fiscal-years';

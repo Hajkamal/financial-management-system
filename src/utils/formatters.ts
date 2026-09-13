@@ -186,20 +186,9 @@ export const INFRASTRUCTURE_SUBCATEGORY_CONFIG: Record<InfrastructureSubCategory
   domain_tools: 'دامنه‌ها و ابزارهای توسعه',
 };
 
-// Excel Export function with multiple rich sheets
-export function exportToExcel(
-  companyName: string,
-  year: number,
-  transactions: FinancialTransaction[],
-  employees: Employee[],
-  salaryMatrix: SalaryMatrixItem[],
-  members: CompanyMember[],
-  loans: Loan[]
-) {
-  const wb = XLSX.utils.book_new();
-
-  // 1. Transactions Sheet (تراکنش‌ها)
-  const txData = transactions.map((t, idx) => {
+// Helper to format transactions for Excel rows
+function mapTransactionsToExcelRows(transactions: FinancialTransaction[]) {
+  return transactions.map((t, idx) => {
     let categoryLabel = '';
     if (t.type === 'income') {
       categoryLabel = INCOME_CATEGORY_CONFIG[t.category as IncomeCategory]?.label || t.category;
@@ -230,16 +219,10 @@ export function exportToExcel(
       'توضیحات': t.description || '-',
     };
   });
-  const txWs = XLSX.utils.json_to_sheet(txData);
-  XLSX.utils.book_append_sheet(wb, txWs, 'ریز تمام تراکنش‌ها');
+}
 
-  // 2. Salary Matrix Sheet (حقوق کارمندان - مشابه شیت گوگل کاربر در تصویر)
-  const salaryHeaders = ['ماه'];
-  employees.forEach(emp => {
-    salaryHeaders.push(emp.hasInsurance ? `${emp.name} (بیمه)` : emp.name);
-  });
-  salaryHeaders.push('جمع کل ماه (ریال)');
-
+// Helper to prepare Salary Matrix data for a specific year
+function prepareSalaryMatrixRows(employees: Employee[], salaryMatrix: SalaryMatrixItem[], year: number) {
   const matrixRows: Record<string, any>[] = [];
   PERSIAN_MONTHS.forEach(month => {
     const row: Record<string, any> = { 'ماه': month.name };
@@ -256,11 +239,12 @@ export function exportToExcel(
     });
 
     row['جمع کل ماه (ریال)'] = monthTotal;
+    row['جمع کل ماه (تومان)'] = Math.round(monthTotal / 10);
     matrixRows.push(row);
   });
 
   // Total summary row for employees
-  const totalRow: Record<string, any> = { 'ماه': 'مجموع کل سال' };
+  const totalRow: Record<string, any> = { 'ماه': `مجموع سال مالی ${year}` };
   let grandTotal = 0;
   employees.forEach(emp => {
     const empTotal = salaryMatrix
@@ -271,14 +255,17 @@ export function exportToExcel(
     grandTotal += empTotal;
   });
   totalRow['جمع کل ماه (ریال)'] = grandTotal;
+  totalRow['جمع کل ماه (تومان)'] = Math.round(grandTotal / 10);
   matrixRows.push(totalRow);
 
-  const salaryWs = XLSX.utils.json_to_sheet(matrixRows);
-  XLSX.utils.book_append_sheet(wb, salaryWs, 'ماتریس حقوق کارمندان');
+  return matrixRows;
+}
 
-  // 3. Members & Payouts Sheet (اعضا و سهامداران)
-  const memberData = members.map(m => {
-    const memberTxs = transactions.filter(t => t.relatedMemberId === m.id && t.year === year);
+// Helper to prepare Members & Shareholders data for a specific year
+function prepareMembersRows(members: CompanyMember[], transactions: FinancialTransaction[], year: number) {
+  const yearTxs = transactions.filter(t => t.year === year);
+  return members.map((m, idx) => {
+    const memberTxs = yearTxs.filter(t => t.relatedMemberId === m.id);
     const salaryPaid = memberTxs
       .filter(t => t.memberPayoutType === 'salary')
       .reduce((acc, t) => acc + t.amount, 0);
@@ -287,41 +274,51 @@ export function exportToExcel(
       .reduce((acc, t) => acc + t.amount, 0);
 
     return {
+      'ردیف': idx + 1,
       'نام عضو / سهامدار': m.name,
       'درصد سهام': `${m.sharePercentage}%`,
       'وضعیت در شرکت': m.isWorkingForce ? 'نیروی فعال شرکت (دارای حقوق کارکرد)' : 'صرفاً سهامدار و عضو',
       'سِمَت': m.role,
-      'کل حقوق ماهانه کارکرد دریافتی (ریال)': salaryPaid,
-      'کل برداشت سود و متفرقه (ریال)': profitWithdrawal,
+      'حقوق کارکرد سال (ریال)': salaryPaid,
+      'برداشت سود سال (ریال)': profitWithdrawal,
       'مجموع دریافتی کل سال (ریال)': salaryPaid + profitWithdrawal,
+      'مجموع دریافتی کل سال (تومان)': Math.round((salaryPaid + profitWithdrawal) / 10),
       'شماره شبا': m.iban || '-',
       'شماره تماس': m.phone || '-',
     };
   });
-  const membersWs = XLSX.utils.json_to_sheet(memberData);
-  XLSX.utils.book_append_sheet(wb, membersWs, 'سهامداران و برداشت اعضا');
+}
 
-  // 4. Employees Roster Sheet (مشخصات پرسنل)
-  const employeesData = employees.map((e, idx) => ({
-    'ردیف': idx + 1,
-    'نام و نام خانوادگی': e.name,
-    'عنوان شغلی': e.role,
-    'وضعیت همکاری': e.status === 'active' ? 'فعال' : e.status === 'probation' ? 'آزمایشی' : 'قطع همکاری',
-    'تاریخ شروع به کار': e.startDate,
-    'تاریخ پایان کار': e.endDate || 'در حال همکاری',
-    'حقوق پایه مصوب (ریال)': e.baseSalary,
-    'حقوق پایه مصوب (تومان)': Math.round(e.baseSalary / 10),
-    'وضعیت بیمه': e.hasInsurance ? 'دارای بیمه' : 'بدون بیمه',
-    'شماره بیمه': e.insuranceNumber || '-',
-    'شماره تماس': e.phone || '-',
-    'کد ملی': e.nationalId || '-',
-    'شماره شبا': e.iban || '-',
-  }));
-  const empWs = XLSX.utils.json_to_sheet(employeesData);
-  XLSX.utils.book_append_sheet(wb, empWs, 'لیست پرسنل و کارمندان');
+// Helper to prepare Employees Roster data
+function prepareEmployeesRows(employees: Employee[], salaryMatrix: SalaryMatrixItem[], year: number) {
+  return employees.map((e, idx) => {
+    const yearPaidTotal = salaryMatrix
+      .filter(item => item.employeeId === e.id && item.year === year)
+      .reduce((sum, i) => sum + i.amount + (i.bonus || 0), 0);
 
-  // 5. Loans Sheet (تسهیلات و اقساط)
-  const loansData = loans.map((l, idx) => {
+    return {
+      'ردیف': idx + 1,
+      'نام و نام خانوادگی': e.name,
+      'عنوان شغلی': e.role,
+      'وضعیت همکاری': e.status === 'active' ? 'فعال' : e.status === 'probation' ? 'آزمایشی' : 'قطع همکاری',
+      'تاریخ شروع به کار': e.startDate,
+      'تاریخ پایان کار': e.endDate || 'در حال همکاری',
+      'حقوق پایه مصوب (ریال)': e.baseSalary,
+      'حقوق پایه مصوب (تومان)': Math.round(e.baseSalary / 10),
+      [`کل دریافتی سال ${year} (ریال)`]: yearPaidTotal,
+      [`کل دریافتی سال ${year} (تومان)`]: Math.round(yearPaidTotal / 10),
+      'وضعیت بیمه': e.hasInsurance ? 'دارای بیمه' : 'بدون بیمه',
+      'شماره بیمه': e.insuranceNumber || '-',
+      'شماره تماس': e.phone || '-',
+      'کد ملی': e.nationalId || '-',
+      'شماره شبا': e.iban || '-',
+    };
+  });
+}
+
+// Helper to prepare Loans data
+function prepareLoansRows(loans: Loan[]) {
+  return loans.map((l, idx) => {
     const remainingInstallments = l.totalInstallments - l.paidInstallments;
     const paidAmount = l.paidInstallments * l.installmentAmount;
     const remainingAmount = remainingInstallments * l.installmentAmount;
@@ -337,14 +334,151 @@ export function exportToExcel(
       'اقساط باقیمانده': remainingInstallments,
       'کل پرداختی تا کنون (ریال)': paidAmount,
       'مانده بدهی به ریال': remainingAmount,
+      'مانده بدهی به تومان': Math.round(remainingAmount / 10),
       'سررسید قسط بعدی': l.nextDueDate,
       'توضیحات': l.notes || '-',
     };
   });
-  const loansWs = XLSX.utils.json_to_sheet(loansData);
-  XLSX.utils.book_append_sheet(wb, loansWs, 'تسهیلات و بدهی‌های شرکت');
+}
+
+// 1. Comprehensive Excel Export (خروجی کامل کل سال مالی در چند شیت)
+export function exportToExcel(
+  companyName: string,
+  year: number,
+  transactions: FinancialTransaction[],
+  employees: Employee[],
+  salaryMatrix: SalaryMatrixItem[],
+  members: CompanyMember[],
+  loans: Loan[]
+) {
+  const wb = XLSX.utils.book_new();
+
+  // فیلتر دقیق تراکنش‌های سال مالی انتخابی
+  const yearTransactions = transactions.filter(t => t.year === year);
+
+  // شیت خلاصه عملکرد مالی سال
+  const totalIncome = yearTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const totalExpense = yearTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const netProfit = totalIncome - totalExpense;
+
+  const summaryData = [
+    { 'عنوان شاخص': `گزارش جامع مالی شرکت ${companyName} در سال مالی ${year}`, 'مقدار (ریال)': '', 'مقدار (تومان)': '' },
+    { 'عنوان شاخص': 'کل درآمدهای سال', 'مقدار (ریال)': totalIncome, 'مقدار (تومان)': Math.round(totalIncome / 10) },
+    { 'عنوان شاخص': 'کل هزینه‌های سال', 'مقدار (ریال)': totalExpense, 'مقدار (تومان)': Math.round(totalExpense / 10) },
+    { 'عنوان شاخص': 'سود / تراز خالص سال مالی', 'مقدار (ریال)': netProfit, 'مقدار (تومان)': Math.round(netProfit / 10) },
+    { 'عنوان شاخص': 'وضعیت تراز سال', 'مقدار (ریال)': netProfit >= 0 ? 'سودده (+) ' : 'زیان‌ده (-)', 'مقدار (تومان)': '' },
+    { 'عنوان شاخص': 'تعداد کل اسناد و تراکنش‌های ثبت‌شده', 'مقدار (ریال)': yearTransactions.length, 'مقدار (تومان)': '' },
+  ];
+  const summaryWs = XLSX.utils.json_to_sheet(summaryData);
+  XLSX.utils.book_append_sheet(wb, summaryWs, `خلاصه عملکرد سال ${year}`);
+
+  // شیت ۱: تراکنش‌های همان سال
+  const txRows = mapTransactionsToExcelRows(yearTransactions);
+  const txWs = XLSX.utils.json_to_sheet(txRows.length > 0 ? txRows : [{ 'پیام': `هیچ تراکنشی در سال مالی ${year} ثبت نشده است.` }]);
+  XLSX.utils.book_append_sheet(wb, txWs, `تراکنش‌های سال ${year}`);
+
+  // شیت ۲: ماتریس حقوق کارمندان سال
+  const salaryRows = prepareSalaryMatrixRows(employees, salaryMatrix, year);
+  const salaryWs = XLSX.utils.json_to_sheet(salaryRows);
+  XLSX.utils.book_append_sheet(wb, salaryWs, `ماتریس حقوق ${year}`);
+
+  // شیت ۳: اعضا و سهامداران
+  const membersRows = prepareMembersRows(members, transactions, year);
+  const membersWs = XLSX.utils.json_to_sheet(membersRows);
+  XLSX.utils.book_append_sheet(wb, membersWs, `سهامداران و برداشت‌ها ${year}`);
+
+  // شیت ۴: مشخصات پرسنل
+  const empRows = prepareEmployeesRows(employees, salaryMatrix, year);
+  const empWs = XLSX.utils.json_to_sheet(empRows);
+  XLSX.utils.book_append_sheet(wb, empWs, 'لیست پرسنل و کارمندان');
+
+  // شیت ۵: تسهیلات و اقساط
+  const loansRows = prepareLoansRows(loans);
+  const loansWs = XLSX.utils.json_to_sheet(loansRows);
+  XLSX.utils.book_append_sheet(wb, loansWs, 'تسهیلات و اقساط');
 
   // Save the workbook
-  const filename = `گزارش_مالی_${companyName.replace(/\s+/g, '_')}_سال_${year}.xlsx`;
+  const filename = `گزارش_جامع_مالی_${companyName.replace(/\s+/g, '_')}_سال_${year}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+// 2. Individual Section Exports (خروجی اختصاصی برای هر بخش)
+
+export function exportTransactionsToExcel(
+  companyName: string,
+  year: number,
+  transactions: FinancialTransaction[]
+) {
+  const wb = XLSX.utils.book_new();
+  const yearTxs = transactions.filter(t => t.year === year);
+  const rows = mapTransactionsToExcelRows(yearTxs);
+
+  const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ 'پیام': `تراکنشی در سال مالی ${year} یافت نشد.` }]);
+  XLSX.utils.book_append_sheet(wb, ws, `تراکنش‌های سال ${year}`);
+
+  const filename = `دفتر_تراکنش‌های_${companyName.replace(/\s+/g, '_')}_سال_${year}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+export function exportSalaryMatrixToExcel(
+  companyName: string,
+  year: number,
+  employees: Employee[],
+  salaryMatrix: SalaryMatrixItem[]
+) {
+  const wb = XLSX.utils.book_new();
+  const rows = prepareSalaryMatrixRows(employees, salaryMatrix, year);
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, `ماتریس حقوق سال ${year}`);
+
+  const filename = `ماتریس_حقوق_پرسنل_${companyName.replace(/\s+/g, '_')}_سال_${year}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+export function exportEmployeesToExcel(
+  companyName: string,
+  year: number,
+  employees: Employee[],
+  salaryMatrix: SalaryMatrixItem[]
+) {
+  const wb = XLSX.utils.book_new();
+  const rows = prepareEmployeesRows(employees, salaryMatrix, year);
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, 'لیست پرسنل');
+
+  const filename = `لیست_پرسنل_${companyName.replace(/\s+/g, '_')}_سال_${year}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+export function exportMembersToExcel(
+  companyName: string,
+  year: number,
+  members: CompanyMember[],
+  transactions: FinancialTransaction[]
+) {
+  const wb = XLSX.utils.book_new();
+  const rows = prepareMembersRows(members, transactions, year);
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, `سهامداران و برداشت‌ها ${year}`);
+
+  const filename = `حقوق_و_برداشت_اعضا_${companyName.replace(/\s+/g, '_')}_سال_${year}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+export function exportLoansToExcel(
+  companyName: string,
+  year: number,
+  loans: Loan[]
+) {
+  const wb = XLSX.utils.book_new();
+  const rows = prepareLoansRows(loans);
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, 'تسهیلات و اقساط');
+
+  const filename = `تسهیلات_و_اقساط_${companyName.replace(/\s+/g, '_')}.xlsx`;
   XLSX.writeFile(wb, filename);
 }

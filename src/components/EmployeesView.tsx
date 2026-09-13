@@ -12,10 +12,11 @@ import {
   Check, 
   Clock, 
   UserX,
-  Search
+  Search,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Employee, CurrencyMode, SalaryMatrixItem } from '../types';
-import { formatCurrency, toPersianDigits } from '../utils/formatters';
+import { formatCurrency, toPersianDigits, exportEmployeesToExcel } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { AmountInput } from './AmountInput';
 
@@ -26,6 +27,8 @@ interface EmployeesViewProps {
   currencyMode: CurrencyMode;
   onSaveEmployee: (employee: Employee) => void;
   onDeleteEmployee: (id: string) => void;
+  companyName?: string;
+  onShowToast?: (msg: string) => void;
 }
 
 export const EmployeesView: React.FC<EmployeesViewProps> = ({
@@ -35,6 +38,8 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
   currencyMode,
   onSaveEmployee,
   onDeleteEmployee,
+  companyName = 'آینده نگاران خلاق',
+  onShowToast,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
@@ -145,13 +150,27 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>افزودن کارمند جدید</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              exportEmployeesToExcel(companyName, selectedYear, employees, salaryMatrix);
+              if (onShowToast) onShowToast(`فایل اکسل مشخصات پرسنل با موفقیت دانلود شد.`);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+            title="دانلود فایل اکسل لیست پرسنل"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>خروجی اکسل پرسنل</span>
+          </button>
+
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>افزودن کارمند جدید</span>
+          </button>
+        </div>
       </div>
 
       {/* Search Bar */}

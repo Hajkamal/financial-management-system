@@ -9,10 +9,11 @@ import {
   CheckCircle2, 
   AlertCircle, 
   Clock, 
-  ArrowUpRight 
+  ArrowUpRight,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Loan, CurrencyMode, FinancialTransaction, PersianMonthNumber } from '../types';
-import { formatCurrency, toPersianDigits, PERSIAN_MONTHS } from '../utils/formatters';
+import { formatCurrency, toPersianDigits, PERSIAN_MONTHS, exportLoansToExcel } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { AmountInput } from './AmountInput';
 
@@ -30,6 +31,8 @@ interface LoansViewProps {
     title: string;
     description?: string;
   }) => void;
+  companyName?: string;
+  onShowToast?: (msg: string) => void;
 }
 
 export const LoansView: React.FC<LoansViewProps> = ({
@@ -40,6 +43,8 @@ export const LoansView: React.FC<LoansViewProps> = ({
   onSaveLoan,
   onDeleteLoan,
   onPayInstallment,
+  companyName = 'آینده نگاران خلاق',
+  onShowToast,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
@@ -167,13 +172,27 @@ export const LoansView: React.FC<LoansViewProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>ثبت تسهیلات یا وام جدید</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              exportLoansToExcel(companyName, selectedYear, loans);
+              if (onShowToast) onShowToast(`فایل اکسل تسهیلات و وام‌ها با موفقیت دانلود شد.`);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+            title="دانلود فایل اکسل تسهیلات و اقساط"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>خروجی اکسل تسهیلات</span>
+          </button>
+
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>ثبت تسهیلات یا وام جدید</span>
+          </button>
+        </div>
       </div>
 
       {/* Overview Cards */}
