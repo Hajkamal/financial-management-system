@@ -62,7 +62,7 @@ interface FiscalYearsViewProps {
 }
 
 export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
-  fiscalYears,
+  fiscalYears = [],
   selectedYear,
   setSelectedYear,
   onAddFiscalYear,
@@ -70,13 +70,13 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
   onDeleteFiscalYear,
   onCloseFiscalYear,
   onReopenFiscalYear,
-  transactions,
+  transactions = [],
   currencyMode,
   companyName,
-  employees,
-  salaryMatrix,
-  members,
-  loans,
+  employees = [],
+  salaryMatrix = [],
+  members = [],
+  loans = [],
   onShowToast,
   canManage = true,
 }) => {

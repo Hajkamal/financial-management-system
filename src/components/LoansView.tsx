@@ -38,8 +38,8 @@ interface LoansViewProps {
 }
 
 export const LoansView: React.FC<LoansViewProps> = ({
-  loans,
-  transactions,
+  loans = [],
+  transactions = [],
   selectedYear,
   currencyMode,
   onSaveLoan,

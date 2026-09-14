@@ -34,8 +34,8 @@ interface EmployeesViewProps {
 }
 
 export const EmployeesView: React.FC<EmployeesViewProps> = ({
-  employees,
-  salaryMatrix,
+  employees = [],
+  salaryMatrix = [],
   selectedYear,
   currencyMode,
   onSaveEmployee,

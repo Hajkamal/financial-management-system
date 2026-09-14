@@ -53,7 +53,7 @@ interface TransactionsViewProps {
 }
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({
-  transactions,
+  transactions = [],
   selectedYear,
   currencyMode,
   onOpenNewTransaction,

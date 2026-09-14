@@ -54,8 +54,8 @@ interface MemberSalarySectionProps {
 }
 
 export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
-  members,
-  transactions,
+  members = [],
+  transactions = [],
   selectedYear,
   currencyMode,
   onAddMemberPayoutTransaction,

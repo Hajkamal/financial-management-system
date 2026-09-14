@@ -61,10 +61,10 @@ interface SalaryMatrixViewProps {
 }
 
 export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
-  employees,
-  salaryMatrix,
-  members,
-  transactions,
+  employees = [],
+  salaryMatrix = [],
+  members = [],
+  transactions = [],
   selectedYear,
   currencyMode,
   onUpdateSalaryCell,

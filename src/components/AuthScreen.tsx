@@ -28,10 +28,11 @@ import {
 } from '../lib/supabase';
 import { AppUser } from '../types';
 import { getPermissionsByRole } from '../utils/permissions';
+import { INITIAL_USERS } from '../data/initialData';
 
 interface AuthScreenProps {
-  users: AppUser[];
-  onLoginUser: (user: AppUser) => void;
+  users?: AppUser[];
+  onLoginUser?: (user: AppUser) => void;
   onRegisterUser?: (user: Omit<AppUser, 'id' | 'createdAt'>) => void;
   onAuthSuccess?: () => void;
 }
@@ -39,7 +40,7 @@ interface AuthScreenProps {
 type AuthMode = 'login' | 'signup' | 'forgot_password';
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ 
-  users, 
+  users = INITIAL_USERS, 
   onLoginUser,
   onRegisterUser,
   onAuthSuccess 
@@ -56,8 +57,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const safeUsers = Array.isArray(users) && users.length > 0 ? users : INITIAL_USERS;
+
   // Find Super Admin
-  const superAdminUser = users.find(u => u.email.toLowerCase() === 'vahidkamali03@gmail.com');
+  const superAdminUser = safeUsers.find(u => u.email?.toLowerCase() === 'vahidkamali03@gmail.com');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,7 +84,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           setSuccessMessage('لینک بازیابی رمز عبور به ایمیل شما ارسال شد.');
         } else {
           // Local reset simulation
-          const found = users.find(u => u.email.toLowerCase() === cleanEmail);
+          const found = safeUsers.find(u => u.email?.toLowerCase() === cleanEmail);
           if (found) {
             setSuccessMessage(`رمز عبور پیش‌فرض برای ${found.fullName}: admin1234 است. اکنون می‌توانید وارد شوید.`);
             setPassword('admin1234');
@@ -118,7 +121,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       }
 
       // Check if user already exists
-      const existingUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+      const existingUser = safeUsers.find(u => u.email?.toLowerCase() === cleanEmail);
       if (existingUser) {
         setErrorMessage('کاربری با این نشانی ایمیل از قبل در سامانه ثبت شده است.');
         return;
@@ -159,7 +162,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
         setSuccessMessage('حساب کاربری با موفقیت ایجاد شد! در حال ورود به سامانه...');
         setTimeout(() => {
-          onLoginUser(newUser);
+          if (onLoginUser) onLoginUser(newUser);
           if (onAuthSuccess) onAuthSuccess();
         }, 500);
 
@@ -175,7 +178,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     setIsLoading(true);
     try {
       // 1. Check registered system users first
-      const localMatchedUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+      const localMatchedUser = safeUsers.find(u => u.email?.toLowerCase() === cleanEmail);
       if (localMatchedUser) {
         if (localMatchedUser.status !== 'active') {
           setErrorMessage('این حساب کاربری غیرفعال یا معلق شده است. لطفاً با مدیر کل سامانه تماس بگیرید.');
@@ -191,7 +194,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         }
 
         // Successful local login
-        onLoginUser(localMatchedUser);
+        if (onLoginUser) onLoginUser(localMatchedUser);
         if (onAuthSuccess) onAuthSuccess();
         return;
       }

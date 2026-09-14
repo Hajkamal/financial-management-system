@@ -49,12 +49,12 @@ export const ExportExcelModal: React.FC<ExportExcelModalProps> = ({
   onClose,
   companyName,
   selectedYear,
-  fiscalYears,
-  transactions,
-  employees,
-  salaryMatrix,
-  members,
-  loans,
+  fiscalYears = [],
+  transactions = [],
+  employees = [],
+  salaryMatrix = [],
+  members = [],
+  loans = [],
   onShowToast
 }) => {
   const [targetYear, setTargetYear] = useState<number>(selectedYear);

@@ -134,7 +134,8 @@ export default function App() {
   const [transactions, setTransactions] = useState<FinancialTransaction[]>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_transactions');
-      return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS;
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? parsed : INITIAL_TRANSACTIONS;
     } catch {
       return INITIAL_TRANSACTIONS;
     }
@@ -143,7 +144,8 @@ export default function App() {
   const [employees, setEmployees] = useState<Employee[]>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_employees');
-      return saved ? JSON.parse(saved) : INITIAL_EMPLOYEES;
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? parsed : INITIAL_EMPLOYEES;
     } catch {
       return INITIAL_EMPLOYEES;
     }
@@ -152,7 +154,8 @@ export default function App() {
   const [salaryMatrix, setSalaryMatrix] = useState<SalaryMatrixItem[]>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_salary_matrix');
-      return saved ? JSON.parse(saved) : INITIAL_SALARY_MATRIX;
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? parsed : INITIAL_SALARY_MATRIX;
     } catch {
       return INITIAL_SALARY_MATRIX;
     }
@@ -161,7 +164,8 @@ export default function App() {
   const [members, setMembers] = useState<CompanyMember[]>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_members');
-      return saved ? JSON.parse(saved) : INITIAL_MEMBERS;
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? parsed : INITIAL_MEMBERS;
     } catch {
       return INITIAL_MEMBERS;
     }
@@ -170,7 +174,8 @@ export default function App() {
   const [loans, setLoans] = useState<Loan[]>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_loans');
-      return saved ? JSON.parse(saved) : INITIAL_LOANS;
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? parsed : INITIAL_LOANS;
     } catch {
       return INITIAL_LOANS;
     }
@@ -179,7 +184,8 @@ export default function App() {
   const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_fiscal_years');
-      return saved ? JSON.parse(saved) : INITIAL_FISCAL_YEARS;
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_FISCAL_YEARS;
     } catch {
       return INITIAL_FISCAL_YEARS;
     }
@@ -188,7 +194,8 @@ export default function App() {
   const [users, setUsers] = useState<AppUser[]>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_users');
-      return saved ? JSON.parse(saved) : INITIAL_USERS;
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_USERS;
     } catch {
       return INITIAL_USERS;
     }
@@ -200,15 +207,16 @@ export default function App() {
   // Derive currently authenticated user in the applet
   const currentAppUser = React.useMemo(() => {
     if (impersonatedUser) return impersonatedUser;
+    const safeUserList = Array.isArray(users) && users.length > 0 ? users : INITIAL_USERS;
     if (user?.email) {
-      const found = users.find(u => u.email.toLowerCase() === user.email?.toLowerCase());
+      const found = safeUserList.find(u => u.email?.toLowerCase() === user.email?.toLowerCase());
       if (found) return found;
       if (user.email.toLowerCase().includes('vahidkamali03')) {
-        return users.find(u => u.email === 'vahidkamali03@gmail.com') || users[0];
+        return safeUserList.find(u => u.email === 'vahidkamali03@gmail.com') || safeUserList[0];
       }
     }
     // Default to Super Admin Vahid Kamali
-    return users.find(u => u.email === 'vahidkamali03@gmail.com') || users[0];
+    return safeUserList.find(u => u.email === 'vahidkamali03@gmail.com') || safeUserList[0] || INITIAL_USERS[0];
   }, [user, users, impersonatedUser]);
 
   // Modals state
@@ -641,10 +649,24 @@ export default function App() {
   if (!user) {
     return (
       <AuthScreen 
+        users={users}
+        onLoginUser={(loggedInUser) => {
+          setUser({
+            id: loggedInUser.id,
+            email: loggedInUser.email,
+            user_metadata: { full_name: loggedInUser.fullName },
+            app_metadata: {},
+            aud: 'authenticated',
+            created_at: new Date().toISOString()
+          } as any);
+        }}
+        onRegisterUser={handleAddUser}
         onAuthSuccess={() => {
           supabase?.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setUser(session?.user ?? null);
+            if (session?.user) {
+              setSession(session);
+              setUser(session.user);
+            }
           });
         }} 
       />

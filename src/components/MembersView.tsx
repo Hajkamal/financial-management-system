@@ -52,8 +52,8 @@ interface MembersViewProps {
 }
 
 export const MembersView: React.FC<MembersViewProps> = ({
-  members,
-  transactions,
+  members = [],
+  transactions = [],
   selectedYear,
   currencyMode,
   onSaveMember,
