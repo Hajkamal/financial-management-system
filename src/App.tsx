@@ -36,6 +36,9 @@ import {
 import { 
   BackupModal 
 } from './components/BackupModal';
+import { 
+  ChangePasswordModal 
+} from './components/ChangePasswordModal';
 
 import { 
   ActiveTab, 
@@ -65,7 +68,10 @@ import {
 
 import { 
   exportToExcel,
-  PERSIAN_MONTHS 
+  PERSIAN_MONTHS,
+  toEnglishDigits,
+  normalizeEmail,
+  normalizePassword
 } from './utils/formatters';
 
 import { 
@@ -224,6 +230,7 @@ export default function App() {
   const [editingTx, setEditingTx] = useState<FinancialTransaction | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -266,19 +273,54 @@ export default function App() {
 
   // User Management Handlers
   const handleAddUser = (userData: Omit<AppUser, 'id' | 'createdAt'>) => {
+    const cleanEmail = normalizeEmail(userData.email);
+    const cleanPassword = normalizePassword(userData.password) || '123456';
+    const cleanPhone = userData.phone ? toEnglishDigits(userData.phone).trim() : undefined;
+
+    // Check if user with this email already exists
+    const exists = users.some(u => normalizeEmail(u.email) === cleanEmail);
+    if (exists) {
+      showToast(`خطا: کاربری با ایمیل «${cleanEmail}» از قبل در سیستم وجود دارد.`);
+      return;
+    }
+
     const newUser: AppUser = {
       ...userData,
+      email: cleanEmail,
+      password: cleanPassword,
+      phone: cleanPhone,
       id: `user-${Date.now()}`,
       createdAt: new Date().toISOString()
     };
-    setUsers(prev => [...prev, newUser]);
+    setUsers(prev => {
+      const updated = [...prev, newUser];
+      try {
+        localStorage.setItem('ayandeh_users', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to sync users to localStorage:', e);
+      }
+      return updated;
+    });
     showToast(`کاربر جدید «${newUser.fullName}» با موفقیت در سامانه افزوده شد.`);
   };
 
   const handleUpdateUser = (id: string, updates: Partial<AppUser>) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
+    const cleanUpdates = { ...updates };
+    if (cleanUpdates.email) cleanUpdates.email = normalizeEmail(cleanUpdates.email);
+    if (cleanUpdates.password) cleanUpdates.password = normalizePassword(cleanUpdates.password);
+    if (cleanUpdates.phone) cleanUpdates.phone = toEnglishDigits(cleanUpdates.phone).trim();
+
+    setUsers(prev => {
+      const updated = prev.map(u => u.id === id ? { ...u, ...cleanUpdates } : u);
+      try {
+        localStorage.setItem('ayandeh_users', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to sync users to localStorage:', e);
+      }
+      return updated;
+    });
     if (impersonatedUser && impersonatedUser.id === id) {
-      setImpersonatedUser(prev => prev ? { ...prev, ...updates } : null);
+      setImpersonatedUser(prev => prev ? { ...prev, ...cleanUpdates } : null);
     }
     showToast('اطلاعات کاربر با موفقیت به‌روزرسانی شد.');
   };
@@ -292,8 +334,47 @@ export default function App() {
     if (impersonatedUser && impersonatedUser.id === id) {
       setImpersonatedUser(null);
     }
-    setUsers(prev => prev.filter(u => u.id !== id));
+    setUsers(prev => {
+      const updated = prev.filter(u => u.id !== id);
+      try {
+        localStorage.setItem('ayandeh_users', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to sync users after delete to localStorage:', e);
+      }
+      return updated;
+    });
     showToast(`کاربر «${target?.fullName || ''}» با موفقیت حذف گردید.`);
+  };
+
+  const handleChangeOwnPassword = (newPassword: string) => {
+    const clean = normalizePassword(newPassword);
+    if (!clean || !currentAppUser) return;
+
+    setUsers(prev => {
+      const updated = prev.map(u => 
+        (u.id === currentAppUser.id || normalizeEmail(u.email) === normalizeEmail(currentAppUser.email))
+          ? { ...u, password: clean }
+          : u
+      );
+      try {
+        localStorage.setItem('ayandeh_users', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to update users password:', e);
+      }
+      return updated;
+    });
+
+    if (impersonatedUser) {
+      setImpersonatedUser(prev => prev ? { ...prev, password: clean } : null);
+    }
+
+    if (supabase && isSupabaseConfigured) {
+      supabase.auth.updateUser({ password: clean }).catch(err => {
+        console.warn('Supabase password sync:', err);
+      });
+    }
+
+    showToast('کلمه عبور با موفقیت به‌روزرسانی شد و در پنل مدیریت کاربران ذخیره گردید.');
   };
 
   const handleSwitchUser = (targetUser: AppUser) => {
@@ -690,6 +771,7 @@ export default function App() {
         onOpenBackupModal={() => setIsBackupModalOpen(true)}
         userEmail={user.email}
         onLogout={handleLogout}
+        onOpenChangePassword={() => setIsChangePasswordOpen(true)}
         fiscalYears={fiscalYears}
         currentUser={currentAppUser}
       />
@@ -728,6 +810,7 @@ export default function App() {
           onOpenBackupModal={() => setIsBackupModalOpen(true)}
           userEmail={user.email}
           onLogout={handleLogout}
+          onOpenChangePassword={() => setIsChangePasswordOpen(true)}
           fiscalYears={fiscalYears}
           currentUser={currentAppUser}
         />
@@ -915,6 +998,16 @@ export default function App() {
         loans={loans}
         onShowToast={showToast}
       />
+
+      {/* Change Password Modal for Current User */}
+      {currentAppUser && (
+        <ChangePasswordModal
+          isOpen={isChangePasswordOpen}
+          onClose={() => setIsChangePasswordOpen(false)}
+          currentUser={currentAppUser}
+          onSavePassword={handleChangeOwnPassword}
+        />
+      )}
 
       {/* Toast Notification */}
       {toastMessage && (

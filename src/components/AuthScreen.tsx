@@ -29,6 +29,7 @@ import {
 import { AppUser } from '../types';
 import { getPermissionsByRole } from '../utils/permissions';
 import { INITIAL_USERS } from '../data/initialData';
+import { toEnglishDigits, normalizeEmail, normalizePassword } from '../utils/formatters';
 
 interface AuthScreenProps {
   users?: AppUser[];
@@ -64,7 +65,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = normalizeEmail(email);
+    const cleanPassword = normalizePassword(password);
+    const cleanConfirm = normalizePassword(confirmPassword);
+
     if (!cleanEmail) {
       setErrorMessage('لطفاً نشانی ایمیل را وارد نمایید.');
       return;
@@ -81,7 +85,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           setSuccessMessage('لینک بازیابی رمز عبور به ایمیل شما ارسال شد.');
         } else {
           // Local reset simulation
-          const found = safeUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+          const found = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
           if (found) {
             setSuccessMessage(`رمز عبور پیش‌فرض برای ${found.fullName}: admin1234 است. اکنون می‌توانید وارد شوید.`);
             setPassword('admin1234');
@@ -98,7 +102,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
 
-    if (!password) {
+    if (!cleanPassword) {
       setErrorMessage('لطفاً رمز عبور را وارد نمایید.');
       return;
     }
@@ -108,31 +112,40 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         setErrorMessage('لطفاً نام و نام خانوادگی را وارد نمایید.');
         return;
       }
-      if (password.length < 4) {
+      if (cleanPassword.length < 4) {
         setErrorMessage('رمز عبور باید حداقل شامل ۴ کاراکتر باشد.');
         return;
       }
-      if (password !== confirmPassword) {
+      if (cleanPassword !== cleanConfirm) {
         setErrorMessage('رمز عبور و تکرار آن با یکدیگر مطابقت ندارند.');
         return;
       }
 
       // Check if user already exists
-      const existingUser = safeUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+      const existingUser = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
       if (existingUser) {
-        setErrorMessage('کاربری با این نشانی ایمیل از قبل در سامانه ثبت شده است.');
+        if (existingUser.status === 'pending') {
+          setErrorMessage('درخواست ثبت‌نام شما قبلاً ثبت شده و در انتظار تایید مدیر ارشد سامانه است.');
+        } else if (existingUser.status === 'inactive') {
+          setErrorMessage('این حساب کاربری غیرفعال شده است. جهت فعال‌سازی مجدد با مدیر کل سامانه تماس بگیرید.');
+        } else {
+          setErrorMessage('کاربری با این نشانی ایمیل قبلاً در سامانه ثبت شده است. لطفاً از بخش «ورود به سامانه» وارد شوید.');
+        }
         return;
       }
 
       setIsLoading(true);
       try {
-        // Register in Supabase if configured (catch error so test environment is resilient and safe)
+        // Register in Supabase if configured (catch error gracefully so app never blocks)
         if (isSupabaseConfigured && supabase) {
           try {
-            await supabase.auth.signUp({
+            const { error } = await supabase.auth.signUp({
               email: cleanEmail,
-              password: password,
+              password: cleanPassword,
             });
+            if (error && !error.message.toLowerCase().includes('already registered')) {
+              console.warn('Supabase auth notice:', error.message);
+            }
           } catch (supErr) {
             console.warn('Supabase auth notice:', supErr);
           }
@@ -145,7 +158,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           fullName: `${firstName.trim()} ${lastName.trim()}`,
-          password,
+          password: cleanPassword,
           role: isSuper ? 'super_admin' : 'viewer',
           roleTitle: isSuper ? 'مدیر ارشد سامانه' : 'کاربر (در انتظار تایید)',
           status: isSuper ? 'active' : 'pending',
@@ -169,7 +182,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           }, 500);
         } else {
           // New regular user: MUST NOT enter, must wait for admin approval
-          setSuccessMessage('درخواست ثبت‌نام شما با موفقیت ثبت شد. حساب شما در حالت «در انتظار تایید مدیر» قرار گرفت و پس از تایید توسط مدیر کل سامane (آقای وحید کمالی) فعال خواهد شد.');
+          setSuccessMessage('درخواست ثبت‌نام شما با موفقیت ثبت شد. حساب شما در حالت «در انتظار تایید مدیر» قرار گرفت و پس از تایید توسط مدیر کل سامانه (آقای وحید کمالی) فعال خواهد شد.');
           setFirstName('');
           setLastName('');
           setPassword('');
@@ -188,8 +201,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     // Mode: 'login'
     setIsLoading(true);
     try {
-      // 1. Check registered system users first
-      const localMatchedUser = safeUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+      // 1. Check registered system users first with normalized credentials
+      const localMatchedUser = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
       if (localMatchedUser) {
         // Enforce pending check
         if (localMatchedUser.status === 'pending') {
@@ -204,9 +217,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           return;
         }
 
-        // Verify password if defined
-        if (localMatchedUser.password && localMatchedUser.password !== password) {
-          setErrorMessage('کلمه عبور وارد شده نادرست است.');
+        // Verify password with normalized comparison
+        const savedPass = normalizePassword(localMatchedUser.password || '123456');
+        if (savedPass !== cleanPassword) {
+          setErrorMessage('ایمیل یا کلمه عبور وارد شده نادرست است.');
           setIsLoading(false);
           return;
         }
@@ -222,7 +236,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         try {
           const { data, error } = await supabase.auth.signInWithPassword({
             email: cleanEmail,
-            password: password,
+            password: cleanPassword,
           });
           if (error) throw error;
 
@@ -238,6 +252,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               role: isSuper ? 'super_admin' : 'viewer',
               roleTitle: isSuper ? 'مدیر ارشد سامانه' : 'کاربر در انتظار تایید',
               status: isSuper ? 'active' : 'pending',
+              password: cleanPassword,
               permissions: getPermissionsByRole(isSuper ? 'super_admin' : 'viewer'),
               createdAt: 'امروز',
             };
@@ -259,7 +274,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       }
 
       // If user not recognized
-      setErrorMessage('کاربری با این مشخصات یافت نشد. لطفاً از صحت ایمیل و کلمه عبور اطمینان حاصل کرده یا ثبت‌نام نمایید.');
+      setErrorMessage('ایمیل یا کلمه عبور وارد شده نادرست است. در صورت ثبت‌نام جدید، لطفاً منتظر تایید مدیر ارشد بمانید.');
 
     } catch (err: any) {
       setErrorMessage(getPersianAuthErrorMessage(err));
@@ -404,7 +419,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   dir="ltr"
                   placeholder="vahidkamali03@gmail.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => setEmail(toEnglishDigits(e.target.value))}
                   disabled={isLoading}
                   className="w-full pr-10 pl-3 py-2.5 bg-slate-900/80 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-left"
                 />
@@ -443,7 +458,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     dir="ltr"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => setPassword(toEnglishDigits(e.target.value))}
                     disabled={isLoading}
                     className="w-full pr-10 pl-10 py-2.5 bg-slate-900/80 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-left"
                   />
@@ -455,6 +470,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                <span className="text-[11px] text-slate-400 mt-1 block">
+                  تبدیل خودکار ارقام فارسی و عربی به انگلیسی فعال است.
+                </span>
               </div>
             )}
 
@@ -475,7 +493,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     dir="ltr"
                     placeholder="••••••••"
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={(e) => setConfirmPassword(toEnglishDigits(e.target.value))}
                     disabled={isLoading}
                     className="w-full pr-10 pl-3 py-2.5 bg-slate-900/80 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-left"
                   />

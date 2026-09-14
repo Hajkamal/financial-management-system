@@ -36,6 +36,7 @@ interface NavigationProps {
   onOpenBackupModal: () => void;
   userEmail?: string;
   onLogout?: () => void;
+  onOpenChangePassword?: () => void;
   fiscalYears?: FiscalYear[];
   currentUser?: AppUser | null;
 }
@@ -102,6 +103,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
   onOpenBackupModal,
   userEmail,
   onLogout,
+  onOpenChangePassword,
   fiscalYears,
   currentUser,
 }) => {
@@ -254,6 +256,17 @@ export const Sidebar: React.FC<NavigationProps> = ({
                 <span className="truncate" dir="ltr">{userEmail}</span>
               </div>
             ) : null}
+            {onOpenChangePassword && (
+              <button
+                type="button"
+                id="sidebar-change-password-btn"
+                onClick={onOpenChangePassword}
+                className="w-full p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                <span>تغییر کلمه عبور</span>
+              </button>
+            )}
             <button
               id="sidebar-logout-btn"
               onClick={onLogout}
@@ -323,6 +336,7 @@ interface TopHeaderProps {
   onOpenBackupModal: () => void;
   userEmail?: string;
   onLogout?: () => void;
+  onOpenChangePassword?: () => void;
   fiscalYears?: FiscalYear[];
   currentUser?: AppUser | null;
 }
@@ -342,6 +356,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenBackupModal,
   userEmail,
   onLogout,
+  onOpenChangePassword,
   fiscalYears,
   currentUser,
 }) => {
@@ -435,6 +450,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 <span className="truncate" dir="ltr">{userEmail}</span>
               </div>
             ) : null}
+            {onOpenChangePassword && (
+              <button
+                type="button"
+                id="header-change-password-btn"
+                onClick={onOpenChangePassword}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="تغییر کلمه عبور اختصاصی"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                <span className="hidden md:inline">تغییر رمز</span>
+              </button>
+            )}
             <button
               id="header-logout-btn"
               onClick={onLogout}

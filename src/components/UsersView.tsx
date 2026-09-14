@@ -14,6 +14,7 @@ import {
   Crown, 
   Calculator, 
   Eye, 
+  EyeOff,
   Briefcase, 
   Sliders, 
   LogIn, 
@@ -32,7 +33,7 @@ import {
   getPermissionsByRole, 
   ALL_PERMISSIONS_GRANTED 
 } from '../utils/permissions';
-import { toPersianDigits } from '../utils/formatters';
+import { toPersianDigits, toEnglishDigits, normalizeEmail, normalizePassword } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface UsersViewProps {
@@ -64,6 +65,8 @@ export const UsersView: React.FC<UsersViewProps> = ({
   const [deletingUser, setDeletingUser] = useState<AppUser | null>(null);
   const [passwordModalUser, setPasswordModalUser] = useState<AppUser | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [visiblePasswordUserId, setVisiblePasswordUserId] = useState<string | null>(null);
 
   // Filtered users
   const filteredUsers = useMemo(() => {
@@ -107,15 +110,17 @@ export const UsersView: React.FC<UsersViewProps> = ({
   const handleSavePassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (!passwordModalUser) return;
-    if (!newPassword || newPassword.length < 4) {
+    const clean = normalizePassword(newPassword);
+    if (!clean || clean.length < 4) {
       onShowToast('کلمه عبور باید حداقل ۴ کاراکتر باشد.');
       return;
     }
 
-    onUpdateUser(passwordModalUser.id, { password: newPassword });
+    onUpdateUser(passwordModalUser.id, { password: clean });
     onShowToast(`کلمه عبور برای ${passwordModalUser.fullName} با موفقیت به‌روزرسانی شد.`);
     setPasswordModalUser(null);
     setNewPassword('');
+    setShowResetPassword(false);
   };
 
   const getRoleBadge = (role: UserRole) => {
@@ -365,6 +370,27 @@ export const UsersView: React.FC<UsersViewProps> = ({
                     </div>
                   )}
 
+                  {/* Password row with view toggle */}
+                  <div className="flex items-center justify-between text-slate-600 pt-1 border-t border-slate-200/60">
+                    <span className="text-slate-400 flex items-center gap-1">
+                      <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                      <span>رمز عبور:</span>
+                    </span>
+                    <div className="flex items-center gap-1.5 font-mono text-[11px]" dir="ltr">
+                      <span className="font-bold text-slate-800 select-all bg-slate-200/70 px-2 py-0.5 rounded border border-slate-300">
+                        {visiblePasswordUserId === user.id ? (user.password || '123456') : '••••••••'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setVisiblePasswordUserId(prev => prev === user.id ? null : user.id)}
+                        className="text-slate-400 hover:text-slate-700 p-0.5 rounded transition-colors cursor-pointer"
+                        title={visiblePasswordUserId === user.id ? 'مخفی‌سازی رمز' : 'مشاهده رمز عبور تعریف شده'}
+                      >
+                        {visiblePasswordUserId === user.id ? <EyeOff className="w-3.5 h-3.5 text-amber-600" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between text-slate-600 pt-1 border-t border-slate-200/60">
                     <span className="text-slate-400">وضعیت حساب:</span>
                     <span className={`inline-flex items-center gap-1 font-bold text-[11px] ${
@@ -558,29 +584,50 @@ export const UsersView: React.FC<UsersViewProps> = ({
       {/* Change Password Modal */}
       {passwordModalUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200">
-            <div className="flex items-center gap-2 text-amber-600 font-bold mb-3">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200" dir="rtl">
+            <div className="flex items-center gap-2 text-amber-600 font-bold mb-2">
               <KeyRound className="w-5 h-5" />
-              <span>تغییر کلمه عبور</span>
+              <span>تغییر کلمه عبور کاربر</span>
             </div>
-            <p className="text-xs text-slate-500 mb-4">
-              تعیین رمز عبور جدید برای کاربر: <strong className="text-slate-800">{passwordModalUser.fullName}</strong>
+            <p className="text-xs text-slate-500 mb-3">
+              کاربر: <strong className="text-slate-800">{passwordModalUser.fullName}</strong> ({passwordModalUser.email})
             </p>
+
+            {/* Current Password Display */}
+            <div className="mb-4 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs flex items-center justify-between">
+              <span className="text-slate-500">رمز عبور فعلی:</span>
+              <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 select-all" dir="ltr">
+                {passwordModalUser.password || 'تعریف نشده'}
+              </span>
+            </div>
 
             <form onSubmit={handleSavePassword} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   کلمه عبور جدید *
                 </label>
-                <input
-                  type="password"
-                  dir="ltr"
-                  required
-                  placeholder="حداقل ۴ کاراکتر"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none font-mono text-left"
-                />
+                <div className="relative">
+                  <input
+                    type={showResetPassword ? 'text' : 'password'}
+                    dir="ltr"
+                    required
+                    placeholder="حداقل ۴ کاراکتر"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(toEnglishDigits(e.target.value))}
+                    className="w-full pl-10 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none font-mono text-left"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(!showResetPassword)}
+                    className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                    title={showResetPassword ? 'مخفی کردن' : 'نمایش رمز'}
+                  >
+                    {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  اعداد فارسی یا عربی خودکار به ارقام انگلیسی تبدیل می‌شوند.
+                </span>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
@@ -589,6 +636,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   onClick={() => {
                     setPasswordModalUser(null);
                     setNewPassword('');
+                    setShowResetPassword(false);
                   }}
                   className="px-4 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-xl font-medium cursor-pointer"
                 >
@@ -649,6 +697,7 @@ const UserModal: React.FC<UserModalProps> = ({
   const [lastName, setLastName] = useState(userToEdit?.lastName || '');
   const [email, setEmail] = useState(userToEdit?.email || '');
   const [password, setPassword] = useState(userToEdit?.password || '123456');
+  const [showModalPassword, setShowModalPassword] = useState(false);
   const [roleTitle, setRoleTitle] = useState(userToEdit?.roleTitle || 'کارشناس حسابداری');
   const [role, setRole] = useState<UserRole>(userToEdit?.role || 'accountant');
   const [status, setStatus] = useState<'active' | 'pending' | 'inactive'>(userToEdit?.status || 'active');
@@ -694,7 +743,9 @@ const UserModal: React.FC<UserModalProps> = ({
     e.preventDefault();
     const cleanFirst = firstName.trim();
     const cleanLast = lastName.trim();
-    const cleanEmail = email.trim();
+    const cleanEmail = normalizeEmail(email);
+    const cleanPassword = normalizePassword(password) || '123456';
+    const cleanPhone = toEnglishDigits(phone).trim() || undefined;
 
     if (!cleanFirst || !cleanLast) {
       alert('لطفاً نام و نام خانوادگی را وارد نمایید.');
@@ -712,12 +763,12 @@ const UserModal: React.FC<UserModalProps> = ({
       lastName: cleanLast,
       fullName,
       email: cleanEmail,
-      password: password.trim() || '123456',
+      password: cleanPassword,
       role,
       roleTitle: roleTitle.trim() || 'کاربر سامانه',
       status,
       permissions,
-      phone: phone.trim() || undefined,
+      phone: cleanPhone,
       notes: notes.trim() || undefined,
     });
   };
@@ -795,7 +846,7 @@ const UserModal: React.FC<UserModalProps> = ({
                   disabled={isSuperAdminEmail}
                   placeholder="vahidkamali03@gmail.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => setEmail(toEnglishDigits(e.target.value))}
                   className="w-full pr-10 pl-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 font-mono text-left disabled:bg-slate-100"
                 />
               </div>
@@ -808,15 +859,26 @@ const UserModal: React.FC<UserModalProps> = ({
               <div className="relative">
                 <Lock className="w-4 h-4 absolute right-3 top-3 text-slate-400" />
                 <input
-                  type="password"
+                  type={showModalPassword ? 'text' : 'password'}
                   required
                   dir="ltr"
                   placeholder="••••••••"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pr-10 pl-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 font-mono text-left"
+                  onChange={(e) => setPassword(toEnglishDigits(e.target.value))}
+                  className="w-full pr-10 pl-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 font-mono text-left"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowModalPassword(!showModalPassword)}
+                  className="absolute left-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  title={showModalPassword ? 'مخفی کردن' : 'نمایش کلمه عبور'}
+                >
+                  {showModalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                اعداد فارسی یا عربی به طور خودکار به انگلیسی تبدیل می‌شوند.
+              </span>
             </div>
           </div>
 
@@ -844,7 +906,7 @@ const UserModal: React.FC<UserModalProps> = ({
                 dir="ltr"
                 placeholder="۰۹۱۲۳۴۵۶۷۸۹"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(toEnglishDigits(e.target.value))}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 font-mono text-left"
               />
             </div>

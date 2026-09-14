@@ -64,6 +64,41 @@ export function parseFormattedNumber(val: string | number): number {
   return isNaN(num) ? 0 : num;
 }
 
+/**
+ * Converts Persian (۰-۹) and Arabic (٠-٩) numerals to standard ASCII English digits (0-9).
+ * Also cleans zero-width spaces and non-breaking spaces.
+ */
+export function toEnglishDigits(str: string): string {
+  if (!str) return '';
+  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  let cleanStr = str.toString();
+  for (let i = 0; i < 10; i++) {
+    cleanStr = cleanStr.replaceAll(persianDigits[i], i.toString());
+    cleanStr = cleanStr.replaceAll(arabicDigits[i], i.toString());
+  }
+  return cleanStr.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');
+}
+
+/**
+ * Normalizes email: converts Persian/Arabic numbers to English, removes spaces, lowercases.
+ */
+export function normalizeEmail(email: string): string {
+  if (!email) return '';
+  return toEnglishDigits(email)
+    .replace(/\s+/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Normalizes password: converts Persian/Arabic numbers to English, strips outer whitespace.
+ */
+export function normalizePassword(pwd: string): string {
+  if (!pwd) return '';
+  return toEnglishDigits(pwd).trim();
+}
+
 export function formatWithCommas(n: number | string): string {
   if (n === '' || n === null || n === undefined) return '';
   const num = typeof n === 'number' ? n : parseFormattedNumber(n);
