@@ -26,7 +26,7 @@ import {
   getPersianAuthErrorMessage,
   SUPABASE_URL
 } from '../lib/supabase';
-import { AppUser } from '../types';
+import { AppUser, UserRole } from '../types';
 import { getPermissionsByRole } from '../utils/permissions';
 import { INITIAL_USERS } from '../data/initialData';
 import { toEnglishDigits, normalizeEmail, normalizePassword } from '../utils/formatters';
@@ -219,19 +219,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
         // Verify password with normalized comparison
         const savedPass = normalizePassword(localMatchedUser.password || '123456');
-        if (savedPass !== cleanPassword) {
-          setErrorMessage('ایمیل یا کلمه عبور وارد شده نادرست است.');
-          setIsLoading(false);
+        if (savedPass === cleanPassword) {
+          // Successful local login
+          if (onLoginUser) onLoginUser(localMatchedUser);
+          if (onAuthSuccess) onAuthSuccess();
           return;
         }
-
-        // Successful local login
-        if (onLoginUser) onLoginUser(localMatchedUser);
-        if (onAuthSuccess) onAuthSuccess();
-        return;
+        // If password did not match local, do not fail immediately if Supabase is available; try Supabase as well
       }
 
-      // 2. If not found in local users and Supabase is configured, try Supabase auth
+      // 2. If not verified locally and Supabase is configured, try Supabase auth
       if (isSupabaseConfigured && supabase) {
         try {
           const { data, error } = await supabase.auth.signInWithPassword({
@@ -241,26 +238,48 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           if (error) throw error;
 
           if (data.session && data.user) {
-            // Auto-generate or match user
+            const meta = data.user.user_metadata || {};
             const isSuper = cleanEmail === 'vahidkamali03@gmail.com';
-            const dynamicUser: AppUser = {
-              id: data.user.id,
-              email: cleanEmail,
-              firstName: isSuper ? 'وحید' : 'کاربر',
-              lastName: isSuper ? 'کمالی' : 'سامانه',
-              fullName: isSuper ? 'وحید کمالی' : (data.user.email?.split('@')[0] || 'کاربر'),
-              role: isSuper ? 'super_admin' : 'viewer',
-              roleTitle: isSuper ? 'مدیر ارشد سامانه' : 'کاربر در انتظار تایید',
-              status: isSuper ? 'active' : 'pending',
-              password: cleanPassword,
-              permissions: getPermissionsByRole(isSuper ? 'super_admin' : 'viewer'),
-              createdAt: 'امروز',
-            };
+            
+            // Look up local user or fallback to metadata
+            const existing = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
 
-            if (dynamicUser.status === 'pending') {
-              setErrorMessage('حساب کاربری شما هنوز به تایید مدیر ارشد سامانه نرسیده است. لطفاً منتظر بمانید.');
+            const userRole: UserRole = existing?.role || (meta.role as UserRole) || (isSuper ? 'super_admin' : 'accountant');
+            const userStatus = existing?.status || meta.status || (isSuper ? 'active' : 'active');
+            const userFullName = existing?.fullName || meta.fullName || (meta.firstName ? `${meta.firstName} ${meta.lastName || ''}`.trim() : '') || (cleanEmail.split('@')[0] || 'کاربر سامانه');
+            const firstName = existing?.firstName || meta.firstName || userFullName.split(' ')[0] || 'کاربر';
+            const lastName = existing?.lastName || meta.lastName || userFullName.split(' ').slice(1).join(' ') || 'سامانه';
+
+            if (userStatus === 'pending') {
+              setErrorMessage('حساب کاربری شما هنوز به تایید مدیر ارشد سامانه نرسیده است. لطفاً منتظر بمانید تا مدیر سامانه حساب شما را فعال کند.');
               setIsLoading(false);
               return;
+            }
+
+            if (userStatus === 'inactive') {
+              setErrorMessage('این حساب کاربری غیرفعال یا معلق شده است. لطفاً با مدیر کل سامانه تماس بگیرید.');
+              setIsLoading(false);
+              return;
+            }
+
+            const dynamicUser: AppUser = {
+              id: existing?.id || data.user.id,
+              email: cleanEmail,
+              firstName,
+              lastName,
+              fullName: userFullName,
+              role: userRole,
+              roleTitle: existing?.roleTitle || meta.roleTitle || (userRole === 'accountant' ? 'کارشناس حسابداری و ثبت اسناد' : 'کاربر سامانه'),
+              status: userStatus,
+              password: cleanPassword,
+              permissions: existing?.permissions || meta.permissions || getPermissionsByRole(userRole),
+              createdAt: existing?.createdAt || 'امروز',
+              phone: existing?.phone || meta.phone,
+            };
+
+            // If not found in local users on this browser, register into local state so future lookups are immediate
+            if (!existing && onRegisterUser) {
+              onRegisterUser(dynamicUser);
             }
 
             if (onLoginUser) onLoginUser(dynamicUser);
@@ -274,7 +293,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       }
 
       // If user not recognized
-      setErrorMessage('ایمیل یا کلمه عبور وارد شده نادرست است. در صورت ثبت‌نام جدید، لطفاً منتظر تایید مدیر ارشد بمانید.');
+      setErrorMessage('ایمیل یا کلمه عبور وارد شده نادرست است.');
 
     } catch (err: any) {
       setErrorMessage(getPersianAuthErrorMessage(err));

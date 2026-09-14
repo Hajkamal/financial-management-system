@@ -56,4 +56,68 @@ export function getPersianAuthErrorMessage(error: AuthError | Error | string): s
   return msg || 'خطایی در فرآیند احراز هویت رخ داد. لطفاً دوباره تلاش کنید.';
 }
 
+/**
+ * Registers or creates a user account in Supabase Auth from the admin panel
+ * using an isolated client instance so that the currently active admin session
+ * is NOT disturbed or overwritten.
+ */
+export async function registerUserInSupabase(
+  email: string, 
+  password: string, 
+  metadata: {
+    fullName?: string;
+    firstName?: string;
+    lastName?: string;
+    role?: string;
+    roleTitle?: string;
+    status?: string;
+    permissions?: any;
+    phone?: string;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { success: true };
+  }
+
+  try {
+    const isolatedClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
+    });
+
+    const { data, error } = await isolatedClient.auth.signUp({
+      email: email.toLowerCase().trim(),
+      password,
+      options: {
+        data: {
+          fullName: metadata.fullName || '',
+          firstName: metadata.firstName || '',
+          lastName: metadata.lastName || '',
+          role: metadata.role || 'accountant',
+          roleTitle: metadata.roleTitle || 'کاربر سامانه',
+          status: metadata.status || 'active',
+          permissions: metadata.permissions,
+          phone: metadata.phone || '',
+        }
+      }
+    });
+
+    if (error) {
+      if (error.message.toLowerCase().includes('already registered')) {
+        return { success: true };
+      }
+      console.warn('Supabase registerUser notice:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.warn('Supabase registerUser exception:', err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
 export type { User, Session, AuthError };

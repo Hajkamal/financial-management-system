@@ -125,7 +125,7 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
 
   // Open Add Modal
   const handleOpenAddModal = () => {
-    const maxYear = Math.max(...fiscalYears.map(y => y.year), 1404);
+    const maxYear = fiscalYears.length > 0 ? Math.max(...fiscalYears.map(y => y.year)) : 1405;
     const nextYr = maxYear + 1;
     setFormYearNumber(nextYr);
     setFormTitle(`سال مالی ${nextYr}`);

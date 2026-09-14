@@ -77,6 +77,7 @@ import {
 import { 
   supabase, 
   isSupabaseConfigured, 
+  registerUserInSupabase,
   User, 
   Session 
 } from './lib/supabase';
@@ -85,36 +86,131 @@ import { Building2, Loader2 } from 'lucide-react';
 
 export default function App() {
   const [companyName] = useState<string>(INITIAL_COMPANY_NAME);
-  const [selectedYear, setSelectedYear] = useState<number>(INITIAL_YEAR);
   const [currencyMode, setCurrencyMode] = useState<CurrencyMode>('rial');
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
 
-  // Supabase Authentication state
-  const [user, setUser] = useState<User | null>(null);
+  // Supabase & Local Authentication state (persisted across refreshes)
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('ayandeh_active_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [session, setSession] = useState<Session | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(() => {
+    try {
+      // If we already have a saved active user, don't show full-page loading blocker on refresh
+      return !localStorage.getItem('ayandeh_active_user');
+    } catch {
+      return true;
+    }
+  });
 
-  // Monitor Supabase auth session
+  // Core Data States (persisted to localStorage)
+  const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>(() => {
+    try {
+      const saved = localStorage.getItem('ayandeh_fiscal_years');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_FISCAL_YEARS;
+    } catch {
+      return INITIAL_FISCAL_YEARS;
+    }
+  });
+
+  const [selectedYear, setSelectedYear] = useState<number>(() => {
+    try {
+      const savedYear = localStorage.getItem('ayandeh_selected_year');
+      const savedFY = localStorage.getItem('ayandeh_fiscal_years');
+      const parsedFY: FiscalYear[] = savedFY ? JSON.parse(savedFY) : null;
+      const list = Array.isArray(parsedFY) && parsedFY.length > 0 ? parsedFY : INITIAL_FISCAL_YEARS;
+      
+      if (savedYear) {
+        const parsed = parseInt(savedYear, 10);
+        if (list.some(y => y.year === parsed)) return parsed;
+      }
+      const openYear = list.find(y => !y.isClosed);
+      return openYear ? openYear.year : list[list.length - 1].year;
+    } catch {
+      return INITIAL_YEAR;
+    }
+  });
+
+  // Ensure selectedYear is always valid within existing fiscalYears
   useEffect(() => {
+    if (fiscalYears.length > 0 && !fiscalYears.some(fy => fy.year === selectedYear)) {
+      const openYear = fiscalYears.find(fy => !fy.isClosed) || fiscalYears[fiscalYears.length - 1];
+      if (openYear) {
+        setSelectedYear(openYear.year);
+      }
+    }
+  }, [fiscalYears, selectedYear]);
+
+  // Persist selectedYear
+  useEffect(() => {
+    localStorage.setItem('ayandeh_selected_year', selectedYear.toString());
+  }, [selectedYear]);
+
+  // Monitor Supabase auth session and maintain persistence
+  useEffect(() => {
+    const savedLocalUser = (() => {
+      try {
+        const s = localStorage.getItem('ayandeh_active_user');
+        return s ? JSON.parse(s) : null;
+      } catch {
+        return null;
+      }
+    })();
+
     if (!supabase) {
+      if (savedLocalUser && !user) {
+        setUser(savedLocalUser);
+      }
       setIsAuthLoading(false);
       return;
     }
 
-    // Check active session
+    // Check active session from Supabase
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+      if (session?.user) {
+        setSession(session);
+        setUser(session.user);
+        try {
+          localStorage.setItem('ayandeh_active_user', JSON.stringify(session.user));
+        } catch {}
+      } else if (savedLocalUser) {
+        setUser(savedLocalUser);
+      } else {
+        setUser(null);
+        try {
+          localStorage.removeItem('ayandeh_active_user');
+        } catch {}
+      }
       setIsAuthLoading(false);
     }).catch((err) => {
-      console.error('Supabase getSession error:', err);
+      console.warn('Supabase getSession notice:', err);
+      if (savedLocalUser) {
+        setUser(savedLocalUser);
+      }
       setIsAuthLoading(false);
     });
 
-    // Listen for auth state transitions (login, logout, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
+    // Listen for auth state transitions
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setUser(null);
+        try {
+          localStorage.removeItem('ayandeh_active_user');
+        } catch {}
+      } else if (currentSession?.user) {
+        setSession(currentSession);
+        setUser(currentSession.user);
+        try {
+          localStorage.setItem('ayandeh_active_user', JSON.stringify(currentSession.user));
+        } catch {}
+      }
       setIsAuthLoading(false);
     });
 
@@ -133,15 +229,29 @@ export default function App() {
     }
     setUser(null);
     setSession(null);
+    setImpersonatedUser(null);
+    try {
+      localStorage.removeItem('ayandeh_active_user');
+      localStorage.removeItem('ayandeh_impersonated_user');
+    } catch {}
     showToast('با موفقیت از سامانه خارج شدید.');
   };
 
   // Core Data States (persisted to localStorage)
   const [transactions, setTransactions] = useState<FinancialTransaction[]>(() => {
     try {
+      const savedFY = localStorage.getItem('ayandeh_fiscal_years');
+      const parsedFY: FiscalYear[] = savedFY ? JSON.parse(savedFY) : null;
       const saved = localStorage.getItem('ayandeh_transactions');
       const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) ? parsed : INITIAL_TRANSACTIONS;
+      const rawTx = Array.isArray(parsed) ? parsed : INITIAL_TRANSACTIONS;
+
+      // Clean up orphaned transactions for deleted fiscal years
+      if (Array.isArray(parsedFY) && parsedFY.length > 0) {
+        const validYears = new Set(parsedFY.map(y => y.year));
+        return rawTx.filter(tx => validYears.has(tx.year));
+      }
+      return rawTx;
     } catch {
       return INITIAL_TRANSACTIONS;
     }
@@ -159,9 +269,18 @@ export default function App() {
 
   const [salaryMatrix, setSalaryMatrix] = useState<SalaryMatrixItem[]>(() => {
     try {
+      const savedFY = localStorage.getItem('ayandeh_fiscal_years');
+      const parsedFY: FiscalYear[] = savedFY ? JSON.parse(savedFY) : null;
       const saved = localStorage.getItem('ayandeh_salary_matrix');
       const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) ? parsed : INITIAL_SALARY_MATRIX;
+      const rawSm = Array.isArray(parsed) ? parsed : INITIAL_SALARY_MATRIX;
+
+      // Clean up orphaned salary items for deleted fiscal years
+      if (Array.isArray(parsedFY) && parsedFY.length > 0) {
+        const validYears = new Set(parsedFY.map(y => y.year));
+        return rawSm.filter(sm => validYears.has(sm.year));
+      }
+      return rawSm;
     } catch {
       return INITIAL_SALARY_MATRIX;
     }
@@ -184,16 +303,6 @@ export default function App() {
       return Array.isArray(parsed) ? parsed : INITIAL_LOANS;
     } catch {
       return INITIAL_LOANS;
-    }
-  });
-
-  const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_fiscal_years');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_FISCAL_YEARS;
-    } catch {
-      return INITIAL_FISCAL_YEARS;
     }
   });
 
@@ -301,6 +410,21 @@ export default function App() {
       }
       return updated;
     });
+
+    // Auto-create in Supabase Auth so user can log in immediately from any browser/device
+    registerUserInSupabase(cleanEmail, cleanPassword, {
+      fullName: newUser.fullName,
+      firstName: newUser.firstName,
+      lastName: newUser.lastName,
+      role: newUser.role,
+      roleTitle: newUser.roleTitle,
+      status: newUser.status || 'active',
+      permissions: newUser.permissions,
+      phone: cleanPhone,
+    }).catch(err => {
+      console.warn('Background Supabase registration notice:', err);
+    });
+
     showToast(`کاربر جدید «${newUser.fullName}» با موفقیت در سامانه افزوده شد.`);
   };
 
@@ -610,13 +734,18 @@ export default function App() {
   };
 
   const handleDeleteFiscalYear = (year: number) => {
-    setFiscalYears(prev => prev.filter(fy => fy.year !== year));
-    if (selectedYear === year) {
-      const remaining = fiscalYears.filter(fy => fy.year !== year);
-      if (remaining.length > 0) {
-        setSelectedYear(remaining[0].year);
+    setFiscalYears(prev => {
+      const remaining = prev.filter(fy => fy.year !== year);
+      if (selectedYear === year) {
+        const nextYear = remaining.find(fy => !fy.isClosed)?.year || remaining[0]?.year || 1405;
+        setSelectedYear(nextYear);
       }
-    }
+      return remaining;
+    });
+    // Remove transactions and salary records for the deleted fiscal year so no orphaned data remains
+    setTransactions(prev => prev.filter(tx => tx.year !== year && tx.fiscalYear !== year && !tx.dateString?.startsWith(`${year}/`)));
+    setSalaryMatrix(prev => prev.filter(sm => sm.year !== year));
+    showToast(`سال مالی ${year} و داده‌های مربوط به آن با موفقیت حذف گردید.`);
   };
 
   const handleCloseFiscalYear = (
@@ -691,12 +820,20 @@ export default function App() {
     salaryMatrix: SalaryMatrixItem[];
     members: CompanyMember[];
     loans: Loan[];
+    fiscalYears?: FiscalYear[];
+    users?: AppUser[];
   }) => {
-    setTransactions(data.transactions);
-    setEmployees(data.employees);
-    setSalaryMatrix(data.salaryMatrix);
-    setMembers(data.members);
-    setLoans(data.loans);
+    if (data.transactions) setTransactions(data.transactions);
+    if (data.employees) setEmployees(data.employees);
+    if (data.salaryMatrix) setSalaryMatrix(data.salaryMatrix);
+    if (data.members) setMembers(data.members);
+    if (data.loans) setLoans(data.loans);
+    if (data.fiscalYears && Array.isArray(data.fiscalYears) && data.fiscalYears.length > 0) {
+      setFiscalYears(data.fiscalYears);
+    }
+    if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+      setUsers(data.users);
+    }
     showToast('کلیه اطلاعات از فایل پشتیبان با موفقیت بازیابی شد.');
   };
 
@@ -980,6 +1117,8 @@ export default function App() {
         loans={loans}
         companyName={companyName}
         selectedYear={selectedYear}
+        fiscalYears={fiscalYears}
+        users={users}
         onRestoreData={handleRestoreData}
         onResetToDefaults={handleResetToDefaults}
       />

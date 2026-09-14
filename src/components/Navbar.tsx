@@ -194,7 +194,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
           <div className="flex items-center gap-1 overflow-x-auto max-w-[140px] py-0.5">
             {(fiscalYears && fiscalYears.length > 0 
               ? [...fiscalYears].sort((a, b) => a.year - b.year)
-              : [1403, 1404, 1405].map(y => ({ year: y, isClosed: false }))
+              : [{ year: 1405, isClosed: false }]
             ).map((fy) => {
               const yr = typeof fy === 'number' ? fy : fy.year;
               const isClosed = typeof fy === 'object' && fy.isClosed;

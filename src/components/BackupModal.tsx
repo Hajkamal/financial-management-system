@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { DatabaseBackup, Download, Upload, RotateCcw, CheckCircle, AlertTriangle } from 'lucide-react';
-import { FinancialTransaction, Employee, SalaryMatrixItem, CompanyMember, Loan } from '../types';
+import { FinancialTransaction, Employee, SalaryMatrixItem, CompanyMember, Loan, FiscalYear, AppUser } from '../types';
 import { toPersianDigits } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
@@ -14,12 +14,16 @@ interface BackupModalProps {
   loans: Loan[];
   companyName: string;
   selectedYear: number;
+  fiscalYears?: FiscalYear[];
+  users?: AppUser[];
   onRestoreData: (data: {
     transactions: FinancialTransaction[];
     employees: Employee[];
     salaryMatrix: SalaryMatrixItem[];
     members: CompanyMember[];
     loans: Loan[];
+    fiscalYears?: FiscalYear[];
+    users?: AppUser[];
   }) => void;
   onResetToDefaults: () => void;
 }
@@ -34,6 +38,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   loans,
   companyName,
   selectedYear,
+  fiscalYears,
+  users,
   onRestoreData,
   onResetToDefaults,
 }) => {
@@ -45,10 +51,12 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
   const handleExportJSON = () => {
     const backupObj = {
-      version: '1.0',
+      version: '1.1',
       exportDate: new Date().toISOString(),
       companyName,
       year: selectedYear,
+      fiscalYears,
+      users,
       transactions,
       employees,
       salaryMatrix,
@@ -59,7 +67,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backupObj, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `پشتیبان_مالی_${companyName}_${selectedYear}.json`);
+    downloadAnchor.setAttribute('download', `پشتیبان_کامل_مالی_${companyName}_${selectedYear}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -75,7 +83,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         const content = event.target?.result as string;
         const parsed = JSON.parse(content);
 
-        if (!parsed.transactions || !parsed.employees) {
+        if (!parsed.transactions && !parsed.employees) {
           return;
         }
 
@@ -85,6 +93,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           salaryMatrix: parsed.salaryMatrix || [],
           members: parsed.members || [],
           loans: parsed.loans || [],
+          fiscalYears: parsed.fiscalYears || undefined,
+          users: parsed.users || undefined,
         });
       } catch (err) {
         // ignore parse error
