@@ -99,6 +99,76 @@ export function normalizePassword(pwd: string): string {
   return toEnglishDigits(pwd).trim();
 }
 
+/**
+ * Returns the current date and time in Persian (Jalali) format with both English and Persian digits.
+ */
+export function getCurrentJalaliDateTime() {
+  const now = new Date();
+  try {
+    const parts = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).formatToParts(now);
+
+    const get = (type: string) => parts.find(p => p.type === type)?.value || '';
+    const year = get('year') || '1405';
+    const month = get('month') || '01';
+    const day = get('day') || '01';
+    const hour = get('hour') || '12';
+    const minute = get('minute') || '00';
+    const second = get('second') || '00';
+
+    return {
+      year,
+      month,
+      day,
+      hour,
+      minute,
+      second,
+      dateFormatted: `${year}/${month}/${day}`,
+      timeFormatted: `${hour}:${minute}`,
+      dateTimeFormatted: `${year}/${month}/${day} - ${hour}:${minute}`,
+      persianDateTimeFormatted: toPersianDigits(`${year}/${month}/${day} ساعت ${hour}:${minute}`),
+      fileSafeString: `${year}-${month}-${day}_${hour}-${minute}`
+    };
+  } catch {
+    return {
+      year: '1405',
+      month: '01',
+      day: '01',
+      hour: '12',
+      minute: '00',
+      second: '00',
+      dateFormatted: '1405/01/01',
+      timeFormatted: '12:00',
+      dateTimeFormatted: '1405/01/01 - 12:00',
+      persianDateTimeFormatted: '۱۴۰۵/۰۱/۰۱ ساعت ۱۲:۰۰',
+      fileSafeString: '1405-01-01_12-00'
+    };
+  }
+}
+
+/**
+ * Generates the backup filename according to user specifications:
+ * Includes Company Name, Selected Year, Jalali Date, and Time of backup.
+ */
+export function generateBackupFilename(companyName: string, selectedYear: number): {
+  persianFilename: string;
+  crossPlatformFilename: string;
+} {
+  const dt = getCurrentJalaliDateTime();
+  const safeComp = companyName.trim().replace(/\s+/g, '_');
+  return {
+    persianFilename: `پشتیبان_مالی_${safeComp}_سال_${selectedYear}_تاریخ_${dt.fileSafeString}.json`,
+    crossPlatformFilename: `Backup_Ayandeh_${selectedYear}_${dt.fileSafeString}.json`
+  };
+}
+
 export function formatWithCommas(n: number | string): string {
   if (n === '' || n === null || n === undefined) return '';
   const num = typeof n === 'number' ? n : parseFormattedNumber(n);

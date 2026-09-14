@@ -301,7 +301,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       </div>
 
-      {/* Transactions Table */}
+      {/* Transactions Table / Mobile Cards */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         {filtered.length === 0 ? (
           <div className="py-12 text-center text-slate-400">
@@ -309,160 +309,274 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <p className="text-sm">هیچ سندی با معیارهای فیلتر شده یافت نشد.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-right border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                  <th className="px-4 py-3 w-12 text-center">نوع</th>
-                  <th className="px-4 py-3">عنوان و شرح سند</th>
-                  <th className="px-4 py-3">دسته‌بندی</th>
-                  <th className="px-4 py-3">طرف حساب / ذینفع</th>
-                  <th className="px-4 py-3">کاربر ثبت‌کننده</th>
-                  <th className="px-4 py-3">تاریخ و ماه</th>
-                  <th className="px-4 py-3 text-left">مبلغ ({currencyMode === 'rial' ? 'ریال' : 'تومان'})</th>
-                  {(canEdit || canDelete) && (
-                    <th className="px-4 py-3 w-20 text-center">عملیات</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((t) => {
-                  const isIncome = t.type === 'income';
-                  let badge = null;
+          <>
+            {/* Mobile Card View (< md) */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {filtered.map((t) => {
+                const isIncome = t.type === 'income';
+                const monthName = PERSIAN_MONTHS.find(m => m.num === t.month)?.name || t.month;
+                const creatorDisplayName = t.createdByName || 'وحید کمالی';
 
-                  if (isIncome) {
-                    const cfg = INCOME_CATEGORY_CONFIG[t.category as IncomeCategory];
-                    badge = (
-                      <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${cfg?.badgeBg || 'bg-slate-100 text-slate-800'}`}>
-                        {cfg?.label || t.category}
-                        {t.subCategory && t.category === 'sale_basina' && (
-                          <span className="font-bold">
-                            : {BASINA_SUBCATEGORY_CONFIG[t.subCategory as BasinaSubCategory] || t.subCategory}
-                          </span>
-                        )}
-                      </span>
-                    );
-                  } else {
-                    const cfg = EXPENSE_CATEGORY_CONFIG[t.category as ExpenseCategory];
-                    badge = (
-                      <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${cfg?.badgeBg || 'bg-slate-100 text-slate-800'}`}>
-                        {cfg?.label || t.category}
-                        {t.subCategory && t.category === 'infrastructure' && (
-                          <span className="font-bold">
-                            : {INFRASTRUCTURE_SUBCATEGORY_CONFIG[t.subCategory as InfrastructureSubCategory] || t.subCategory}
-                          </span>
-                        )}
-                        {t.category === 'shareholder_payout' && (
-                          <span className="font-bold text-[10px] mr-1">
-                            ({t.memberPayoutType === 'salary' ? 'حقوق کارکرد ماهانه' : 'برداشت سود سهام'})
-                          </span>
-                        )}
-                      </span>
-                    );
-                  }
+                let badge = null;
+                if (isIncome) {
+                  const cfg = INCOME_CATEGORY_CONFIG[t.category as IncomeCategory];
+                  badge = (
+                    <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium ${cfg?.badgeBg || 'bg-slate-100 text-slate-800'}`}>
+                      {cfg?.label || t.category}
+                      {t.subCategory && t.category === 'sale_basina' && (
+                        <span className="font-bold">
+                          : {BASINA_SUBCATEGORY_CONFIG[t.subCategory as BasinaSubCategory] || t.subCategory}
+                        </span>
+                      )}
+                    </span>
+                  );
+                } else {
+                  const cfg = EXPENSE_CATEGORY_CONFIG[t.category as ExpenseCategory];
+                  badge = (
+                    <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium ${cfg?.badgeBg || 'bg-slate-100 text-slate-800'}`}>
+                      {cfg?.label || t.category}
+                      {t.subCategory && t.category === 'infrastructure' && (
+                        <span className="font-bold">
+                          : {INFRASTRUCTURE_SUBCATEGORY_CONFIG[t.subCategory as InfrastructureSubCategory] || t.subCategory}
+                        </span>
+                      )}
+                      {t.category === 'shareholder_payout' && (
+                        <span className="font-bold text-[10px] mr-1">
+                          ({t.memberPayoutType === 'salary' ? 'حقوق' : 'سود'})
+                        </span>
+                      )}
+                    </span>
+                  );
+                }
 
-                  const monthName = PERSIAN_MONTHS.find(m => m.num === t.month)?.name || t.month;
-                  const creatorDisplayName = t.createdByName || 'وحید کمالی';
-
-                  return (
-                    <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                      {/* Type Icon */}
-                      <td className="p-3 text-center">
-                        <div className={`w-7 h-7 mx-auto rounded-full flex items-center justify-center ${
+                return (
+                  <div key={t.id} className="p-4 space-y-2.5 hover:bg-slate-50/60 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
                           isIncome ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
                         }`}>
                           {isIncome ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
                         </div>
-                      </td>
-
-                      {/* Title & Desc */}
-                      <td className="p-3">
-                        <span className="font-bold text-slate-900 block">{t.title}</span>
-                        {t.description && (
-                          <span className="text-[11px] text-slate-500 block truncate max-w-sm mt-0.5">
-                            {t.description}
-                          </span>
-                        )}
-                        {t.trackingCode && (
-                          <span className="text-[10px] text-slate-400 block mt-0.5 font-mono">
-                            کد رهگیری: {t.trackingCode}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Category Badge */}
-                      <td className="p-3">
-                        {badge}
-                      </td>
-
-                      {/* Recipient / Payer */}
-                      <td className="p-3 text-slate-700 font-medium">
-                        {t.recipientOrPayer || '-'}
-                      </td>
-
-                      {/* Creator User Info */}
-                      <td className="p-3 text-slate-700">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-black shrink-0">
-                            {creatorDisplayName[0]}
-                          </div>
-                          <div>
-                            <span className="font-bold text-slate-800 text-[11px] block">
-                              {creatorDisplayName}
-                            </span>
-                            {t.updatedByName && (
-                              <span className="text-[10px] text-amber-600 block">
-                                ویرایش: {t.updatedByName}
-                              </span>
-                            )}
+                        <div>
+                          <h4 className="font-bold text-slate-900 text-xs sm:text-sm line-clamp-1">{t.title}</h4>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+                            <span>{t.dateString}</span>
+                            <span>•</span>
+                            <span>ماه {monthName}</span>
                           </div>
                         </div>
-                      </td>
+                      </div>
 
-                      {/* Date */}
-                      <td className="p-3 text-slate-600">
-                        <span className="font-semibold block">{t.dateString}</span>
-                        <span className="text-[11px] text-slate-400">ماه {monthName}</span>
-                      </td>
-
-                      {/* Amount */}
-                      <td className="p-3 text-left">
-                        <span className={`text-sm font-extrabold ${isIncome ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      <div className="text-left shrink-0">
+                        <span className={`text-sm sm:text-base font-extrabold ${isIncome ? 'text-emerald-700' : 'text-rose-700'}`}>
                           {isIncome ? '+' : '-'}{formatCurrency(t.amount, currencyMode)}
                         </span>
-                      </td>
+                      </div>
+                    </div>
 
-                      {/* Actions */}
+                    {t.description && (
+                      <p className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg leading-relaxed">
+                        {t.description}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between gap-2 pt-1 text-[11px]">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {badge}
+                        {t.recipientOrPayer && (
+                          <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                            طرف حساب: {t.recipientOrPayer}
+                          </span>
+                        )}
+                      </div>
+
                       {(canEdit || canDelete) && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          {canEdit && (
+                            <button
+                              onClick={() => onEditTransaction(t)}
+                              className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                              title="ویرایش"
+                              aria-label="ویرایش سند"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={() => setDeletingTransaction({ id: t.id, title: t.title })}
+                              className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="حذف"
+                              aria-label="حذف سند"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table View (>= md) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-xs text-right border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                    <th className="px-4 py-3 w-12 text-center">نوع</th>
+                    <th className="px-4 py-3">عنوان و شرح سند</th>
+                    <th className="px-4 py-3">دسته‌بندی</th>
+                    <th className="px-4 py-3">طرف حساب / ذینفع</th>
+                    <th className="px-4 py-3">کاربر ثبت‌کننده</th>
+                    <th className="px-4 py-3">تاریخ و ماه</th>
+                    <th className="px-4 py-3 text-left">مبلغ ({currencyMode === 'rial' ? 'ریال' : 'تومان'})</th>
+                    {(canEdit || canDelete) && (
+                      <th className="px-4 py-3 w-20 text-center">عملیات</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map((t) => {
+                    const isIncome = t.type === 'income';
+                    let badge = null;
+
+                    if (isIncome) {
+                      const cfg = INCOME_CATEGORY_CONFIG[t.category as IncomeCategory];
+                      badge = (
+                        <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${cfg?.badgeBg || 'bg-slate-100 text-slate-800'}`}>
+                          {cfg?.label || t.category}
+                          {t.subCategory && t.category === 'sale_basina' && (
+                            <span className="font-bold">
+                              : {BASINA_SUBCATEGORY_CONFIG[t.subCategory as BasinaSubCategory] || t.subCategory}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    } else {
+                      const cfg = EXPENSE_CATEGORY_CONFIG[t.category as ExpenseCategory];
+                      badge = (
+                        <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${cfg?.badgeBg || 'bg-slate-100 text-slate-800'}`}>
+                          {cfg?.label || t.category}
+                          {t.subCategory && t.category === 'infrastructure' && (
+                            <span className="font-bold">
+                              : {INFRASTRUCTURE_SUBCATEGORY_CONFIG[t.subCategory as InfrastructureSubCategory] || t.subCategory}
+                            </span>
+                          )}
+                          {t.category === 'shareholder_payout' && (
+                            <span className="font-bold text-[10px] mr-1">
+                              ({t.memberPayoutType === 'salary' ? 'حقوق کارکرد ماهانه' : 'برداشت سود سهام'})
+                            </span>
+                          )}
+                        </span>
+                      );
+                    }
+
+                    const monthName = PERSIAN_MONTHS.find(m => m.num === t.month)?.name || t.month;
+                    const creatorDisplayName = t.createdByName || 'وحید کمالی';
+
+                    return (
+                      <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                        {/* Type Icon */}
                         <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            {canEdit && (
-                              <button
-                                onClick={() => onEditTransaction(t)}
-                                className="p-1.5 rounded text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
-                                title="ویرایش سند"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            {canDelete && (
-                              <button
-                                onClick={() => setDeletingTransaction({ id: t.id, title: t.title })}
-                                className="p-1.5 rounded text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                                title="حذف سند"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                          <div className={`w-7 h-7 mx-auto rounded-full flex items-center justify-center ${
+                            isIncome ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                          }`}>
+                            {isIncome ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
                           </div>
                         </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+
+                        {/* Title & Desc */}
+                        <td className="p-3">
+                          <span className="font-bold text-slate-900 block">{t.title}</span>
+                          {t.description && (
+                            <span className="text-[11px] text-slate-500 block truncate max-w-sm mt-0.5">
+                              {t.description}
+                            </span>
+                          )}
+                          {t.trackingCode && (
+                            <span className="text-[10px] text-slate-400 block mt-0.5 font-mono">
+                              کد رهگیری: {t.trackingCode}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Category Badge */}
+                        <td className="p-3">
+                          {badge}
+                        </td>
+
+                        {/* Recipient / Payer */}
+                        <td className="p-3 text-slate-700 font-medium">
+                          {t.recipientOrPayer || '-'}
+                        </td>
+
+                        {/* Creator User Info */}
+                        <td className="p-3 text-slate-700">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-black shrink-0">
+                              {creatorDisplayName[0]}
+                            </div>
+                            <div>
+                              <span className="font-bold text-slate-800 text-[11px] block">
+                                {creatorDisplayName}
+                              </span>
+                              {t.updatedByName && (
+                                <span className="text-[10px] text-amber-600 block">
+                                  ویرایش: {t.updatedByName}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Date */}
+                        <td className="p-3 text-slate-600">
+                          <span className="font-semibold block">{t.dateString}</span>
+                          <span className="text-[11px] text-slate-400">ماه {monthName}</span>
+                        </td>
+
+                        {/* Amount */}
+                        <td className="p-3 text-left">
+                          <span className={`text-sm font-extrabold ${isIncome ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            {isIncome ? '+' : '-'}{formatCurrency(t.amount, currencyMode)}
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        {(canEdit || canDelete) && (
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {canEdit && (
+                                <button
+                                  onClick={() => onEditTransaction(t)}
+                                  className="p-1.5 rounded text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                                  title="ویرایش سند"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => setDeletingTransaction({ id: t.id, title: t.title })}
+                                  className="p-1.5 rounded text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                  title="حذف سند"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

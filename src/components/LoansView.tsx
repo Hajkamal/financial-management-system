@@ -60,8 +60,8 @@ export const LoansView: React.FC<LoansViewProps> = ({
   const [installmentAmount, setInstallmentAmount] = useState('');
   const [totalInstallments, setTotalInstallments] = useState('30');
   const [paidInstallments, setPaidInstallments] = useState('0');
-  const [startDate, setStartDate] = useState('۱۴۰۳/۱۱/۰۱');
-  const [nextDueDate, setNextDueDate] = useState('۱۴۰۴/۰۸/۱۵');
+  const [startDate, setStartDate] = useState('۱۴۰۵/۰۱/۰۱');
+  const [nextDueDate, setNextDueDate] = useState('۱۴۰۵/۰۸/۱۵');
   const [interestRate, setInterestRate] = useState('4');
   const [notes, setNotes] = useState('');
 
@@ -79,8 +79,8 @@ export const LoansView: React.FC<LoansViewProps> = ({
     setInstallmentAmount('40000000');
     setTotalInstallments('25');
     setPaidInstallments('0');
-    setStartDate('۱۴۰۴/۰۱/۰۱');
-    setNextDueDate('۱۴۰۴/۰۸/۱۵');
+    setStartDate('۱۴۰۵/۰۱/۰۱');
+    setNextDueDate('۱۴۰۵/۰۸/۱۵');
     setInterestRate('4');
     setNotes('');
     setIsModalOpen(true);
@@ -113,8 +113,8 @@ export const LoansView: React.FC<LoansViewProps> = ({
       installmentAmount: Number(installmentAmount) || 0,
       totalInstallments: Number(totalInstallments) || 1,
       paidInstallments: Number(paidInstallments) || 0,
-      startDate: startDate.trim() || '۱۴۰۴/۰۱/۰۱',
-      nextDueDate: nextDueDate.trim() || '۱۴۰۴/۰۸/۱۵',
+      startDate: startDate.trim() || '۱۴۰۵/۰۱/۰۱',
+      nextDueDate: nextDueDate.trim() || '۱۴۰۵/۰۸/۱۵',
       interestRate: interestRate ? Number(interestRate) : undefined,
       notes: notes.trim() || undefined,
     };

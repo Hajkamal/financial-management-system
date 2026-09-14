@@ -283,24 +283,61 @@ export const Sidebar: React.FC<NavigationProps> = ({
 
   return (
     <>
-      {/* Mobile Top Bar */}
-      <div className="md:hidden bg-slate-900 text-white p-4 border-b border-slate-800 flex items-center justify-between sticky top-0 z-40">
+      {/* Enhanced Mobile Top Bar */}
+      <div className="md:hidden bg-slate-900 text-white px-3 py-2.5 border-b border-slate-800 flex items-center justify-between sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded bg-blue-600 flex items-center justify-center font-bold">
-            <Building2 className="w-3.5 h-3.5 text-white" />
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold shrink-0">
+            <Building2 className="w-4 h-4 text-white" />
           </div>
           <div>
-            <div className="text-sm font-bold">{companyName}</div>
-            <div className="text-[10px] text-slate-400">سال {selectedYear}</div>
+            <div className="text-xs font-bold truncate max-w-[130px]">{companyName}</div>
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+              <span className="text-blue-400 font-bold">سال {selectedYear}</span>
+              <span>•</span>
+              <button
+                onClick={() => setCurrencyMode(currencyMode === 'rial' ? 'toman' : 'rial')}
+                className="text-amber-300 hover:underline font-medium"
+              >
+                {currencyMode === 'rial' ? 'ریال' : 'تومان'}
+              </button>
+            </div>
           </div>
         </div>
-        <button
-          onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="p-2 text-slate-300 hover:bg-slate-800 rounded-lg"
-          aria-label="منوی اصلی"
-        >
-          {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+
+        <div className="flex items-center gap-1.5">
+          {/* Quick Backup Modal Button on Mobile */}
+          {(currentUser?.permissions.canBackupRestore ?? true) && (
+            <button
+              onClick={onOpenBackupModal}
+              className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+              title="پشتیبان‌گیری و نگهداری داده‌ها"
+              aria-label="پشتیبان‌گیری"
+            >
+              <DatabaseBackup className="w-4 h-4 text-indigo-400" />
+            </button>
+          )}
+
+          {/* Quick Add Transaction Button on Mobile */}
+          {(currentUser?.permissions.canCreateTransactions ?? true) && (
+            <button
+              onClick={onOpenNewTransaction}
+              className="p-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-xs cursor-pointer"
+              title="ثبت سند جدید"
+              aria-label="ثبت سند جدید"
+            >
+              <PlusCircle className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Hamburger Menu */}
+          <button
+            onClick={() => setIsMobileOpen(!isMobileOpen)}
+            className="p-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+            aria-label="منوی اصلی"
+          >
+            {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Drawer */}
@@ -484,3 +521,86 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 export const Navbar: React.FC<NavigationProps> = (props) => {
   return <Sidebar {...props} />;
 };
+
+interface MobileBottomNavProps {
+  activeTab: ActiveTab;
+  setActiveTab: (tab: ActiveTab) => void;
+  onOpenNewTransaction: () => void;
+  onOpenBackupModal: () => void;
+  canCreateTransactions?: boolean;
+}
+
+/**
+ * Mobile-First Native-like Bottom Navigation Bar
+ * Fixed at the bottom of the viewport on mobile devices (<768px)
+ */
+export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
+  activeTab,
+  setActiveTab,
+  onOpenNewTransaction,
+  onOpenBackupModal,
+  canCreateTransactions = true,
+}) => {
+  return (
+    <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 text-white flex items-center justify-around px-2 py-1.5 shadow-2xl safe-area-bottom">
+      {/* 1. Dashboard */}
+      <button
+        onClick={() => setActiveTab('dashboard')}
+        className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors cursor-pointer ${
+          activeTab === 'dashboard' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+        }`}
+      >
+        <BarChart3 className="w-5 h-5 mb-0.5" />
+        <span className="text-[10px]">داشبورد</span>
+      </button>
+
+      {/* 2. Transactions */}
+      <button
+        onClick={() => setActiveTab('transactions')}
+        className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors cursor-pointer ${
+          activeTab === 'transactions' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+        }`}
+      >
+        <ReceiptText className="w-5 h-5 mb-0.5" />
+        <span className="text-[10px]">اسناد</span>
+      </button>
+
+      {/* 3. Center FAB: New Transaction */}
+      {canCreateTransactions && (
+        <div className="flex flex-col items-center justify-center flex-1 -mt-5">
+          <button
+            onClick={onOpenNewTransaction}
+            className="w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-lg shadow-blue-600/40 border-2 border-slate-900 active:scale-95 transition-all cursor-pointer"
+            title="ثبت سند جدید"
+            aria-label="ثبت سند جدید"
+          >
+            <PlusCircle className="w-7 h-7" />
+          </button>
+          <span className="text-[9px] font-bold text-slate-300 mt-1">ثبت</span>
+        </div>
+      )}
+
+      {/* 4. Salary Matrix */}
+      <button
+        onClick={() => setActiveTab('salary-matrix')}
+        className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors cursor-pointer ${
+          activeTab === 'salary-matrix' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+        }`}
+      >
+        <Table2 className="w-5 h-5 mb-0.5" />
+        <span className="text-[10px]">حقوق</span>
+      </button>
+
+      {/* 5. Backup & Maintenance */}
+      <button
+        onClick={onOpenBackupModal}
+        className="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer"
+        title="پشتیبان‌گیری و بازیابی داده‌ها"
+      >
+        <DatabaseBackup className="w-5 h-5 mb-0.5 text-indigo-400" />
+        <span className="text-[10px]">بکاپ</span>
+      </button>
+    </div>
+  );
+};
+

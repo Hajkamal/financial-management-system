@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Sidebar,
-  TopHeader
+  TopHeader,
+  MobileBottomNav
 } from './components/Navbar';
 import { 
   DashboardView 
@@ -71,7 +72,9 @@ import {
   PERSIAN_MONTHS,
   toEnglishDigits,
   normalizeEmail,
-  normalizePassword
+  normalizePassword,
+  generateBackupFilename,
+  getCurrentJalaliDateTime
 } from './utils/formatters';
 
 import { 
@@ -82,7 +85,17 @@ import {
   Session 
 } from './lib/supabase';
 import { AuthScreen } from './components/AuthScreen';
-import { Building2, Loader2 } from 'lucide-react';
+import { Building2, Loader2, DatabaseBackup, Download, AlertCircle, X } from 'lucide-react';
+
+/** Helper to ensure fiscal years never include legacy 1404 and always contain 1405 */
+const sanitizeFiscalYearsList = (list: any): FiscalYear[] => {
+  const arr = Array.isArray(list) ? list : [];
+  const cleaned = arr.filter((fy: any) => fy.year !== 1404);
+  if (!cleaned.some((fy: any) => fy.year === 1405)) {
+    cleaned.push(...INITIAL_FISCAL_YEARS);
+  }
+  return cleaned;
+};
 
 export default function App() {
   const [companyName] = useState<string>(INITIAL_COMPANY_NAME);
@@ -108,12 +121,14 @@ export default function App() {
     }
   });
 
-  // Core Data States (persisted to localStorage)
+  // Core Data States (persisted to localStorage) with 1404 eradicated across devices
   const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_fiscal_years');
       const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_FISCAL_YEARS;
+      const valid = sanitizeFiscalYearsList(parsed);
+      localStorage.setItem('ayandeh_fiscal_years', JSON.stringify(valid));
+      return valid;
     } catch {
       return INITIAL_FISCAL_YEARS;
     }
@@ -122,34 +137,44 @@ export default function App() {
   const [selectedYear, setSelectedYear] = useState<number>(() => {
     try {
       const savedYear = localStorage.getItem('ayandeh_selected_year');
+      if (savedYear === '1404') {
+        localStorage.setItem('ayandeh_selected_year', '1405');
+        return 1405;
+      }
       const savedFY = localStorage.getItem('ayandeh_fiscal_years');
       const parsedFY: FiscalYear[] = savedFY ? JSON.parse(savedFY) : null;
-      const list = Array.isArray(parsedFY) && parsedFY.length > 0 ? parsedFY : INITIAL_FISCAL_YEARS;
+      const list = sanitizeFiscalYearsList(parsedFY);
       
       if (savedYear) {
         const parsed = parseInt(savedYear, 10);
-        if (list.some(y => y.year === parsed)) return parsed;
+        if (parsed !== 1404 && list.some(y => y.year === parsed)) return parsed;
       }
       const openYear = list.find(y => !y.isClosed);
-      return openYear ? openYear.year : list[list.length - 1].year;
+      return openYear ? openYear.year : 1405;
     } catch {
       return INITIAL_YEAR;
     }
   });
 
-  // Ensure selectedYear is always valid within existing fiscalYears
+  // Ensure selectedYear is always valid within existing fiscalYears and never 1404
   useEffect(() => {
-    if (fiscalYears.length > 0 && !fiscalYears.some(fy => fy.year === selectedYear)) {
-      const openYear = fiscalYears.find(fy => !fy.isClosed) || fiscalYears[fiscalYears.length - 1];
+    if (selectedYear === 1404 || (fiscalYears.length > 0 && !fiscalYears.some(fy => fy.year === selectedYear))) {
+      const openYear = fiscalYears.find(fy => !fy.isClosed && fy.year !== 1404) || fiscalYears[fiscalYears.length - 1];
       if (openYear) {
         setSelectedYear(openYear.year);
+      } else {
+        setSelectedYear(1405);
       }
     }
   }, [fiscalYears, selectedYear]);
 
   // Persist selectedYear
   useEffect(() => {
-    localStorage.setItem('ayandeh_selected_year', selectedYear.toString());
+    if (selectedYear !== 1404) {
+      localStorage.setItem('ayandeh_selected_year', selectedYear.toString());
+    } else {
+      localStorage.setItem('ayandeh_selected_year', '1405');
+    }
   }, [selectedYear]);
 
   // Monitor Supabase auth session and maintain persistence
@@ -240,18 +265,17 @@ export default function App() {
   // Core Data States (persisted to localStorage)
   const [transactions, setTransactions] = useState<FinancialTransaction[]>(() => {
     try {
-      const savedFY = localStorage.getItem('ayandeh_fiscal_years');
-      const parsedFY: FiscalYear[] = savedFY ? JSON.parse(savedFY) : null;
       const saved = localStorage.getItem('ayandeh_transactions');
       const parsed = saved ? JSON.parse(saved) : null;
       const rawTx = Array.isArray(parsed) ? parsed : INITIAL_TRANSACTIONS;
 
-      // Clean up orphaned transactions for deleted fiscal years
-      if (Array.isArray(parsedFY) && parsedFY.length > 0) {
-        const validYears = new Set(parsedFY.map(y => y.year));
-        return rawTx.filter(tx => validYears.has(tx.year));
-      }
-      return rawTx;
+      // Clean up orphaned transactions & eradicate 1404 completely across all devices
+      const cleaned = rawTx.filter(tx => 
+        tx.year !== 1404 && 
+        !tx.dateString?.startsWith('1404') && 
+        !tx.dateString?.startsWith('۱۴۰۴')
+      );
+      return cleaned.length > 0 ? cleaned : INITIAL_TRANSACTIONS;
     } catch {
       return INITIAL_TRANSACTIONS;
     }
@@ -269,18 +293,13 @@ export default function App() {
 
   const [salaryMatrix, setSalaryMatrix] = useState<SalaryMatrixItem[]>(() => {
     try {
-      const savedFY = localStorage.getItem('ayandeh_fiscal_years');
-      const parsedFY: FiscalYear[] = savedFY ? JSON.parse(savedFY) : null;
       const saved = localStorage.getItem('ayandeh_salary_matrix');
       const parsed = saved ? JSON.parse(saved) : null;
       const rawSm = Array.isArray(parsed) ? parsed : INITIAL_SALARY_MATRIX;
 
-      // Clean up orphaned salary items for deleted fiscal years
-      if (Array.isArray(parsedFY) && parsedFY.length > 0) {
-        const validYears = new Set(parsedFY.map(y => y.year));
-        return rawSm.filter(sm => validYears.has(sm.year));
-      }
-      return rawSm;
+      // Clean up salary items: eradicate 1404
+      const cleaned = rawSm.filter(sm => sm.year !== 1404);
+      return cleaned.length > 0 ? cleaned : INITIAL_SALARY_MATRIX;
     } catch {
       return INITIAL_SALARY_MATRIX;
     }
@@ -315,6 +334,78 @@ export default function App() {
       return INITIAL_USERS;
     }
   });
+
+  // Automated one-time purge for any browser or phone carrying legacy 1404 cache
+  useEffect(() => {
+    const isPurged = localStorage.getItem('ayandeh_1404_purged_v3');
+    if (!isPurged) {
+      // 1. Fiscal Years
+      const savedFY = localStorage.getItem('ayandeh_fiscal_years');
+      if (savedFY && savedFY.includes('1404')) {
+        try {
+          const parsed = JSON.parse(savedFY);
+          const cleaned = sanitizeFiscalYearsList(parsed);
+          localStorage.setItem('ayandeh_fiscal_years', JSON.stringify(cleaned));
+          setFiscalYears(cleaned);
+        } catch {}
+      }
+      // 2. Selected Year
+      if (localStorage.getItem('ayandeh_selected_year') === '1404') {
+        localStorage.setItem('ayandeh_selected_year', '1405');
+        setSelectedYear(1405);
+      }
+      // 3. Transactions
+      const savedTx = localStorage.getItem('ayandeh_transactions');
+      if (savedTx && (savedTx.includes('1404') || savedTx.includes('۱۴۰۴'))) {
+        try {
+          const parsedTx: FinancialTransaction[] = JSON.parse(savedTx);
+          const cleanedTx = parsedTx.filter(tx => 
+            tx.year !== 1404 && 
+            !tx.dateString?.startsWith('1404') && 
+            !tx.dateString?.startsWith('۱۴۰۴')
+          );
+          localStorage.setItem('ayandeh_transactions', JSON.stringify(cleanedTx));
+          setTransactions(cleanedTx.length > 0 ? cleanedTx : INITIAL_TRANSACTIONS);
+        } catch {}
+      }
+      // 4. Salary Matrix
+      const savedSm = localStorage.getItem('ayandeh_salary_matrix');
+      if (savedSm && savedSm.includes('1404')) {
+        try {
+          const parsedSm: SalaryMatrixItem[] = JSON.parse(savedSm);
+          const cleanedSm = parsedSm.filter(sm => sm.year !== 1404);
+          localStorage.setItem('ayandeh_salary_matrix', JSON.stringify(cleanedSm));
+          setSalaryMatrix(cleanedSm.length > 0 ? cleanedSm : INITIAL_SALARY_MATRIX);
+        } catch {}
+      }
+      localStorage.setItem('ayandeh_1404_purged_v3', 'true');
+    }
+  }, []);
+
+  // Periodic backup reminder state (reminds user to export periodic backup)
+  const [showBackupReminder, setShowBackupReminder] = useState<boolean>(() => {
+    try {
+      const dismissedUntil = localStorage.getItem('ayandeh_backup_reminder_dismissed');
+      if (dismissedUntil && Date.now() < parseInt(dismissedUntil, 10)) {
+        return false;
+      }
+      const lastBackup = localStorage.getItem('ayandeh_last_backup_date');
+      if (!lastBackup) {
+        return true; // Remind if never backed up
+      }
+      const days = (Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24);
+      return days >= 3; // Remind every 3 days
+    } catch {
+      return false;
+    }
+  });
+
+  const dismissBackupReminder = (hours = 48) => {
+    setShowBackupReminder(false);
+    try {
+      localStorage.setItem('ayandeh_backup_reminder_dismissed', (Date.now() + hours * 60 * 60 * 1000).toString());
+    } catch {}
+  };
 
   // Support for impersonating / testing another user role
   const [impersonatedUser, setImpersonatedUser] = useState<AppUser | null>(null);
@@ -813,6 +904,81 @@ export default function App() {
     setIsExportModalOpen(true);
   };
 
+  // Quick direct backup download with name and Jalali timestamp
+  const handleQuickBackupDownload = () => {
+    const dt = getCurrentJalaliDateTime();
+    const filenames = generateBackupFilename(companyName, selectedYear);
+    const backupObj = {
+      backupApp: 'سامانه حسابداری و مدیریت مالی آینده نگاران خلاق',
+      version: '2.5.0',
+      exportDateIso: new Date().toISOString(),
+      exportJalaliDateTime: dt.persianDateTimeFormatted,
+      companyName,
+      year: selectedYear,
+      fiscalYears,
+      users,
+      transactions,
+      employees,
+      salaryMatrix,
+      members,
+      loans,
+      stats: {
+        totalTransactions: transactions.length,
+        totalEmployees: employees.length,
+        totalMembers: members.length,
+        totalLoans: loans.length,
+      }
+    };
+    const jsonString = JSON.stringify(backupObj, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.setAttribute('download', filenames.persianFilename);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    localStorage.setItem('ayandeh_last_backup_date', new Date().toISOString());
+    setShowBackupReminder(false);
+    showToast(`فایل پشتیبان با موفقیت دانلود شد: ${filenames.persianFilename}`);
+  };
+
+  // Explicit Purge of any 1404 data from the device/browser
+  const handlePurge1404 = () => {
+    // 1. Fiscal Years
+    const cleanedFY = fiscalYears.filter(fy => fy.year !== 1404);
+    if (!cleanedFY.some(fy => fy.year === 1405)) {
+      cleanedFY.push(...INITIAL_FISCAL_YEARS);
+    }
+    setFiscalYears(cleanedFY);
+    localStorage.setItem('ayandeh_fiscal_years', JSON.stringify(cleanedFY));
+
+    // 2. Selected Year
+    setSelectedYear(1405);
+    localStorage.setItem('ayandeh_selected_year', '1405');
+
+    // 3. Transactions
+    const cleanedTx = transactions.filter(tx => 
+      tx.year !== 1404 && 
+      !tx.dateString?.startsWith('1404') && 
+      !tx.dateString?.startsWith('۱۴۰۴')
+    );
+    const finalTx = cleanedTx.length > 0 ? cleanedTx : INITIAL_TRANSACTIONS;
+    setTransactions(finalTx);
+    localStorage.setItem('ayandeh_transactions', JSON.stringify(finalTx));
+
+    // 4. Salary Matrix
+    const cleanedSm = salaryMatrix.filter(sm => sm.year !== 1404);
+    const finalSm = cleanedSm.length > 0 ? cleanedSm : INITIAL_SALARY_MATRIX;
+    setSalaryMatrix(finalSm);
+    localStorage.setItem('ayandeh_salary_matrix', JSON.stringify(finalSm));
+
+    localStorage.setItem('ayandeh_1404_purged_v3', 'true');
+    showToast('اطلاعات سال مالی ۱۴۰۴ با موفقیت پاکسازی شد و سال ۱۴۰۵ به عنوان سال پایه فعال گردید.');
+  };
+
   // Restore and Reset
   const handleRestoreData = (data: {
     transactions: FinancialTransaction[];
@@ -823,17 +989,27 @@ export default function App() {
     fiscalYears?: FiscalYear[];
     users?: AppUser[];
   }) => {
-    if (data.transactions) setTransactions(data.transactions);
+    if (data.transactions) {
+      const cleanedTx = data.transactions.filter(tx => tx.year !== 1404);
+      setTransactions(cleanedTx.length > 0 ? cleanedTx : data.transactions);
+    }
     if (data.employees) setEmployees(data.employees);
-    if (data.salaryMatrix) setSalaryMatrix(data.salaryMatrix);
+    if (data.salaryMatrix) {
+      const cleanedSm = data.salaryMatrix.filter(sm => sm.year !== 1404);
+      setSalaryMatrix(cleanedSm.length > 0 ? cleanedSm : data.salaryMatrix);
+    }
     if (data.members) setMembers(data.members);
     if (data.loans) setLoans(data.loans);
     if (data.fiscalYears && Array.isArray(data.fiscalYears) && data.fiscalYears.length > 0) {
-      setFiscalYears(data.fiscalYears);
+      const cleanedFY = sanitizeFiscalYearsList(data.fiscalYears);
+      setFiscalYears(cleanedFY);
+      localStorage.setItem('ayandeh_fiscal_years', JSON.stringify(cleanedFY));
     }
     if (data.users && Array.isArray(data.users) && data.users.length > 0) {
       setUsers(data.users);
     }
+    localStorage.setItem('ayandeh_last_backup_date', new Date().toISOString());
+    setShowBackupReminder(false);
     showToast('کلیه اطلاعات از فایل پشتیبان با موفقیت بازیابی شد.');
   };
 
@@ -843,7 +1019,9 @@ export default function App() {
     setSalaryMatrix(INITIAL_SALARY_MATRIX);
     setMembers(INITIAL_MEMBERS);
     setLoans(INITIAL_LOANS);
-    showToast('داده‌های نمونه اولیه با موفقیت بازنشانی شدند.');
+    setFiscalYears(INITIAL_FISCAL_YEARS);
+    setSelectedYear(1405);
+    showToast('داده‌های نمونه اولیه سال ۱۴۰۵ با موفقیت بازنشانی شدند.');
   };
 
   // 1. Loading screen while restoring Supabase session
@@ -952,8 +1130,55 @@ export default function App() {
           currentUser={currentAppUser}
         />
 
-        {/* Main Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 flex flex-col gap-6 overflow-y-auto">
+        {/* Periodic Backup Reminder Banner */}
+        {showBackupReminder && (
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-3 text-xs flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md border-b border-indigo-800/60 z-20">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-indigo-600/90 flex items-center justify-center shrink-0 shadow-xs">
+                <DatabaseBackup className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <p className="font-bold text-white text-xs flex items-center gap-1.5">
+                  <span>یادآوری تهیه نسخه پشتیبان دوره‌ای (سال ۱۴۰۵)</span>
+                  <span className="text-[10px] bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-400/20">توصیه امنیتی</span>
+                </p>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  برای جلوگیری از پاک شدن داده‌ها در صورت تغییر دستگاه یا پاک شدن حافظه مرورگر، نسخه پشتیبان جدید دانلود فرمایید.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <button
+                onClick={handleQuickBackupDownload}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                title="دانلود فایل پشتیبان با نام و تاریخ روز"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>دانلود سریع پشتیبان</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowBackupReminder(false);
+                  setIsBackupModalOpen(true);
+                }}
+                className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-indigo-100 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+              >
+                مرکز پشتیبان
+              </button>
+              <button
+                onClick={() => dismissBackupReminder(48)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                title="بستن یادآوری برای دو روز"
+                aria-label="بستن یادآوری"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area (Optimized with pb-24 on mobile so MobileBottomNav never blocks content) */}
+        <main className="flex-1 p-3 sm:p-6 lg:p-8 pb-24 md:pb-8 flex flex-col gap-5 sm:gap-6 overflow-y-auto">
           {activeTab === 'dashboard' && (
             <DashboardView
               transactions={transactions}
@@ -1121,6 +1346,8 @@ export default function App() {
         users={users}
         onRestoreData={handleRestoreData}
         onResetToDefaults={handleResetToDefaults}
+        onPurge1404={handlePurge1404}
+        onShowToast={showToast}
       />
 
       {/* Comprehensive & Specific Section Excel Export Modal */}
@@ -1148,9 +1375,18 @@ export default function App() {
         />
       )}
 
+      {/* Native Mobile Bottom Navigation Bar (Fixed at bottom on < md devices) */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenNewTransaction={handleOpenNewTransaction}
+        onOpenBackupModal={() => setIsBackupModalOpen(true)}
+        canCreateTransactions={currentAppUser?.permissions.canCreateTransactions ?? true}
+      />
+
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-5 left-5 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-xl shadow-xl z-50 animate-in fade-in slide-in-from-bottom-3 flex items-center gap-2 border border-slate-700">
+        <div className="fixed bottom-16 md:bottom-5 left-5 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-xl shadow-xl z-50 animate-in fade-in slide-in-from-bottom-3 flex items-center gap-2 border border-slate-700">
           <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
           <span>{toastMessage}</span>
         </div>

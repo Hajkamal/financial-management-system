@@ -68,7 +68,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     setEditingEmp(null);
     setName('');
     setRole('');
-    setStartDate('۱۴۰۴/۰۱/۰۱');
+    setStartDate('۱۴۰۵/۰۱/۰۱');
     setEndDate('');
     setStatus('active');
     setBaseSalary('150000000');
@@ -106,7 +106,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       id: editingEmp ? editingEmp.id : `emp-${Date.now()}`,
       name: name.trim(),
       role: role.trim() || 'کارشناس',
-      startDate: startDate.trim() || '۱۴۰۴/۰۱/۰۱',
+      startDate: startDate.trim() || '۱۴۰۵/۰۱/۰۱',
       endDate: endDate.trim() || undefined,
       status,
       baseSalary: Number(baseSalary) || 0,
