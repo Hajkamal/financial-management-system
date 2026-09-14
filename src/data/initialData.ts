@@ -1,7 +1,62 @@
-import { Employee, SalaryMatrixItem, CompanyMember, Loan, FinancialTransaction, FiscalYear } from '../types';
+import { Employee, SalaryMatrixItem, CompanyMember, Loan, FinancialTransaction, FiscalYear, AppUser } from '../types';
+import { ALL_PERMISSIONS_GRANTED, ACCOUNTANT_PERMISSIONS, VIEWER_PERMISSIONS } from '../utils/permissions';
 
 export const INITIAL_COMPANY_NAME = 'آینده نگاران خلاق';
 export const INITIAL_YEAR = 1404;
+
+export const INITIAL_USERS: AppUser[] = [
+  {
+    id: 'user-vahid',
+    email: 'vahidkamali03@gmail.com',
+    firstName: 'وحید',
+    lastName: 'کمالی',
+    fullName: 'وحید کمالی',
+    password: 'admin',
+    role: 'super_admin',
+    roleTitle: 'مدیر کل سامانه',
+    status: 'active',
+    permissions: ALL_PERMISSIONS_GRANTED,
+    avatarColor: 'from-amber-500 to-yellow-600',
+    createdAt: '۱۴۰۴/۰۱/۰۱',
+    lastLogin: 'امروز',
+    phone: '۰۹۱۲۳۴۵۶۷۸۹',
+    notes: 'مدیر ارشد و مالک سامانه با دسترسی نامحدود به تمامی بخش‌ها و مدیریت کاربران',
+  },
+  {
+    id: 'user-sara',
+    email: 'sara.mohammadi@ayandeh.com',
+    firstName: 'سارا',
+    lastName: 'محمدی',
+    fullName: 'سارا محمدی',
+    password: 'user1234',
+    role: 'accountant',
+    roleTitle: 'کارشناس حسابداری و ثبت اسناد',
+    status: 'active',
+    permissions: ACCOUNTANT_PERMISSIONS,
+    avatarColor: 'from-emerald-500 to-teal-600',
+    createdAt: '۱۴۰۴/۰۲/۱۵',
+    lastLogin: '۱۴۰۴/۰۵/۰۲',
+    phone: '۰۹۱۹۸۷۶۵۴۳۲',
+    notes: 'دسترسی خواندن و نوشتن: ثبت درآمد، هزینه و مشاهده ماتریس حقوق',
+  },
+  {
+    id: 'user-rezaei',
+    email: 'rezaei.audit@ayandeh.com',
+    firstName: 'امیر',
+    lastName: 'رضایی',
+    fullName: 'امیر رضایی',
+    password: 'viewer123',
+    role: 'viewer',
+    roleTitle: 'حسابرس و ناظر مالی (فقط خواندنی)',
+    status: 'active',
+    permissions: VIEWER_PERMISSIONS,
+    avatarColor: 'from-blue-500 to-indigo-600',
+    createdAt: '۱۴۰۴/۰۳/۰۱',
+    lastLogin: '۱۴۰۴/۰۴/۲۹',
+    phone: '۰۹۳۵۱۲۳۴۵۶۷',
+    notes: 'فقط خواندنی با امکان دانلود خروجی‌های اکسل برای گزارش‌گیری',
+  },
+];
 
 export const INITIAL_FISCAL_YEARS: FiscalYear[] = [
   {

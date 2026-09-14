@@ -33,6 +33,8 @@ interface LoansViewProps {
   }) => void;
   companyName?: string;
   onShowToast?: (msg: string) => void;
+  canEdit?: boolean;
+  canExport?: boolean;
 }
 
 export const LoansView: React.FC<LoansViewProps> = ({
@@ -45,6 +47,8 @@ export const LoansView: React.FC<LoansViewProps> = ({
   onPayInstallment,
   companyName = 'آینده نگاران خلاق',
   onShowToast,
+  canEdit = true,
+  canExport = true,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
@@ -173,25 +177,29 @@ export const LoansView: React.FC<LoansViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              exportLoansToExcel(companyName, selectedYear, loans);
-              if (onShowToast) onShowToast(`فایل اکسل تسهیلات و وام‌ها با موفقیت دانلود شد.`);
-            }}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
-            title="دانلود فایل اکسل تسهیلات و اقساط"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>خروجی اکسل تسهیلات</span>
-          </button>
+          {canExport && (
+            <button
+              onClick={() => {
+                exportLoansToExcel(companyName, selectedYear, loans);
+                if (onShowToast) onShowToast(`فایل اکسل تسهیلات و وام‌ها با موفقیت دانلود شد.`);
+              }}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+              title="دانلود فایل اکسل تسهیلات و اقساط"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>خروجی اکسل تسهیلات</span>
+            </button>
+          )}
 
-          <button
-            onClick={handleOpenAdd}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>ثبت تسهیلات یا وام جدید</span>
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>ثبت تسهیلات یا وام جدید</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -242,22 +250,24 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleOpenEdit(loan)}
-                      className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                      title="ویرایش تسهیلات"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setDeletingLoan({ id: loan.id, title: loan.title })}
-                      className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                      title="حذف تسهیلات"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {canEdit && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenEdit(loan)}
+                        className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                        title="ویرایش تسهیلات"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeletingLoan({ id: loan.id, title: loan.title })}
+                        className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="حذف تسهیلات"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Progress Bar */}
@@ -317,18 +327,20 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 <span className="text-xs text-slate-500">
                   {remainingInstallments === 0 ? 'کلیه اقساط تسویه شده است' : `${toPersianDigits(remainingInstallments)} قسط تا تسویه نهایی`}
                 </span>
-                <button
-                  disabled={remainingInstallments === 0}
-                  onClick={() => handleOpenPayModal(loan)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
-                    remainingInstallments > 0
-                      ? 'text-white bg-red-600 hover:bg-red-700 shadow-xs'
-                      : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                  }`}
-                >
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                  <span>واریز قسط بعدی</span>
-                </button>
+                {canEdit && (
+                  <button
+                    disabled={remainingInstallments === 0}
+                    onClick={() => handleOpenPayModal(loan)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                      remainingInstallments > 0
+                        ? 'text-white bg-red-600 hover:bg-red-700 shadow-xs cursor-pointer'
+                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    <span>واریز قسط بعدی</span>
+                  </button>
+                )}
               </div>
             </div>
           );

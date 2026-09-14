@@ -118,6 +118,14 @@ export interface FinancialTransaction {
   memberPayoutType?: MemberPayoutType;
   relatedEmployeeId?: string;
   relatedLoanId?: string;
+
+  // فیلدهای ثبت‌کننده و ویرایش‌کننده (رهگیری کاربر)
+  createdBy?: string;        // ایمیل یا شناسه کاربر ثبت‌کننده
+  createdByName?: string;    // نام و نام خانوادگی کاربر ثبت‌کننده (مثلاً وحید کمالی)
+  createdAt?: string;        // زمان ثبت سند
+  updatedBy?: string;        // ایمیل یا شناسه کاربر ویرایش‌کننده
+  updatedByName?: string;    // نام ویرایش‌کننده
+  updatedAt?: string;        // زمان آخرین ویرایش
 }
 
 export type CurrencyMode = 'rial' | 'toman';
@@ -134,6 +142,51 @@ export interface FiscalYear {
   closingBalance?: number;   // مانده نهایی اختتامیه به ریال
 }
 
+// ==========================================
+// مدل‌های مدیریت کاربران و سطوح دسترسی (RBAC)
+// ==========================================
+
+export type UserRole = 
+  | 'super_admin'        // مدیر کل سامانه (وحید کمالی - دسترسی کامل و مدیریت کاربران)
+  | 'finance_manager'    // مدیر مالی (دسترسی به کلیه عملیات مالی بدون مدیریت کاربران)
+  | 'accountant'         // کارشناس حسابداری (ثبت و ویرایش اسناد درآمد و هزینه، ماتریس حقوق)
+  | 'viewer'             // ناظر و حسابرس (فقط خواندنی با امکان خروجی اکسل)
+  | 'custom';            // سفارشی (تعیین دستی جزئیات دسترسی)
+
+export interface UserPermissions {
+  canViewDashboard: boolean;        // مشاهده داشبورد و شاخص‌های مالی
+  canViewTransactions: boolean;     // مشاهده دفتر کل تراکنش‌ها
+  canCreateTransactions: boolean;   // ثبت درآمد و هزینه جدید
+  canEditTransactions: boolean;     // ویرایش تراکنش‌های مالی
+  canDeleteTransactions: boolean;   // حذف تراکنش‌های مالی
+  canManageSalaryMatrix: boolean;   // مدیریت و ویرایش ماتریس حقوق و دستمزد
+  canManageEmployees: boolean;      // تعریف و ویرایش مشخصات پرسنل
+  canManageMembers: boolean;        // مدیریت سهامداران و ثبت برداشت‌ها
+  canManageLoans: boolean;          // ثبت تسهیلات و واریز اقساط وام
+  canManageFiscalYears: boolean;    // تعریف و بستن سال‌های مالی
+  canExportExcel: boolean;          // دریافت خروجی‌های اکسل
+  canBackupRestore: boolean;        // تهیه پشتیبان و بازگردانی اطلاعات
+  canManageUsers: boolean;          // افزودن، ویرایش و مدیریت کاربران سامانه
+}
+
+export interface AppUser {
+  id: string;
+  email: string;
+  firstName: string;                 // نام
+  lastName: string;                  // نام خانوادگی
+  fullName: string;                  // نام و نام خانوادگی
+  password?: string;                 // کلمه عبور ورود به سامانه
+  role: UserRole;                    // نقش اصلی
+  roleTitle: string;                 // عنوان سِمَت (مثلاً مدیر ارشد، حسابدار، ناظر مالی)
+  status: 'active' | 'inactive';     // وضعیت حساب کاربری
+  permissions: UserPermissions;      // ماتریس دسترسی‌ها
+  avatarColor?: string;              // رنگ شناسه آواتار
+  createdAt: string;                 // تاریخ ایجاد حساب
+  lastLogin?: string;                // آخرین زمان ورود به سیستم
+  phone?: string;                    // شماره تلفن
+  notes?: string;                    // یادداشت‌ها
+}
+
 export type ActiveTab = 
   | 'dashboard'
   | 'transactions'
@@ -141,4 +194,6 @@ export type ActiveTab =
   | 'employees'
   | 'members'
   | 'loans'
-  | 'fiscal-years';
+  | 'fiscal-years'
+  | 'users';
+

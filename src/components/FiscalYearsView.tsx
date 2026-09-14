@@ -58,6 +58,7 @@ interface FiscalYearsViewProps {
   members: CompanyMember[];
   loans: Loan[];
   onShowToast: (msg: string) => void;
+  canManage?: boolean;
 }
 
 export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
@@ -76,7 +77,8 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
   salaryMatrix,
   members,
   loans,
-  onShowToast
+  onShowToast,
+  canManage = true,
 }) => {
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -244,13 +246,15 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
             </span>
           </div>
 
-          <button
-            onClick={handleOpenAddModal}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-blue-600/20 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تعریف سال مالی جدید</span>
-          </button>
+          {canManage && (
+            <button
+              onClick={handleOpenAddModal}
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-blue-600/20 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>تعریف سال مالی جدید</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -391,48 +395,50 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
                   )}
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  {/* Close or Reopen Button */}
-                  {!fy.isClosed ? (
-                    <button
-                      onClick={() => handleOpenCloseModal(fy)}
-                      className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                      title="بستن سال مالی و انتقال تراز به سال بعد"
-                    >
-                      <Lock className="w-3.5 h-3.5 text-amber-600" />
-                      <span>بستن سال مالی</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => onReopenFiscalYear(fy.year)}
-                      className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1"
-                      title="بازگشایی مجدد دفاتر سال مالی"
-                    >
-                      <Unlock className="w-3.5 h-3.5 text-slate-500" />
-                      <span>بازگشایی سال</span>
-                    </button>
-                  )}
+                {canManage && (
+                  <div className="flex items-center gap-1.5">
+                    {/* Close or Reopen Button */}
+                    {!fy.isClosed ? (
+                      <button
+                        onClick={() => handleOpenCloseModal(fy)}
+                        className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        title="بستن سال مالی و انتقال تراز به سال بعد"
+                      >
+                        <Lock className="w-3.5 h-3.5 text-amber-600" />
+                        <span>بستن سال مالی</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => onReopenFiscalYear(fy.year)}
+                        className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                        title="بازگشایی مجدد دفاتر سال مالی"
+                      >
+                        <Unlock className="w-3.5 h-3.5 text-slate-500" />
+                        <span>بازگشایی سال</span>
+                      </button>
+                    )}
 
-                  {/* Edit */}
-                  <button
-                    onClick={() => handleOpenEditModal(fy)}
-                    className="p-1.5 hover:bg-slate-200 text-slate-500 hover:text-slate-800 rounded-lg transition-colors cursor-pointer"
-                    title="ویرایش مشخصات سال مالی"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-
-                  {/* Delete (if more than 1 year exists) */}
-                  {fiscalYears.length > 1 && (
+                    {/* Edit */}
                     <button
-                      onClick={() => setDeleteTargetYear(fy)}
-                      className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
-                      title="حذف سال مالی"
+                      onClick={() => handleOpenEditModal(fy)}
+                      className="p-1.5 hover:bg-slate-200 text-slate-500 hover:text-slate-800 rounded-lg transition-colors cursor-pointer"
+                      title="ویرایش مشخصات سال مالی"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Edit3 className="w-4 h-4" />
                     </button>
-                  )}
-                </div>
+
+                    {/* Delete (if more than 1 year exists) */}
+                    {fiscalYears.length > 1 && (
+                      <button
+                        onClick={() => setDeleteTargetYear(fy)}
+                        className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
+                        title="حذف سال مالی"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           );

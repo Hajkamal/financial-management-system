@@ -56,6 +56,8 @@ interface SalaryMatrixViewProps {
   onNavigateToMembers?: () => void;
   companyName?: string;
   onShowToast?: (msg: string) => void;
+  canEdit?: boolean;
+  canExport?: boolean;
 }
 
 export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
@@ -73,6 +75,8 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
   onNavigateToMembers,
   companyName = 'آینده نگاران خلاق',
   onShowToast,
+  canEdit = true,
+  canExport = true,
 }) => {
   // Sub-tab: 'staff' (Employees Matrix) or 'members' (Company Members Salary & Withdrawals)
   const [payrollSubTab, setPayrollSubTab] = useState<'staff' | 'members'>('staff');
@@ -92,6 +96,10 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
   const [inputColor, setInputColor] = useState<string>('');
 
   const handleOpenEdit = (empId: string, month: PersianMonthNumber) => {
+    if (!canEdit) {
+      if (onShowToast) onShowToast('سطح دسترسی شما فقط خواندنی است و امکان ویرایش مبالغ ماتریس را ندارید.');
+      return;
+    }
     const existing = salaryMatrix.find(
       i => i.employeeId === empId && i.month === month && i.year === selectedYear
     );
@@ -230,25 +238,29 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
             </span>
           </div>
 
-          <button
-            onClick={() => {
-              exportSalaryMatrixToExcel(companyName, selectedYear, employees, salaryMatrix);
-              if (onShowToast) onShowToast(`ماتریس حقوق سال مالی ${selectedYear} با موفقیت در قالب اکسل دانلود شد.`);
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
-            title={`دانلود اکسل ماتریس حقوق سال ${selectedYear}`}
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>خروجی اکسل ماتریس حقوق</span>
-          </button>
+          {canExport && (
+            <button
+              onClick={() => {
+                exportSalaryMatrixToExcel(companyName, selectedYear, employees, salaryMatrix);
+                if (onShowToast) onShowToast(`ماتریس حقوق سال مالی ${selectedYear} با موفقیت در قالب اکسل دانلود شد.`);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
+              title={`دانلود اکسل ماتریس حقوق سال ${selectedYear}`}
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>خروجی اکسل ماتریس حقوق</span>
+            </button>
+          )}
 
-          <button
-            onClick={onNavigateToEmployees}
-            className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تعریف کارمند جدید</span>
-          </button>
+          {canEdit && (
+            <button
+              onClick={onNavigateToEmployees}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>تعریف کارمند جدید</span>
+            </button>
+          )}
         </div>
       </div>
 

@@ -21,7 +21,8 @@ import {
   CurrencyMode,
   Employee,
   CompanyMember,
-  Loan
+  Loan,
+  AppUser
 } from '../types';
 import { 
   PERSIAN_MONTHS, 
@@ -43,6 +44,7 @@ interface TransactionModalProps {
   employees: Employee[];
   members: CompanyMember[];
   loans: Loan[];
+  currentUser?: AppUser | null;
 }
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
@@ -55,6 +57,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   employees,
   members,
   loans,
+  currentUser,
 }) => {
   if (!isOpen) return null;
 
@@ -106,6 +109,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     const dayStr = day < 10 ? `0${day}` : `${day}`;
     const dateString = `${year}/${monthStr}/${dayStr}`;
 
+    const nowStr = `${year}/${monthStr}/${dayStr}`;
+
     const tx: FinancialTransaction = {
       id: editingTransaction ? editingTransaction.id : `tx-${Date.now()}`,
       type,
@@ -124,6 +129,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       memberPayoutType: category === 'shareholder_payout' ? memberPayoutType : undefined,
       relatedEmployeeId: category === 'salary' ? relatedEmployeeId : undefined,
       relatedLoanId: category === 'loan_installment' ? relatedLoanId : undefined,
+
+      // اطلاعات کاربر ثبت‌کننده و ویرایش‌کننده
+      createdBy: editingTransaction?.createdBy || currentUser?.email || 'vahidkamali03@gmail.com',
+      createdByName: editingTransaction?.createdByName || currentUser?.fullName || 'وحید کمالی',
+      createdAt: editingTransaction?.createdAt || nowStr,
+      updatedBy: editingTransaction ? (currentUser?.email || 'vahidkamali03@gmail.com') : undefined,
+      updatedByName: editingTransaction ? (currentUser?.fullName || 'وحید کمالی') : undefined,
+      updatedAt: editingTransaction ? nowStr : undefined,
     };
 
     onSave(tx);
@@ -134,9 +147,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl p-6 max-w-xl w-full shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <h3 className="font-bold text-slate-900 text-base">
-            {editingTransaction ? 'ویرایش سند مالی' : 'ثبت سند درآمد یا هزینه جدید'}
-          </h3>
+          <div>
+            <h3 className="font-bold text-slate-900 text-base">
+              {editingTransaction ? 'ویرایش سند مالی' : 'ثبت سند درآمد یا هزینه جدید'}
+            </h3>
+            <span className="text-[11px] text-slate-500 block mt-0.5">
+              ثبت به نام کاربر: <strong className="text-blue-700 font-bold">{currentUser?.fullName || 'وحید کمالی'}</strong> ({currentUser?.roleTitle || 'مدیر کل'})
+            </span>
+          </div>
           <button
             type="button"
             onClick={onClose}

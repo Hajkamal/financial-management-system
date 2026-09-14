@@ -25,6 +25,9 @@ import {
   FiscalYearsView 
 } from './components/FiscalYearsView';
 import { 
+  UsersView 
+} from './components/UsersView';
+import { 
   ExportExcelModal 
 } from './components/ExportExcelModal';
 import { 
@@ -44,7 +47,8 @@ import {
   Loan, 
   PersianMonthNumber,
   MemberPayoutType,
-  FiscalYear
+  FiscalYear,
+  AppUser
 } from './types';
 
 import { 
@@ -55,7 +59,8 @@ import {
   INITIAL_MEMBERS, 
   INITIAL_LOANS, 
   INITIAL_TRANSACTIONS,
-  INITIAL_FISCAL_YEARS
+  INITIAL_FISCAL_YEARS,
+  INITIAL_USERS
 } from './data/initialData';
 
 import { 
@@ -180,6 +185,32 @@ export default function App() {
     }
   });
 
+  const [users, setUsers] = useState<AppUser[]>(() => {
+    try {
+      const saved = localStorage.getItem('ayandeh_users');
+      return saved ? JSON.parse(saved) : INITIAL_USERS;
+    } catch {
+      return INITIAL_USERS;
+    }
+  });
+
+  // Support for impersonating / testing another user role
+  const [impersonatedUser, setImpersonatedUser] = useState<AppUser | null>(null);
+
+  // Derive currently authenticated user in the applet
+  const currentAppUser = React.useMemo(() => {
+    if (impersonatedUser) return impersonatedUser;
+    if (user?.email) {
+      const found = users.find(u => u.email.toLowerCase() === user.email?.toLowerCase());
+      if (found) return found;
+      if (user.email.toLowerCase().includes('vahidkamali03')) {
+        return users.find(u => u.email === 'vahidkamali03@gmail.com') || users[0];
+      }
+    }
+    // Default to Super Admin Vahid Kamali
+    return users.find(u => u.email === 'vahidkamali03@gmail.com') || users[0];
+  }, [user, users, impersonatedUser]);
+
   // Modals state
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<FinancialTransaction | null>(null);
@@ -220,6 +251,47 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('ayandeh_fiscal_years', JSON.stringify(fiscalYears));
   }, [fiscalYears]);
+
+  useEffect(() => {
+    localStorage.setItem('ayandeh_users', JSON.stringify(users));
+  }, [users]);
+
+  // User Management Handlers
+  const handleAddUser = (userData: Omit<AppUser, 'id' | 'createdAt'>) => {
+    const newUser: AppUser = {
+      ...userData,
+      id: `user-${Date.now()}`,
+      createdAt: new Date().toISOString()
+    };
+    setUsers(prev => [...prev, newUser]);
+    showToast(`کاربر جدید «${newUser.fullName}» با موفقیت در سامانه افزوده شد.`);
+  };
+
+  const handleUpdateUser = (id: string, updates: Partial<AppUser>) => {
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
+    if (impersonatedUser && impersonatedUser.id === id) {
+      setImpersonatedUser(prev => prev ? { ...prev, ...updates } : null);
+    }
+    showToast('اطلاعات کاربر با موفقیت به‌روزرسانی شد.');
+  };
+
+  const handleDeleteUser = (id: string) => {
+    const target = users.find(u => u.id === id);
+    if (target?.email === 'vahidkamali03@gmail.com') {
+      showToast('امکان حذف مدیر ارشد سیستم (vahidkamali03@gmail.com) وجود ندارد.');
+      return;
+    }
+    if (impersonatedUser && impersonatedUser.id === id) {
+      setImpersonatedUser(null);
+    }
+    setUsers(prev => prev.filter(u => u.id !== id));
+    showToast(`کاربر «${target?.fullName || ''}» با موفقیت حذف گردید.`);
+  };
+
+  const handleSwitchUser = (targetUser: AppUser) => {
+    setImpersonatedUser(targetUser);
+    showToast(`شما اکنون با هویت و دسترسی «${targetUser.fullName}» (${targetUser.roleTitle}) فعالیت می‌کنید.`);
+  };
 
   // Transactions Handlers
   const handleOpenNewTransaction = () => {
@@ -597,10 +669,30 @@ export default function App() {
         userEmail={user.email}
         onLogout={handleLogout}
         fiscalYears={fiscalYears}
+        currentUser={currentAppUser}
       />
 
       {/* Main Content Column */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        {/* Impersonation Banner if testing another user */}
+        {impersonatedUser && (
+          <div className="bg-amber-500 text-slate-900 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-xs z-30">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-slate-900 animate-ping"></span>
+              <span>در حال مشاهده سامانه با هویت آزمایشی: <strong>{impersonatedUser.fullName}</strong> ({impersonatedUser.roleTitle})</span>
+            </div>
+            <button
+              onClick={() => {
+                setImpersonatedUser(null);
+                showToast('به حساب کاربری اصلی خود (وحید کمالی - مدیر کل) بازگشتید.');
+              }}
+              className="px-2.5 py-1 bg-slate-900 text-white hover:bg-black rounded-lg text-[11px] font-medium transition-colors cursor-pointer"
+            >
+              بازگشت به حساب وحید کمالی
+            </button>
+          </div>
+        )}
+
         {/* Top Header */}
         <TopHeader
           companyName={companyName}
@@ -615,6 +707,7 @@ export default function App() {
           userEmail={user.email}
           onLogout={handleLogout}
           fiscalYears={fiscalYears}
+          currentUser={currentAppUser}
         />
 
         {/* Main Content Area */}
@@ -640,6 +733,8 @@ export default function App() {
               onDeleteTransaction={handleDeleteTransaction}
               companyName={companyName}
               onShowToast={showToast}
+              currentUser={currentAppUser}
+              users={users}
             />
           )}
 
@@ -659,6 +754,8 @@ export default function App() {
               onNavigateToMembers={() => setActiveTab('members')}
               companyName={companyName}
               onShowToast={showToast}
+              canEdit={currentAppUser?.permissions.canEditSalary ?? true}
+              canExport={currentAppUser?.permissions.canExportExcel ?? true}
             />
           )}
 
@@ -672,6 +769,8 @@ export default function App() {
               onDeleteEmployee={handleDeleteEmployee}
               companyName={companyName}
               onShowToast={showToast}
+              canEdit={currentAppUser?.permissions.canEditEmployees ?? true}
+              canExport={currentAppUser?.permissions.canExportExcel ?? true}
             />
           )}
 
@@ -686,6 +785,8 @@ export default function App() {
               onAddMemberPayoutTransaction={handleAddMemberPayoutTransaction}
               companyName={companyName}
               onShowToast={showToast}
+              canEdit={currentAppUser?.permissions.canEditMembers ?? true}
+              canExport={currentAppUser?.permissions.canExportExcel ?? true}
             />
           )}
 
@@ -700,6 +801,8 @@ export default function App() {
               onPayInstallment={handlePayLoanInstallment}
               companyName={companyName}
               onShowToast={showToast}
+              canEdit={currentAppUser?.permissions.canEditLoans ?? true}
+              canExport={currentAppUser?.permissions.canExportExcel ?? true}
             />
           )}
 
@@ -707,14 +810,33 @@ export default function App() {
             <FiscalYearsView
               fiscalYears={fiscalYears}
               selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
               currencyMode={currencyMode}
               transactions={transactions}
-              onSelectYear={setSelectedYear}
               onAddFiscalYear={handleAddFiscalYear}
               onUpdateFiscalYear={handleUpdateFiscalYear}
               onDeleteFiscalYear={handleDeleteFiscalYear}
               onCloseFiscalYear={handleCloseFiscalYear}
               onReopenFiscalYear={handleReopenFiscalYear}
+              companyName={companyName}
+              employees={employees}
+              salaryMatrix={salaryMatrix}
+              members={members}
+              loans={loans}
+              onShowToast={showToast}
+              canManage={currentAppUser?.permissions.canManageFiscalYears ?? true}
+            />
+          )}
+
+          {activeTab === 'users' && (
+            <UsersView
+              users={users}
+              currentUser={currentAppUser}
+              onAddUser={handleAddUser}
+              onUpdateUser={handleUpdateUser}
+              onDeleteUser={handleDeleteUser}
+              onSwitchUser={handleSwitchUser}
+              onShowToast={showToast}
             />
           )}
         </main>
@@ -723,7 +845,7 @@ export default function App() {
         <footer className="bg-white border-t border-slate-200 py-4 px-6 lg:px-8 text-xs text-slate-400 shrink-0">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
             <span>سامانه مدیریت مالی و حسابداری شرکت {companyName} • سال {selectedYear}</span>
-            <span>پلتفرم باسینا • فروش سپید • حقوق و دستمزد پرسنل • تسهیلات پارک</span>
+            <span>مدیر ارشد سامانه: وحید کمالی (vahidkamali03@gmail.com)</span>
           </div>
         </footer>
       </div>
@@ -739,6 +861,7 @@ export default function App() {
         employees={employees}
         members={members}
         loans={loans}
+        currentUser={currentAppUser}
       />
 
       {/* Backup and Restore Modal */}

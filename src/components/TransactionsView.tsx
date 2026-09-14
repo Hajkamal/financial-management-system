@@ -10,7 +10,11 @@ import {
   ArrowDownLeft, 
   Tag,
   CheckCircle,
-  Calendar
+  Calendar,
+  UserCheck,
+  ShieldAlert,
+  User,
+  FileSpreadsheet
 } from 'lucide-react';
 import { 
   FinancialTransaction, 
@@ -20,7 +24,8 @@ import {
   ExpenseCategory, 
   PersianMonthNumber,
   BasinaSubCategory,
-  InfrastructureSubCategory
+  InfrastructureSubCategory,
+  AppUser
 } from '../types';
 import { 
   PERSIAN_MONTHS, 
@@ -33,7 +38,6 @@ import {
   exportTransactionsToExcel
 } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
-import { FileSpreadsheet } from 'lucide-react';
 
 interface TransactionsViewProps {
   transactions: FinancialTransaction[];
@@ -44,6 +48,8 @@ interface TransactionsViewProps {
   onDeleteTransaction: (id: string) => void;
   companyName?: string;
   onShowToast?: (msg: string) => void;
+  currentUser?: AppUser | null;
+  users?: AppUser[];
 }
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({
@@ -55,12 +61,21 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   onDeleteTransaction,
   companyName = 'آینده نگاران خلاق',
   onShowToast,
+  currentUser,
+  users = [],
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | TransactionType>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [monthFilter, setMonthFilter] = useState<string>('all');
+  const [creatorFilter, setCreatorFilter] = useState<string>('all');
   const [deletingTransaction, setDeletingTransaction] = useState<{ id: string; title: string } | null>(null);
+
+  // Permission flags
+  const canCreate = currentUser?.permissions.canCreateTransactions ?? true;
+  const canEdit = currentUser?.permissions.canEditTransactions ?? true;
+  const canDelete = currentUser?.permissions.canDeleteTransactions ?? true;
+  const canExport = currentUser?.permissions.canExportExcel ?? true;
 
   // Filter transactions
   const filtered = useMemo(() => {
@@ -70,22 +85,31 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       if (categoryFilter !== 'all' && t.category !== categoryFilter) return false;
       if (monthFilter !== 'all' && t.month !== Number(monthFilter)) return false;
 
+      // Creator filter
+      if (creatorFilter !== 'all') {
+        const creatorName = t.createdByName || 'وحید کمالی';
+        const creatorEmail = t.createdBy || 'vahidkamali03@gmail.com';
+        if (creatorName !== creatorFilter && creatorEmail !== creatorFilter) {
+          return false;
+        }
+      }
+
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const matchTitle = t.title.toLowerCase().includes(query);
         const matchDesc = t.description?.toLowerCase().includes(query) || false;
         const matchRecipient = t.recipientOrPayer?.toLowerCase().includes(query) || false;
         const matchCode = t.trackingCode?.toLowerCase().includes(query) || false;
-        if (!matchTitle && !matchDesc && !matchRecipient && !matchCode) return false;
+        const matchCreator = (t.createdByName || '').toLowerCase().includes(query);
+        if (!matchTitle && !matchDesc && !matchRecipient && !matchCode && !matchCreator) return false;
       }
 
       return true;
     }).sort((a, b) => {
-      // Sort by month desc, day desc
       if (b.month !== a.month) return b.month - a.month;
       return b.day - a.day;
     });
-  }, [transactions, selectedYear, typeFilter, categoryFilter, monthFilter, searchTerm]);
+  }, [transactions, selectedYear, typeFilter, categoryFilter, monthFilter, creatorFilter, searchTerm]);
 
   // Totals for filtered records
   const totalIncome = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
@@ -95,6 +119,22 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   return (
     <div className="space-y-6" id="transactions-view">
       
+      {/* Read-Only Notice Banner if cannot create/edit */}
+      {(!canCreate || !canEdit) && (
+        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between text-xs text-amber-800">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              سطح دسترسی شما به عنوان <strong>{currentUser?.roleTitle || 'کاربر'}</strong>: 
+              {!canCreate && !canEdit ? ' فقط خواندنی است (امکان ثبت و ویرایش اسناد مالی مسدود می‌باشد).' : ' دسترسی ثبت/ویرایش با محدودیت اعمال شده است.'}
+            </span>
+          </div>
+          <span className="text-[11px] bg-amber-200/60 px-2 py-0.5 rounded font-bold">
+            مشاهده دفتر کل
+          </span>
+        </div>
+      )}
+
       {/* Top Controls & Header */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -107,48 +147,57 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 دفتر کل ثبت درآمدها و هزینه‌های سال {selectedYear}
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                ثبت و مدیریت اسناد مالی شرکت آینده‌نگاران خلاق با دسته‌بندی‌های دقیق و شفاف
+                ثبت و مدیریت اسناد مالی شرکت آینده‌نگاران خلاق با رهگیری دقیق کاربر ثبت‌کننده
               </p>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              exportTransactionsToExcel(companyName, selectedYear, transactions);
-              if (onShowToast) onShowToast(`فایل اکسل تراکنش‌های سال مالی ${selectedYear} با موفقیت دانلود شد.`);
-            }}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
-            title={`دانلود فایل اکسل تراکنش‌های سال ${selectedYear}`}
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>خروجی اکسل تراکنش‌ها</span>
-          </button>
+          {canExport && (
+            <button
+              onClick={() => {
+                exportTransactionsToExcel(companyName, selectedYear, transactions);
+                if (onShowToast) onShowToast(`فایل اکسل تراکنش‌های سال مالی ${selectedYear} با موفقیت دانلود شد.`);
+              }}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+              title={`دانلود فایل اکسل تراکنش‌های سال ${selectedYear}`}
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>خروجی اکسل تراکنش‌ها</span>
+            </button>
+          )}
 
-          <button
-            onClick={onOpenNewTransaction}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>ثبت سند جدید</span>
-          </button>
+          {canCreate ? (
+            <button
+              onClick={onOpenNewTransaction}
+              id="open-new-transaction-btn"
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>ثبت سند جدید</span>
+            </button>
+          ) : (
+            <span className="text-[11px] text-slate-400 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200">
+              دسترسی فقط خواندنی
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Filters and Search Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           
-          {/* Search Box */}
+          {/* Search */}
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
+            <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
             <input
               type="text"
+              placeholder="جستجو در عنوان، شرح، کاربر..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="جستجو در عنوان، طرف حساب یا کد رهگیری..."
-              className="w-full pr-9 pl-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none bg-slate-50/50"
+              className="w-full pr-9 pl-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none"
             />
           </div>
 
@@ -163,8 +212,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-slate-50/50 cursor-pointer"
             >
               <option value="all">همه اسناد (درآمد و هزینه)</option>
-              <option value="income">فقط درآمدها</option>
-              <option value="expense">فقط هزینه‌ها</option>
+              <option value="income">فقط درآمدها (+)</option>
+              <option value="expense">فقط هزینه‌ها (-)</option>
             </select>
           </div>
 
@@ -176,21 +225,17 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-slate-50/50 cursor-pointer"
             >
               <option value="all">همه دسته‌بندی‌ها</option>
-              
-              {/* Income categories */}
               {typeFilter !== 'expense' && (
-                <optgroup label="دسته‌های درآمد">
-                  {Object.entries(INCOME_CATEGORY_CONFIG).map(([key, cfg]) => (
-                    <option key={key} value={key}>{cfg.label}</option>
+                <optgroup label="درآمدها">
+                  {Object.entries(INCOME_CATEGORY_CONFIG).map(([k, v]) => (
+                    <option key={k} value={k}>{v.label}</option>
                   ))}
                 </optgroup>
               )}
-
-              {/* Expense categories */}
               {typeFilter !== 'income' && (
-                <optgroup label="دسته‌های هزینه">
-                  {Object.entries(EXPENSE_CATEGORY_CONFIG).map(([key, cfg]) => (
-                    <option key={key} value={key}>{cfg.label}</option>
+                <optgroup label="هزینه‌ها">
+                  {Object.entries(EXPENSE_CATEGORY_CONFIG).map(([k, v]) => (
+                    <option key={k} value={k}>{v.label}</option>
                   ))}
                 </optgroup>
               )}
@@ -211,12 +256,33 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </select>
           </div>
 
+          {/* Creator Filter */}
+          <div>
+            <select
+              value={creatorFilter}
+              onChange={(e) => setCreatorFilter(e.target.value)}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-slate-50/50 cursor-pointer"
+            >
+              <option value="all">همه کاربران ثبت‌کننده</option>
+              {users.map(u => (
+                <option key={u.id} value={u.fullName}>
+                  ثبت توسط: {u.fullName}
+                </option>
+              ))}
+            </select>
+          </div>
+
         </div>
 
         {/* Filter Summary Banner */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 text-xs">
           <span className="text-slate-500 font-medium">
             تعداد اسناد یافت شده: <strong className="text-slate-900 font-bold">{toPersianDigits(filtered.length)}</strong> مورد
+            {creatorFilter !== 'all' && (
+              <span className="mr-2 text-blue-600 font-bold">
+                (فیلتر کاربر: {creatorFilter})
+              </span>
+            )}
           </span>
 
           <div className="flex items-center gap-3">
@@ -247,13 +313,16 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <table className="w-full text-xs text-right border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                  <th className="px-5 py-3 w-12 text-center">نوع</th>
-                  <th className="px-5 py-3">عنوان و شرح سند</th>
-                  <th className="px-5 py-3">دسته‌بندی</th>
-                  <th className="px-5 py-3">طرف حساب / ذینفع</th>
-                  <th className="px-5 py-3">تاریخ و ماه</th>
-                  <th className="px-5 py-3 text-left">مبلغ ({currencyMode === 'rial' ? 'ریال' : 'تومان'})</th>
-                  <th className="px-5 py-3 w-20 text-center">عملیات</th>
+                  <th className="px-4 py-3 w-12 text-center">نوع</th>
+                  <th className="px-4 py-3">عنوان و شرح سند</th>
+                  <th className="px-4 py-3">دسته‌بندی</th>
+                  <th className="px-4 py-3">طرف حساب / ذینفع</th>
+                  <th className="px-4 py-3">کاربر ثبت‌کننده</th>
+                  <th className="px-4 py-3">تاریخ و ماه</th>
+                  <th className="px-4 py-3 text-left">مبلغ ({currencyMode === 'rial' ? 'ریال' : 'تومان'})</th>
+                  {(canEdit || canDelete) && (
+                    <th className="px-4 py-3 w-20 text-center">عملیات</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -284,8 +353,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                           </span>
                         )}
                         {t.category === 'shareholder_payout' && (
-                          <span className="font-bold">
-                            : {t.memberPayoutType === 'salary' ? 'حقوق ماهانه' : 'برداشت سود سهام'}
+                          <span className="font-bold text-[10px] mr-1">
+                            ({t.memberPayoutType === 'salary' ? 'حقوق کارکرد ماهانه' : 'برداشت سود سهام'})
                           </span>
                         )}
                       </span>
@@ -293,10 +362,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   }
 
                   const monthName = PERSIAN_MONTHS.find(m => m.num === t.month)?.name || t.month;
+                  const creatorDisplayName = t.createdByName || 'وحید کمالی';
 
                   return (
-                    <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                      {/* Icon type */}
+                    <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                      {/* Type Icon */}
                       <td className="p-3 text-center">
                         <div className={`w-7 h-7 mx-auto rounded-full flex items-center justify-center ${
                           isIncome ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
@@ -314,7 +384,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                           </span>
                         )}
                         {t.trackingCode && (
-                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                          <span className="text-[10px] text-slate-400 block mt-0.5 font-mono">
                             کد رهگیری: {t.trackingCode}
                           </span>
                         )}
@@ -328,6 +398,25 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                       {/* Recipient / Payer */}
                       <td className="p-3 text-slate-700 font-medium">
                         {t.recipientOrPayer || '-'}
+                      </td>
+
+                      {/* Creator User Info */}
+                      <td className="p-3 text-slate-700">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-black shrink-0">
+                            {creatorDisplayName[0]}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-800 text-[11px] block">
+                              {creatorDisplayName}
+                            </span>
+                            {t.updatedByName && (
+                              <span className="text-[10px] text-amber-600 block">
+                                ویرایش: {t.updatedByName}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
 
                       {/* Date */}
@@ -344,24 +433,30 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                       </td>
 
                       {/* Actions */}
-                      <td className="p-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => onEditTransaction(t)}
-                            className="p-1.5 rounded text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                            title="ویرایش سند"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setDeletingTransaction({ id: t.id, title: t.title })}
-                            className="p-1.5 rounded text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                            title="حذف سند"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
+                      {(canEdit || canDelete) && (
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {canEdit && (
+                              <button
+                                onClick={() => onEditTransaction(t)}
+                                className="p-1.5 rounded text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                                title="ویرایش سند"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={() => setDeletingTransaction({ id: t.id, title: t.title })}
+                                className="p-1.5 rounded text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                title="حذف سند"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -380,6 +475,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         onConfirm={() => {
           if (deletingTransaction) {
             onDeleteTransaction(deletingTransaction.id);
+            if (onShowToast) onShowToast(`سند "${deletingTransaction.title}" با موفقیت حذف شد.`);
             setDeletingTransaction(null);
           }
         }}

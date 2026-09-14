@@ -29,6 +29,8 @@ interface EmployeesViewProps {
   onDeleteEmployee: (id: string) => void;
   companyName?: string;
   onShowToast?: (msg: string) => void;
+  canEdit?: boolean;
+  canExport?: boolean;
 }
 
 export const EmployeesView: React.FC<EmployeesViewProps> = ({
@@ -40,6 +42,8 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
   onDeleteEmployee,
   companyName = 'آینده نگاران خلاق',
   onShowToast,
+  canEdit = true,
+  canExport = true,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
@@ -151,25 +155,29 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              exportEmployeesToExcel(companyName, selectedYear, employees, salaryMatrix);
-              if (onShowToast) onShowToast(`فایل اکسل مشخصات پرسنل با موفقیت دانلود شد.`);
-            }}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
-            title="دانلود فایل اکسل لیست پرسنل"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>خروجی اکسل پرسنل</span>
-          </button>
+          {canExport && (
+            <button
+              onClick={() => {
+                exportEmployeesToExcel(companyName, selectedYear, employees, salaryMatrix);
+                if (onShowToast) onShowToast(`فایل اکسل مشخصات پرسنل با موفقیت دانلود شد.`);
+              }}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+              title="دانلود فایل اکسل لیست پرسنل"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>خروجی اکسل پرسنل</span>
+            </button>
+          )}
 
-          <button
-            onClick={handleOpenAdd}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>افزودن کارمند جدید</span>
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>افزودن کارمند جدید</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -227,22 +235,24 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                     <p className="text-xs font-medium text-slate-600 mt-0.5">{emp.role}</p>
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleOpenEdit(emp)}
-                      className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                      title="ویرایش مشخصات"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setDeletingEmp({ id: emp.id, name: emp.name })}
-                      className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                      title="حذف کارمند"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {canEdit && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenEdit(emp)}
+                        className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                        title="ویرایش مشخصات"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeletingEmp({ id: emp.id, name: emp.name })}
+                        className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="حذف کارمند"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Details List */}
@@ -318,12 +328,14 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                     {formatCurrency(totalPaidYear, currencyMode)}
                   </span>
                 </div>
-                <button
-                  onClick={() => handleOpenEdit(emp)}
-                  className="text-xs text-blue-600 hover:text-blue-800 font-bold"
-                >
-                  ویرایش حکم
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => handleOpenEdit(emp)}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
+                  >
+                    ویرایش حکم
+                  </button>
+                )}
               </div>
             </div>
           );

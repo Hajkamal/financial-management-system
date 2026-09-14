@@ -47,6 +47,8 @@ interface MembersViewProps {
   }) => void;
   companyName?: string;
   onShowToast?: (msg: string) => void;
+  canEdit?: boolean;
+  canExport?: boolean;
 }
 
 export const MembersView: React.FC<MembersViewProps> = ({
@@ -59,6 +61,8 @@ export const MembersView: React.FC<MembersViewProps> = ({
   onAddMemberPayoutTransaction,
   companyName = 'آینده نگاران خلاق',
   onShowToast,
+  canEdit = true,
+  canExport = true,
 }) => {
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<CompanyMember | null>(null);
@@ -194,25 +198,29 @@ export const MembersView: React.FC<MembersViewProps> = ({
             {totalSharePercentage === 100 && ' (تکمیل ۱۰۰٪)'}
           </div>
 
-          <button
-            onClick={() => {
-              exportMembersToExcel(companyName, selectedYear, members, transactions);
-              if (onShowToast) onShowToast(`فایل اکسل سهامداران و برداشت‌ها برای سال مالی ${selectedYear} دانلود شد.`);
-            }}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
-            title={`دانلود فایل اکسل سهامداران و برداشت‌ها سال ${selectedYear}`}
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>خروجی اکسل سهامداران</span>
-          </button>
+          {canExport && (
+            <button
+              onClick={() => {
+                exportMembersToExcel(companyName, selectedYear, members, transactions);
+                if (onShowToast) onShowToast(`فایل اکسل سهامداران و برداشت‌ها برای سال مالی ${selectedYear} دانلود شد.`);
+              }}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+              title={`دانلود فایل اکسل سهامداران و برداشت‌ها سال ${selectedYear}`}
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>خروجی اکسل سهامداران</span>
+            </button>
+          )}
 
-          <button
-            onClick={handleOpenAdd}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>افزودن عضو / سهامدار</span>
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>افزودن عضو / سهامدار</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -250,22 +258,24 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     <p className="text-xs font-semibold text-slate-600 mt-1">{member.role}</p>
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleOpenEdit(member)}
-                      className="p-1.5 text-slate-500 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors cursor-pointer"
-                      title="ویرایش مشخصات عضو"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setDeletingMember({ id: member.id, name: member.name })}
-                      className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                      title="حذف عضو"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {canEdit && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenEdit(member)}
+                        className="p-1.5 text-slate-500 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors cursor-pointer"
+                        title="ویرایش مشخصات عضو"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeletingMember({ id: member.id, name: member.name })}
+                        className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="حذف عضو"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Status Badge: Active Working Force vs Sole Shareholder */}
@@ -337,15 +347,17 @@ export const MembersView: React.FC<MembersViewProps> = ({
               </div>
 
               {/* Action Button */}
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end">
-                <button
-                  onClick={() => handleOpenPayoutModal(member)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded-lg transition-colors"
-                >
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                  <span>ثبت واریز یا برداشت جدید</span>
-                </button>
-              </div>
+              {canEdit && (
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end">
+                  <button
+                    onClick={() => handleOpenPayoutModal(member)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    <span>ثبت واریز یا برداشت جدید</span>
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

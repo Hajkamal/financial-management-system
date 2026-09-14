@@ -216,6 +216,8 @@ function mapTransactionsToExcelRows(transactions: FinancialTransaction[]) {
       'ماه': PERSIAN_MONTHS.find(m => m.num === t.month)?.name || t.month,
       'طرف حساب / ذینفع': t.recipientOrPayer || '-',
       'شماره پیگیری': t.trackingCode || '-',
+      'کاربر ثبت‌کننده': t.createdByName || t.createdBy || 'وحید کمالی (مدیر کل)',
+      'تاریخ ثبت در سیستم': t.createdAt || t.dateString,
       'توضیحات': t.description || '-',
     };
   });

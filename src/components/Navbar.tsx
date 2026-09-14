@@ -18,9 +18,10 @@ import {
   User,
   CalendarCheck,
   Lock,
-  Settings2
+  Settings2,
+  ShieldCheck
 } from 'lucide-react';
-import { ActiveTab, CurrencyMode, FiscalYear } from '../types';
+import { ActiveTab, CurrencyMode, FiscalYear, AppUser } from '../types';
 
 interface NavigationProps {
   companyName: string;
@@ -36,6 +37,7 @@ interface NavigationProps {
   userEmail?: string;
   onLogout?: () => void;
   fiscalYears?: FiscalYear[];
+  currentUser?: AppUser | null;
 }
 
 export const NAV_TABS = [
@@ -46,6 +48,7 @@ export const NAV_TABS = [
   { id: 'loans' as ActiveTab, label: 'تسهیلات و اقساط', icon: Landmark },
   { id: 'members' as ActiveTab, label: 'سهامداران و اعضا', icon: UserCheck },
   { id: 'fiscal-years' as ActiveTab, label: 'سال‌های مالی', icon: CalendarCheck },
+  { id: 'users' as ActiveTab, label: 'مدیریت کاربران', icon: ShieldCheck },
 ];
 
 export const TAB_META: Record<ActiveTab, { title: string; subtitle: string }> = {
@@ -76,6 +79,10 @@ export const TAB_META: Record<ActiveTab, { title: string; subtitle: string }> = 
   'fiscal-years': {
     title: 'مدیریت سال‌های مالی و دوره‌ها',
     subtitle: 'تعریف سال جدید، بستن سال مالی، انتقال مانده به دوره بعد و قفل اسناد'
+  },
+  'users': {
+    title: 'مدیریت کاربران و سطوح دسترسی',
+    subtitle: 'تعریف کاربر جدید، تنظیم رمز عبور، کنترل دسترسی ثبت/ویرایش/خروجی'
   }
 };
 
@@ -96,6 +103,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
   userEmail,
   onLogout,
   fiscalYears,
+  currentUser,
 }) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -113,23 +121,30 @@ export const Sidebar: React.FC<NavigationProps> = ({
       </div>
 
       {/* Quick Action Button in Sidebar */}
-      <div className="px-4 pt-4 pb-2">
-        <button
-          id="sidebar-new-tx-btn"
-          onClick={() => {
-            onOpenNewTransaction();
-            setIsMobileOpen(false);
-          }}
-          className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>+ ثبت تراکنش جدید</span>
-        </button>
-      </div>
+      {(currentUser?.permissions.canCreateTransactions ?? true) && (
+        <div className="px-4 pt-4 pb-2">
+          <button
+            id="sidebar-new-tx-btn"
+            onClick={() => {
+              onOpenNewTransaction();
+              setIsMobileOpen(false);
+            }}
+            className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>+ ثبت تراکنش جدید</span>
+          </button>
+        </div>
+      )}
 
       {/* Navigation List */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {NAV_TABS.map((tab) => {
+        {NAV_TABS.filter((tab) => {
+          if (tab.id === 'users') {
+            return currentUser ? currentUser.permissions.canManageUsers : true;
+          }
+          return true;
+        }).map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
@@ -222,13 +237,23 @@ export const Sidebar: React.FC<NavigationProps> = ({
 
         {/* User Account & Logout in Sidebar */}
         {onLogout && (
-          <div className="pt-2 border-t border-slate-800/80">
-            {userEmail && (
+          <div className="pt-2 border-t border-slate-800/80 space-y-2">
+            {currentUser ? (
+              <div className="px-2.5 py-2 bg-slate-800/70 rounded-lg border border-slate-700/50 flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-blue-600/30 border border-blue-400/40 text-blue-300 font-bold flex items-center justify-center text-xs shrink-0">
+                  {currentUser.fullName.slice(0, 1)}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-bold text-slate-200 truncate">{currentUser.fullName}</span>
+                  <span className="text-[10px] text-emerald-400 font-medium">{currentUser.roleTitle}</span>
+                </div>
+              </div>
+            ) : userEmail ? (
               <div className="px-2 py-1 text-[11px] text-slate-400 truncate flex items-center gap-1.5 font-mono mb-1.5" title={userEmail}>
                 <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                 <span className="truncate" dir="ltr">{userEmail}</span>
               </div>
-            )}
+            ) : null}
             <button
               id="sidebar-logout-btn"
               onClick={onLogout}
@@ -299,6 +324,7 @@ interface TopHeaderProps {
   userEmail?: string;
   onLogout?: () => void;
   fiscalYears?: FiscalYear[];
+  currentUser?: AppUser | null;
 }
 
 /**
@@ -317,6 +343,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   userEmail,
   onLogout,
   fiscalYears,
+  currentUser,
 }) => {
   const currentTabMeta = TAB_META[activeTab] || {
     title: 'سامانه مدیریت مالی',
@@ -352,39 +379,54 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center gap-2.5">
         {/* Excel Export Button */}
-        <button
-          id="excel-export-btn"
-          onClick={onExportExcel}
-          className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold text-xs sm:text-sm hover:bg-emerald-700 shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
-        >
-          <FileSpreadsheet className="w-4 h-4" />
-          <span>خروجی اکسل (XLSX)</span>
-        </button>
+        {(currentUser?.permissions.canExportExcel ?? true) && (
+          <button
+            id="excel-export-btn"
+            onClick={onExportExcel}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold text-xs sm:text-sm hover:bg-emerald-700 shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>خروجی اکسل (XLSX)</span>
+          </button>
+        )}
 
         {/* System Settings / Backup */}
-        <button
-          id="backup-btn"
-          onClick={onOpenBackupModal}
-          className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-bold text-xs sm:text-sm hover:bg-slate-50 shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
-        >
-          <DatabaseBackup className="w-4 h-4 text-slate-500" />
-          <span>تنظیمات سیستم</span>
-        </button>
+        {(currentUser?.permissions.canBackupRestore ?? true) && (
+          <button
+            id="backup-btn"
+            onClick={onOpenBackupModal}
+            className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-bold text-xs sm:text-sm hover:bg-slate-50 shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <DatabaseBackup className="w-4 h-4 text-slate-500" />
+            <span>تنظیمات سیستم</span>
+          </button>
+        )}
 
         {/* New Transaction */}
-        <button
-          id="add-transaction-header-btn"
-          onClick={onOpenNewTransaction}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-xs sm:text-sm hover:bg-blue-700 shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>+ ثبت تراکنش</span>
-        </button>
+        {(currentUser?.permissions.canCreateTransactions ?? true) && (
+          <button
+            id="add-transaction-header-btn"
+            onClick={onOpenNewTransaction}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-xs sm:text-sm hover:bg-blue-700 shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>+ ثبت تراکنش</span>
+          </button>
+        )}
 
         {/* Supabase User & Logout */}
         {onLogout && (
           <div className="flex items-center gap-2 border-r border-slate-200 pr-2.5 mr-1">
-            {userEmail && (
+            {currentUser ? (
+              <div 
+                className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200/80 rounded-lg text-slate-700 text-xs font-medium"
+                title={`کاربر: ${currentUser.fullName} (${currentUser.email}) - ${currentUser.roleTitle}`}
+              >
+                <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
+                <span className="font-bold text-slate-800">{currentUser.fullName}</span>
+                <span className="text-[11px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">{currentUser.roleTitle}</span>
+              </div>
+            ) : userEmail ? (
               <div 
                 className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 border border-slate-200/80 rounded-lg text-slate-700 text-xs font-mono font-medium max-w-[210px] truncate"
                 title={`کاربر وارد شده: ${userEmail}`}
@@ -392,7 +434,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
                 <span className="truncate" dir="ltr">{userEmail}</span>
               </div>
-            )}
+            ) : null}
             <button
               id="header-logout-btn"
               onClick={onLogout}
