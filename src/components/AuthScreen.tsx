@@ -46,8 +46,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   onAuthSuccess 
 }) => {
   const [mode, setMode] = useState<AuthMode>('login');
-  const [email, setEmail] = useState('vahidkamali03@gmail.com');
-  const [password, setPassword] = useState('admin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -58,9 +58,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const safeUsers = Array.isArray(users) && users.length > 0 ? users : INITIAL_USERS;
-
-  // Find Super Admin
-  const superAdminUser = safeUsers.find(u => u.email?.toLowerCase() === 'vahidkamali03@gmail.com');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,14 +126,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
       setIsLoading(true);
       try {
+        // Register in Supabase if configured (catch error so test environment is resilient and safe)
         if (isSupabaseConfigured && supabase) {
-          await supabase.auth.signUp({
-            email: cleanEmail,
-            password: password,
-          });
+          try {
+            await supabase.auth.signUp({
+              email: cleanEmail,
+              password: password,
+            });
+          } catch (supErr) {
+            console.warn('Supabase auth notice:', supErr);
+          }
         }
 
-        // Create new user in local state
+        // Check if this is the super admin email, otherwise default to pending
         const isSuper = cleanEmail === 'vahidkamali03@gmail.com';
         const newUserData: Omit<AppUser, 'id' | 'createdAt'> = {
           email: cleanEmail,
@@ -145,8 +147,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           fullName: `${firstName.trim()} ${lastName.trim()}`,
           password,
           role: isSuper ? 'super_admin' : 'viewer',
-          roleTitle: isSuper ? 'مدیر ارشد سامانه' : 'کارشناس (دسترسی اولیه)',
-          status: 'active',
+          roleTitle: isSuper ? 'مدیر ارشد سامانه' : 'کاربر (در انتظار تایید)',
+          status: isSuper ? 'active' : 'pending',
           permissions: getPermissionsByRole(isSuper ? 'super_admin' : 'viewer'),
         };
 
@@ -154,17 +156,26 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           onRegisterUser(newUserData);
         }
 
-        const newUser: AppUser = {
-          ...newUserData,
-          id: `user-${Date.now()}`,
-          createdAt: 'امروز',
-        };
-
-        setSuccessMessage('حساب کاربری با موفقیت ایجاد شد! در حال ورود به سامانه...');
-        setTimeout(() => {
-          if (onLoginUser) onLoginUser(newUser);
-          if (onAuthSuccess) onAuthSuccess();
-        }, 500);
+        if (isSuper) {
+          const newUser: AppUser = {
+            ...newUserData,
+            id: `user-${Date.now()}`,
+            createdAt: 'امروز',
+          };
+          setSuccessMessage('حساب کاربری مدیر ارشد با موفقیت ایجاد شد! در حال ورود به سامانه...');
+          setTimeout(() => {
+            if (onLoginUser) onLoginUser(newUser);
+            if (onAuthSuccess) onAuthSuccess();
+          }, 500);
+        } else {
+          // New regular user: MUST NOT enter, must wait for admin approval
+          setSuccessMessage('درخواست ثبت‌نام شما با موفقیت ثبت شد. حساب شما در حالت «در انتظار تایید مدیر» قرار گرفت و پس از تایید توسط مدیر کل سامane (آقای وحید کمالی) فعال خواهد شد.');
+          setFirstName('');
+          setLastName('');
+          setPassword('');
+          setConfirmPassword('');
+          setMode('login');
+        }
 
       } catch (err: any) {
         setErrorMessage(getPersianAuthErrorMessage(err));
@@ -180,14 +191,21 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       // 1. Check registered system users first
       const localMatchedUser = safeUsers.find(u => u.email?.toLowerCase() === cleanEmail);
       if (localMatchedUser) {
-        if (localMatchedUser.status !== 'active') {
+        // Enforce pending check
+        if (localMatchedUser.status === 'pending') {
+          setErrorMessage('حساب کاربری شما هنوز به تایید مدیر ارشد سامانه نرسیده است. لطفاً منتظر بمانید تا مدیر سامانه حساب شما را فعال کند.');
+          setIsLoading(false);
+          return;
+        }
+
+        if (localMatchedUser.status === 'inactive') {
           setErrorMessage('این حساب کاربری غیرفعال یا معلق شده است. لطفاً با مدیر کل سامانه تماس بگیرید.');
           setIsLoading(false);
           return;
         }
 
         // Verify password if defined
-        if (localMatchedUser.password && localMatchedUser.password !== password && password !== 'admin') {
+        if (localMatchedUser.password && localMatchedUser.password !== password) {
           setErrorMessage('کلمه عبور وارد شده نادرست است.');
           setIsLoading(false);
           return;
@@ -201,47 +219,53 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
       // 2. If not found in local users and Supabase is configured, try Supabase auth
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: password,
-        });
-        if (error) throw error;
-
-        if (data.session && data.user) {
-          // Auto-generate or match user
-          const isSuper = cleanEmail === 'vahidkamali03@gmail.com';
-          const dynamicUser: AppUser = {
-            id: data.user.id,
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({
             email: cleanEmail,
-            firstName: isSuper ? 'وحید' : 'کاربر',
-            lastName: isSuper ? 'کمالی' : 'سامانه',
-            fullName: isSuper ? 'وحید کمالی' : (data.user.email?.split('@')[0] || 'کاربر'),
-            role: isSuper ? 'super_admin' : 'viewer',
-            roleTitle: isSuper ? 'مدیر ارشد سامانه' : 'کاربر سامانه',
-            status: 'active',
-            permissions: getPermissionsByRole(isSuper ? 'super_admin' : 'viewer'),
-            createdAt: 'امروز',
-          };
-          onLoginUser(dynamicUser);
-          if (onAuthSuccess) onAuthSuccess();
+            password: password,
+          });
+          if (error) throw error;
+
+          if (data.session && data.user) {
+            // Auto-generate or match user
+            const isSuper = cleanEmail === 'vahidkamali03@gmail.com';
+            const dynamicUser: AppUser = {
+              id: data.user.id,
+              email: cleanEmail,
+              firstName: isSuper ? 'وحید' : 'کاربر',
+              lastName: isSuper ? 'کمالی' : 'سامانه',
+              fullName: isSuper ? 'وحید کمالی' : (data.user.email?.split('@')[0] || 'کاربر'),
+              role: isSuper ? 'super_admin' : 'viewer',
+              roleTitle: isSuper ? 'مدیر ارشد سامانه' : 'کاربر در انتظار تایید',
+              status: isSuper ? 'active' : 'pending',
+              permissions: getPermissionsByRole(isSuper ? 'super_admin' : 'viewer'),
+              createdAt: 'امروز',
+            };
+
+            if (dynamicUser.status === 'pending') {
+              setErrorMessage('حساب کاربری شما هنوز به تایید مدیر ارشد سامانه نرسیده است. لطفاً منتظر بمانید.');
+              setIsLoading(false);
+              return;
+            }
+
+            if (onLoginUser) onLoginUser(dynamicUser);
+            if (onAuthSuccess) onAuthSuccess();
+            return;
+          }
+        } catch (supabaseErr: any) {
+          setErrorMessage(getPersianAuthErrorMessage(supabaseErr));
           return;
         }
       }
 
       // If user not recognized
-      setErrorMessage('کاربری با این نشانی ایمیل در سامانه تعریف نشده است. لطفاً با مدیر کل (vahidkamali03@gmail.com) تماس بگیرید یا ثبت‌نام نمایید.');
+      setErrorMessage('کاربری با این مشخصات یافت نشد. لطفاً از صحت ایمیل و کلمه عبور اطمینان حاصل کرده یا ثبت‌نام نمایید.');
 
     } catch (err: any) {
       setErrorMessage(getPersianAuthErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Quick switcher helpers
-  const handleQuickLogin = (targetUser: AppUser) => {
-    onLoginUser(targetUser);
-    if (onAuthSuccess) onAuthSuccess();
   };
 
   return (
@@ -268,33 +292,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           </p>
         </div>
 
-        {/* Super Admin Notice Card */}
-        <div className="mb-5 p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 to-blue-500/15 border border-amber-500/30 text-amber-200 text-xs shadow-lg">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-300 flex items-center justify-center shrink-0">
-              <Crown className="w-5 h-5" />
+        {/* Access Notice Card */}
+        <div className="mb-5 p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700 text-slate-300 text-xs shadow-md">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/15 border border-blue-400/30 text-blue-400 flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-4 h-4" />
             </div>
-            <div className="space-y-1.5 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="font-black text-amber-300 text-xs">حساب مدیر کل سامانه (مدیر ارشد)</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-400/30">
-                  دسترسی کامل
-                </span>
-              </div>
-              <p className="text-amber-100/90 text-[11px] leading-relaxed">
-                مدیر کل سامانه: <strong className="text-white font-bold font-mono">vahidkamali03@gmail.com</strong> (وحید کمالی)
+            <div className="space-y-0.5 flex-1">
+              <div className="font-bold text-slate-200 text-[11px]">احراز هویت و کنترل دسترسی</div>
+              <p className="text-slate-400 text-[10px] leading-relaxed">
+                ورود تنها با ایمیل و رمز عبور اختصاصی امکان‌پذیر است. ثبت‌نام کاربران جدید نیازمند تایید مدیر ارشد سامانه می‌باشد.
               </p>
-              {superAdminUser && (
-                <button
-                  type="button"
-                  id="quick-super-admin-login"
-                  onClick={() => handleQuickLogin(superAdminUser)}
-                  className="mt-1 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg font-black text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/20 cursor-pointer"
-                >
-                  <Crown className="w-3.5 h-3.5" />
-                  <span>ورود فوری به عنوان مدیر کل (وحید کمالی)</span>
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -514,53 +522,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             </div>
 
           </form>
-
-          {/* Quick Demo Logins Section */}
-          {mode === 'login' && users.length > 1 && (
-            <div className="mt-5 pt-4 border-t border-slate-700/60">
-              <span className="text-[11px] text-slate-400 block mb-2 font-semibold">
-                ورود سریع با کاربران تعریف‌شده در سامانه (جهت تست سطوح دسترسی):
-              </span>
-              <div className="flex flex-col gap-2">
-                {users.map((u) => {
-                  const isSuper = u.role === 'super_admin';
-                  return (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => handleQuickLogin(u)}
-                      className={`w-full p-2.5 rounded-xl border text-right flex items-center justify-between transition-all cursor-pointer ${
-                        isSuper 
-                          ? 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-200' 
-                          : 'bg-slate-700/50 hover:bg-slate-700 border-slate-600/50 text-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {isSuper ? (
-                          <Crown className="w-4 h-4 text-amber-400 shrink-0" />
-                        ) : u.role === 'accountant' ? (
-                          <Calculator className="w-4 h-4 text-emerald-400 shrink-0" />
-                        ) : (
-                          <EyeIcon className="w-4 h-4 text-slate-400 shrink-0" />
-                        )}
-                        <div>
-                          <div className="font-bold text-xs text-white flex items-center gap-1.5">
-                            <span>{u.fullName}</span>
-                            <span className="text-[10px] font-normal text-slate-400">({u.roleTitle})</span>
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-mono" dir="ltr">{u.email}</span>
-                        </div>
-                      </div>
-
-                      <span className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700 font-medium">
-                        ورود سریع ↵
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Mode Toggles */}
           <div className="mt-5 pt-4 border-t border-slate-700/60 flex flex-col gap-2 text-center text-xs">

@@ -178,7 +178,7 @@ export interface AppUser {
   password?: string;                 // کلمه عبور ورود به سامانه
   role: UserRole;                    // نقش اصلی
   roleTitle: string;                 // عنوان سِمَت (مثلاً مدیر ارشد، حسابدار، ناظر مالی)
-  status: 'active' | 'inactive';     // وضعیت حساب کاربری
+  status: 'active' | 'inactive' | 'pending'; // وضعیت حساب کاربری (فعال، غیرفعال، در انتظار تایید مدیر)
   permissions: UserPermissions;      // ماتریس دسترسی‌ها
   avatarColor?: string;              // رنگ شناسه آواتار
   createdAt: string;                 // تاریخ ایجاد حساب

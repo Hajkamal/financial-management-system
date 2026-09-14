@@ -22,7 +22,9 @@ import {
   Phone, 
   Sparkles,
   HelpCircle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Clock,
+  UserCheck
 } from 'lucide-react';
 import { AppUser, UserRole, UserPermissions } from '../types';
 import { 
@@ -54,7 +56,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'inactive'>('all');
 
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -85,6 +87,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
     return {
       total: users.length,
       active: users.filter(u => u.status === 'active').length,
+      pending: users.filter(u => u.status === 'pending').length,
       admins: users.filter(u => u.role === 'super_admin').length,
       accountants: users.filter(u => u.role === 'accountant' || u.role === 'finance_manager').length,
       viewers: users.filter(u => u.role === 'viewer').length,
@@ -160,13 +163,13 @@ export const UsersView: React.FC<UsersViewProps> = ({
     <div className="space-y-6" id="users-view-container">
       
       {/* Top Banner with Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs text-slate-500 block mb-1">کل کاربران ثبت‌شده</span>
             <span className="text-2xl font-black text-slate-900">{toPersianDigits(stats.total)}</span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">حساب‌های کاربری فعال در سامانه</span>
+            <span className="text-[11px] text-slate-400 block mt-0.5">حساب‌های کاربری در سامانه</span>
           </div>
           <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
             <Users className="w-5 h-5" />
@@ -181,6 +184,21 @@ export const UsersView: React.FC<UsersViewProps> = ({
           </div>
           <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
             <CheckCircle2 className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className={`p-4 rounded-2xl border shadow-xs flex items-center justify-between transition-all ${
+          stats.pending > 0 
+            ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/30' 
+            : 'bg-white border-slate-200'
+        }`}>
+          <div>
+            <span className="text-xs text-amber-800 font-bold block mb-1">در انتظار تایید ادمین</span>
+            <span className="text-2xl font-black text-amber-700">{toPersianDigits(stats.pending)}</span>
+            <span className="text-[11px] text-amber-600/80 block mt-0.5">کاربران ثبت‌نامی معلق</span>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center border border-amber-200">
+            <Clock className="w-5 h-5" />
           </div>
         </div>
 
@@ -271,6 +289,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
             >
               <option value="all">تمام وضعیت‌ها</option>
               <option value="active">فقط کاربران فعال</option>
+              <option value="pending">در انتظار تایید مدیر ارشد</option>
               <option value="inactive">کاربران غیرفعال و معلق</option>
             </select>
           </div>
@@ -349,10 +368,26 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   <div className="flex items-center justify-between text-slate-600 pt-1 border-t border-slate-200/60">
                     <span className="text-slate-400">وضعیت حساب:</span>
                     <span className={`inline-flex items-center gap-1 font-bold text-[11px] ${
-                      user.status === 'active' ? 'text-emerald-700' : 'text-slate-500'
+                      user.status === 'active' 
+                        ? 'text-emerald-700' 
+                        : user.status === 'pending' 
+                        ? 'text-amber-700' 
+                        : 'text-slate-500'
                     }`}>
-                      <span className={`w-2 h-2 rounded-full ${user.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-                      <span>{user.status === 'active' ? 'فعال و مجاز به ورود' : 'غیرفعال / معلق'}</span>
+                      <span className={`w-2 h-2 rounded-full ${
+                        user.status === 'active' 
+                          ? 'bg-emerald-500' 
+                          : user.status === 'pending' 
+                          ? 'bg-amber-500 animate-pulse' 
+                          : 'bg-slate-400'
+                      }`}></span>
+                      <span>
+                        {user.status === 'active' 
+                          ? 'فعال و مجاز به ورود' 
+                          : user.status === 'pending' 
+                          ? 'در انتظار تایید مدیر ارشد' 
+                          : 'غیرفعال / معلق'}
+                      </span>
                     </span>
                   </div>
                 </div>
@@ -413,23 +448,38 @@ export const UsersView: React.FC<UsersViewProps> = ({
               {/* Card Footer Actions */}
               <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-1 text-xs">
                 
-                {/* Switch to this user button (Instant preview test) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSwitchUser(user);
-                    onShowToast(`با موفقیت به کاربر ${user.fullName} سوئیچ شدید.`);
-                  }}
-                  className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer ${
-                    isCurrentUser 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
-                  }`}
-                  title="ورود و تست سامانه با دسترسی‌های این کاربر"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>{isCurrentUser ? 'کاربر فعال' : 'ورود با این حساب'}</span>
-                </button>
+                {/* Switch or Approve button */}
+                {user.status === 'pending' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUpdateUser(user.id, { status: 'active', roleTitle: user.roleTitle.replace('(در انتظار تایید)', '').trim() || 'کاربر فعال' });
+                      onShowToast(`حساب کاربری ${user.fullName} با موفقیت تایید و فعال شد.`);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer shadow-xs"
+                    title="تایید و فعال‌سازی حساب کاربر"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>تایید حساب کاربر</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSwitchUser(user);
+                      onShowToast(`با موفقیت به کاربر ${user.fullName} سوئیچ شدید.`);
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer ${
+                      isCurrentUser 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                    title="ورود و تست سامانه با دسترسی‌های این کاربر"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>{isCurrentUser ? 'کاربر فعال' : 'ورود با این حساب'}</span>
+                  </button>
+                )}
 
                 <div className="flex items-center gap-1">
                   {/* Reset Password */}
@@ -601,7 +651,7 @@ const UserModal: React.FC<UserModalProps> = ({
   const [password, setPassword] = useState(userToEdit?.password || '123456');
   const [roleTitle, setRoleTitle] = useState(userToEdit?.roleTitle || 'کارشناس حسابداری');
   const [role, setRole] = useState<UserRole>(userToEdit?.role || 'accountant');
-  const [status, setStatus] = useState<'active' | 'inactive'>(userToEdit?.status || 'active');
+  const [status, setStatus] = useState<'active' | 'pending' | 'inactive'>(userToEdit?.status || 'active');
   const [phone, setPhone] = useState(userToEdit?.phone || '');
   const [notes, setNotes] = useState(userToEdit?.notes || '');
 
@@ -992,24 +1042,54 @@ const UserModal: React.FC<UserModalProps> = ({
 
           </div>
 
-          {/* User Status Toggle */}
-          <div className="pt-2 flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
-            <div>
-              <span className="font-bold text-slate-800 block">وضعیت حساب کاربری</span>
-              <span className="text-[11px] text-slate-500 block mt-0.5">در صورت غیرفعال بودن، کاربر امکان ورود به سامانه را نخواهد داشت</span>
+          {/* User Status Selection */}
+          <div className="pt-2 p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <span className="font-bold text-slate-800 block text-xs">وضعیت حساب کاربری</span>
+                <span className="text-[11px] text-slate-500 block mt-0.5">کاربران فقط در وضعیت «فعال» امکان ورود به سامانه را خواهند داشت</span>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setStatus(status === 'active' ? 'inactive' : 'active')}
-              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
-                status === 'active' 
-                  ? 'bg-emerald-600 text-white' 
-                  : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-              }`}
-            >
-              {status === 'active' ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-              <span>{status === 'active' ? 'حساب فعال' : 'حساب غیرفعال'}</span>
-            </button>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setStatus('active')}
+                className={`py-2 px-2.5 rounded-xl font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 border ${
+                  status === 'active'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>فعال (مجاز به ورود)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatus('pending')}
+                className={`py-2 px-2.5 rounded-xl font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 border ${
+                  status === 'pending'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>در انتظار تایید</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatus('inactive')}
+                className={`py-2 px-2.5 rounded-xl font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 border ${
+                  status === 'inactive'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                <span>غیرفعال / مسدود</span>
+              </button>
+            </div>
           </div>
 
           {/* Modal Footer Actions */}
