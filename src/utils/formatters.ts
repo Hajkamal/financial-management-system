@@ -11,7 +11,8 @@ import {
   Employee,
   SalaryMatrixItem,
   CompanyMember,
-  Loan
+  Loan,
+  VatInvoice
 } from '../types';
 
 export const PERSIAN_MONTHS: PersianMonthInfo[] = [
@@ -589,3 +590,190 @@ export function exportLoansToExcel(
   const filename = `تسهیلات_و_اقساط_${companyName.replace(/\s+/g, '_')}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
+
+/**
+ * Converts a numeric amount to formal Persian words.
+ * Example: 13059310000 -> "سیزده میلیارد و پنجاه و نه میلیون و سیصد و ده هزار"
+ */
+export function numberToPersianWords(amount: number, unit = 'ریال'): string {
+  if (amount === 0) return `صفر ${unit}`;
+  if (isNaN(amount)) return '';
+
+  const isNegative = amount < 0;
+  let n = Math.abs(Math.floor(amount));
+
+  const yekan = ['', 'یک', 'دو', 'سه', 'چهار', 'پنج', 'شش', 'هفت', 'هشت', 'نه'];
+  const dahha = ['', 'ده', 'بیست', 'سی', 'چهل', 'پنجاه', 'شصت', 'هفتاد', 'هشتاد', 'نود'];
+  const dahTaNozdah = [
+    'ده', 'یازده', 'دوازده', 'سیزده', 'چهارده', 'پانزده', 
+    'شانزده', 'هفده', 'هجده', 'نوزده'
+  ];
+  const sadha = ['', 'یکصد', 'دویست', 'سیصد', 'چهارصد', 'پانصد', 'ششصد', 'هفتصد', 'هشتصد', 'نهصد'];
+  const steps = ['', 'هزار', 'میلیون', 'میلیارد', 'تریلیون'];
+
+  function convertGroup(val: number): string {
+    const s: string[] = [];
+    const h = Math.floor(val / 100);
+    const remainder = val % 100;
+    const t = Math.floor(remainder / 10);
+    const y = remainder % 10;
+
+    if (h > 0) s.push(sadha[h]);
+
+    if (remainder >= 10 && remainder <= 19) {
+      s.push(dahTaNozdah[remainder - 10]);
+    } else {
+      if (t > 0) s.push(dahha[t]);
+      if (y > 0) s.push(yekan[y]);
+    }
+
+    return s.join(' و ');
+  }
+
+  const parts: string[] = [];
+  let stepIndex = 0;
+
+  while (n > 0) {
+    const group = n % 1000;
+    if (group > 0) {
+      const groupText = convertGroup(group);
+      const stepName = steps[stepIndex];
+      parts.unshift(stepName ? `${groupText} ${stepName}` : groupText);
+    }
+    n = Math.floor(n / 1000);
+    stepIndex++;
+  }
+
+  const result = (isNegative ? 'منفی ' : '') + parts.join(' و ') + (unit ? ` ${unit}` : '');
+  return result;
+}
+
+/**
+ * Exports a single official VAT Invoice to Excel (matching Tax Authority & Taxpayer System format).
+ */
+export function exportVatInvoiceToExcel(invoice: VatInvoice, companyName: string) {
+  const wb = XLSX.utils.book_new();
+
+  // Header info
+  const headerInfo = [
+    ['عنوان صورتحساب:', `صورتحساب فروش ${invoice.periodType === 'seasonal' ? `فصل ${invoice.season}` : `ماه ${invoice.month}`} سال ${invoice.year}`],
+    ['شماره صورتحساب:', invoice.invoiceNumber],
+    ['نوع و الگوی صورتحساب:', `${invoice.invoiceType} - ${invoice.invoicePattern} (${invoice.invoiceSubject})`],
+    ['تاریخ و زمان ثبت:', invoice.issueDateTime],
+    ['نام فروشنده:', invoice.sellerCompanyName || companyName],
+    ['شناسه ملی / شماره اقتصادی:', invoice.sellerNationalId],
+    ['کد پستی فروشنده:', invoice.sellerPostalCode],
+    ['نام نماینده قانونی:', invoice.sellerPersonName],
+    ['طرف خریدار:', invoice.buyerTitle || 'مصرف‌کننده نهایی'],
+    []
+  ];
+
+  // Table items
+  const tableHeaders = [
+    'ردیف',
+    'شناسه کالا/خدمت داخلی',
+    'شناسه عمومی مالیاتی',
+    'شرح کالا / خدمت',
+    'واحد',
+    'تعداد / مقدار',
+    'مبلغ واحد (ریال)',
+    'تخفیف (ریال)',
+    'مبلغ خالص قبل مالیات (ریال)',
+    'نرخ ارزش افزوده (%)',
+    'مبلغ مالیات ارزش افزوده (ریال)',
+    'مبلغ کل (ریال)'
+  ];
+
+  const tableRows = invoice.items.map((it, idx) => {
+    const gross = (it.quantity * it.unitPrice) - (it.discount || 0);
+    return [
+      idx + 1,
+      it.internalCode,
+      it.serviceCode,
+      it.title,
+      it.unit,
+      it.quantity,
+      it.unitPrice,
+      it.discount || 0,
+      gross,
+      `${it.vatRate}%`,
+      it.taxAmount,
+      it.totalAmount
+    ];
+  });
+
+  const totalsRow = [
+    'جمع کل',
+    '',
+    '',
+    '',
+    '',
+    invoice.totalQuantity,
+    '',
+    invoice.totalDiscount,
+    invoice.totalGrossAmount,
+    '',
+    invoice.totalVatAmount,
+    invoice.finalAmount
+  ];
+
+  const footerInfo = [
+    [],
+    ['مالیات موضوع ماده ۱۷:', invoice.article17Tax || 0],
+    ['مبلغ نهایی صورتحساب (ریال):', invoice.finalAmount],
+    ['مبلغ به حروف:', invoice.amountInWords]
+  ];
+
+  const allData = [...headerInfo, tableHeaders, ...tableRows, totalsRow, ...footerInfo];
+  const ws = XLSX.utils.aoa_to_sheet(allData);
+
+  // Set column widths
+  ws['!cols'] = [
+    { wch: 8 },  // ردیف
+    { wch: 22 }, // شناسه داخلی
+    { wch: 20 }, // شناسه عمومی
+    { wch: 35 }, // شرح کالا/خدمت
+    { wch: 10 }, // واحد
+    { wch: 14 }, // تعداد
+    { wch: 18 }, // فی
+    { wch: 14 }, // تخفیف
+    { wch: 24 }, // مبلغ خالص
+    { wch: 18 }, // نرخ
+    { wch: 26 }, // مالیات
+    { wch: 24 }  // مبلغ کل
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'صورتحساب ارزش افزوده');
+  const filename = `صورتحساب_ارزش_افزوده_${invoice.invoiceNumber}_${invoice.periodType === 'seasonal' ? invoice.season : `ماه_${invoice.month}`}_${invoice.year}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+/**
+ * Exports summary of all VAT seasonal & monthly invoices to Excel.
+ */
+export function exportAllVatInvoicesToExcel(invoices: VatInvoice[], companyName: string, year: number) {
+  const wb = XLSX.utils.book_new();
+
+  const rows = invoices.map((inv, idx) => ({
+    'ردیف': idx + 1,
+    'شماره صورتحساب': inv.invoiceNumber,
+    'دوره': inv.periodType === 'seasonal' ? `فصل ${inv.season}` : `ماه ${inv.month}`,
+    'سال مالی': inv.year,
+    'تاریخ ثبت': inv.issueDateTime,
+    'نوع صورتحساب': inv.invoiceType,
+    'تعداد اقلام': inv.items.length,
+    'مجموع تعداد خدمات': inv.totalQuantity,
+    'مبلغ خالص فروش (ریال)': inv.totalGrossAmount,
+    'مجموع ارزش افزوده (ریال)': inv.totalVatAmount,
+    'مبلغ نهایی با ارزش افزوده (ریال)': inv.finalAmount,
+    'وضعیت ثبت در تراکنش‌ها': inv.isSyncedToTransactions ? 'ثبت شده' : 'ثبت نشده',
+    'طرف خریدار': inv.buyerTitle || 'مصرف‌کننده نهایی'
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ 'پیام': 'هیچ صورتحسابی ثبت نشده است.' }]);
+  XLSX.utils.book_append_sheet(wb, ws, `گزارش فصلی ارزش افزوده ${year}`);
+
+  const filename = `گزارش_فروش_فصلی_ارزش_افزوده_${companyName.replace(/\s+/g, '_')}_سال_${year}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+

@@ -17,7 +17,7 @@ import {
   Smartphone,
   ShieldCheck
 } from 'lucide-react';
-import { FinancialTransaction, Employee, SalaryMatrixItem, CompanyMember, Loan, FiscalYear, AppUser, BankAccount } from '../types';
+import { FinancialTransaction, Employee, SalaryMatrixItem, CompanyMember, Loan, FiscalYear, AppUser, BankAccount, VatInvoice, ServiceTariff } from '../types';
 import { toPersianDigits, getCurrentJalaliDateTime, generateBackupFilename } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
@@ -44,6 +44,8 @@ interface BackupModalProps {
   fiscalYears?: FiscalYear[];
   users?: AppUser[];
   bankAccounts?: BankAccount[];
+  vatInvoices?: VatInvoice[];
+  serviceTariffs?: ServiceTariff[];
   onRestoreData: (data: {
     transactions: FinancialTransaction[];
     employees: Employee[];
@@ -53,6 +55,8 @@ interface BackupModalProps {
     fiscalYears?: FiscalYear[];
     users?: AppUser[];
     bankAccounts?: BankAccount[];
+    vatInvoices?: VatInvoice[];
+    serviceTariffs?: ServiceTariff[];
   }) => void;
   onResetToDefaults: () => void;
   onPurge1404?: () => void;
@@ -73,6 +77,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   fiscalYears,
   users,
   bankAccounts,
+  vatInvoices,
+  serviceTariffs,
   onRestoreData,
   onResetToDefaults,
   onPurge1404,
@@ -123,6 +129,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       fiscalYears: fiscalYears || [],
       users: users || [],
       bankAccounts: bankAccounts || [],
+      vatInvoices: vatInvoices || [],
+      serviceTariffs: serviceTariffs || [],
       transactions: transactions || [],
       employees: employees || [],
       salaryMatrix: salaryMatrix || [],
@@ -134,6 +142,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         totalMembers: members.length,
         totalLoans: loans.length,
         totalBankAccounts: (bankAccounts || []).length,
+        totalVatInvoices: (vatInvoices || []).length,
+        totalServiceTariffs: (serviceTariffs || []).length,
       }
     };
   };
@@ -247,6 +257,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       fiscalYears: restoredFY,
       users: parsed.users,
       bankAccounts: parsed.bankAccounts,
+      vatInvoices: parsed.vatInvoices,
+      serviceTariffs: parsed.serviceTariffs,
       sourceInfo: {
         exportDate: parsed.exportJalaliDateTime || parsed.exportDateIso || 'نامشخص',
         companyName: parsed.companyName || companyName,

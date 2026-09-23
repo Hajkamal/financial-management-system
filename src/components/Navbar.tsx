@@ -19,7 +19,8 @@ import {
   CalendarCheck,
   Lock,
   Settings2,
-  ShieldCheck
+  ShieldCheck,
+  FileCheck2
 } from 'lucide-react';
 import { ActiveTab, CurrencyMode, FiscalYear, AppUser } from '../types';
 
@@ -44,6 +45,7 @@ interface NavigationProps {
 export const NAV_TABS = [
   { id: 'dashboard' as ActiveTab, label: 'داشبورد اصلی', icon: BarChart3 },
   { id: 'transactions' as ActiveTab, label: 'ثبت درآمد و هزینه', icon: ReceiptText },
+  { id: 'vat-reports' as ActiveTab, label: 'ارزش افزوده و مودیان', icon: FileCheck2 },
   { id: 'salary-matrix' as ActiveTab, label: 'حقوق و دستمزد', icon: Table2 },
   { id: 'bank-accounts' as ActiveTab, label: 'حساب‌های بانکی', icon: Landmark },
   { id: 'ai-assistant' as ActiveTab, label: 'دستیار هوش مصنوعی', icon: Sparkles },
@@ -62,6 +64,10 @@ export const TAB_META: Record<ActiveTab, { title: string; subtitle: string }> = 
   'transactions': {
     title: 'دفتر کل تراکنش‌ها',
     subtitle: 'ثبت، بازبینی و فیلتر کلیه تراکنش‌های ورودی و خروجی'
+  },
+  'vat-reports': {
+    title: 'گزارش‌های فصلی، ارزش افزوده و سامانه مودیان',
+    subtitle: 'صورتحساب‌های فروش فصلی و ماهانه، ثبت تعرفه‌های متغیر خدمات و صدور فاکتور رسمی'
   },
   'salary-matrix': {
     title: 'ماتریس حقوق و دستمزد پرسنل',

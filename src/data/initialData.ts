@@ -1,4 +1,15 @@
-import { Employee, SalaryMatrixItem, CompanyMember, Loan, FinancialTransaction, FiscalYear, AppUser, BankAccount } from '../types';
+import { 
+  Employee, 
+  SalaryMatrixItem, 
+  CompanyMember, 
+  Loan, 
+  FinancialTransaction, 
+  FiscalYear, 
+  AppUser, 
+  BankAccount,
+  VatInvoice,
+  ServiceTariff
+} from '../types';
 import { ALL_PERMISSIONS_GRANTED, ACCOUNTANT_PERMISSIONS, VIEWER_PERMISSIONS } from '../utils/permissions';
 
 export const INITIAL_COMPANY_NAME = 'آینده نگاران خلاق';
@@ -603,4 +614,243 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
     createdAt: '۱۴۰۵/۰۲/۰۱',
   },
 ];
+
+/**
+ * کاتالوگ خدمات و تعرفه‌های کارمزد پلتفرم باسینا
+ * با قابلیت ثبت تاریخچه چند نرخی و تغییرات کارمزد در طول ماه، فصل و سال
+ */
+export const INITIAL_SERVICE_TARIFFS: ServiceTariff[] = [
+  {
+    id: 'tariff-1',
+    internalCode: '01',
+    serviceCode: '2330001423019',
+    title: 'مشاوره آنلاین پزشکی',
+    unit: 'نوبت',
+    currentPrice: 600000, // ۶۰,۰۰۰ تومان (۶۰۰,۰۰۰ ریال)
+    subCategory: 'online_consultation',
+    defaultVatRate: 10,
+    isActive: true,
+    priceHistory: [
+      {
+        id: 'ph-1-1',
+        price: 600000,
+        effectiveDate: '۱۴۰۵/۰۱/۰۱',
+        periodLabel: 'تعرفه ثابت بهار ۱۴۰۵',
+        notes: 'کارمزد پایه ویزیت و مشاوره آنلاین پزشک عمومی و متخصص',
+      }
+    ],
+    notes: 'شناسه مالیاتی ۲۳۳۰۰۰۱۴۲۳۰۱۹ مورد تایید سامانه مودیان',
+  },
+  {
+    id: 'tariff-2',
+    internalCode: '002',
+    serviceCode: '2330001423019',
+    title: 'نوبت دهی آنلاین پزشک',
+    unit: 'نوبت',
+    currentPrice: 300000, // آخرین تعرفه به ۳۰۰,۰۰۰ ریال ارتقا یافته
+    subCategory: 'appointment',
+    defaultVatRate: 10,
+    isActive: true,
+    priceHistory: [
+      {
+        id: 'ph-2-1',
+        price: 200000, // ۲۰,۰۰۰ تومان
+        effectiveDate: '۱۴۰۵/۰۱/۰۱',
+        periodLabel: 'تعرفه اولیه فروردین و اردیبهشت (نرخ ۲۲۰,۰۰۰ ریال با تخفیف)',
+        notes: 'نرخ پایه نوبت‌دهی در ابتدای فصل بهار',
+      },
+      {
+        id: 'ph-2-2',
+        price: 300000, // ۳۰,۰۰۰ تومان
+        effectiveDate: '۱۴۰۵/۰۳/۰۱',
+        periodLabel: 'تعرفه جدید کارمزد نوبت دهی اینترنتی پزشکی',
+        notes: 'افزایش کارمزد نوبت‌دهی به ۳۰,۰۰۰ تومان در اواخر بهار و تابستان',
+      }
+    ],
+    notes: 'شامل هر دو شناسه داخلی ۰۰۲ (نرخ ۲۰۰,۰۰۰) و ۰۳ (نرخ ۳۰۰,۰۰۰)',
+  },
+  {
+    id: 'tariff-3',
+    internalCode: '001',
+    serviceCode: '2330001423019',
+    title: 'تفسیر آزمایش آنلاین با هوش مصنوعی',
+    unit: 'نوبت',
+    currentPrice: 1000000, // ۱۰۰,۰۰۰ تومان (۱,۰۰۰,۰۰۰ ریال)
+    subCategory: 'ai_lab_interpretation',
+    defaultVatRate: 10,
+    isActive: true,
+    priceHistory: [
+      {
+        id: 'ph-3-1',
+        price: 500000, // ۵۰,۰۰۰ تومان
+        effectiveDate: '۱۴۰۵/۰۱/۰۱',
+        periodLabel: 'تعرفه بسته پایه تفسیر آزمایش (نرخ ۵۰۰,۰۰۰ ریال)',
+        notes: 'تفسیر مقدماتی آزمایشات خون و بیوشیمی',
+      },
+      {
+        id: 'ph-3-2',
+        price: 1000000, // ۱۰۰,۰۰۰ تومان
+        effectiveDate: '۱۴۰۵/۰۲/۱۵',
+        periodLabel: 'تعرفه پیشرفته تفسیر جامع هوش مصنوعی باسینا (کد داخلی ۰۴)',
+        notes: 'ارتقای قابلیت الگوریتم و تعیین نرخ ۱۰۰,۰۰۰ تومانی',
+      }
+    ],
+    notes: 'پراستفاده‌ترین خدمت هوش مصنوعی با بیش از ۷,۸۰۰ نوبت در فصل',
+  },
+  {
+    id: 'tariff-4',
+    internalCode: '05',
+    serviceCode: '2330001423019',
+    title: 'تریاژ هوشمند و غربالگری علائم بالینی',
+    unit: 'نوبت',
+    currentPrice: 400000, // ۴۰,۰۰۰ تومان
+    subCategory: 'online_triage',
+    defaultVatRate: 10,
+    isActive: true,
+    priceHistory: [
+      {
+        id: 'ph-4-1',
+        price: 400000,
+        effectiveDate: '۱۴۰۵/۰۱/۰۱',
+        periodLabel: 'تعرفه سال ۱۴۰۵',
+        notes: 'سرویس هوشمند راهنمایی بیمار به کلینیک تخصصی مربوطه',
+      }
+    ],
+    notes: 'ارائه به کلینیک‌ها و مراکز درمانی همکار',
+  }
+];
+
+/**
+ * صورتحساب‌های رسمی فصلی و ماهانه ارزش افزوده و سامانه مودیان
+ * شامل سند فاکتور رسمی بهار ۱۴۰۵ ارسال شده به سازمان امور مالیاتی کشور (تصویر پیوستی)
+ */
+export const INITIAL_VAT_INVOICES: VatInvoice[] = [
+  {
+    id: 'vat-inv-1405-q1',
+    invoiceNumber: '01',
+    systemInvoiceId: '1405/04/02 18:49:54',
+    invoiceType: 'نوع دوم',
+    invoicePattern: 'فروش',
+    invoiceSubject: 'اصلی',
+    periodType: 'seasonal',
+    season: 'بهار',
+    year: 1405,
+    issueDateTime: '1405/04/02 18:49:54',
+    
+    // مشخصات فروشنده (آینده نگاران خلاق)
+    sellerEconomicCode: '14012787320',
+    sellerNationalId: '14012787320',
+    sellerCompanyName: 'آینده نگاران خلاق',
+    sellerPersonName: 'مصطفی راونگی نژاد',
+    sellerPostalCode: '7981944383',
+    sellerBranchCode: '-',
+
+    // مشخصات خریدار (نوع دوم - مصرف‌کننده نهایی)
+    buyerTitle: 'مصرف‌کنندگان نهایی خدمات پلتفرم سلامت باسینا',
+    buyerEconomicCode: '-',
+    buyerNationalId: '-',
+    buyerPersonName: '-',
+    buyerPostalCode: '-',
+    buyerBranchCode: '-',
+
+    // اقلام ۵ گانه واقعی صورتحساب فصل بهار ۱۴۰۵
+    items: [
+      {
+        id: 'vat-it-1',
+        rowNumber: 1,
+        internalCode: '01',
+        serviceCode: '2330001423019',
+        title: 'مشاوره آنلاین پزشکی',
+        unit: 'نوبت',
+        quantity: 190,
+        unitPrice: 600000,
+        discount: 0,
+        vatRate: 10,
+        taxAmount: 11400000,
+        totalAmount: 125400000,
+        subCategory: 'online_consultation',
+        notes: 'ویزیت‌های آنلاین تخصصی بهار',
+      },
+      {
+        id: 'vat-it-2',
+        rowNumber: 2,
+        internalCode: '002',
+        serviceCode: '2330001423019',
+        title: 'نوبت دهی آنلاین پزشک نرخ 220000 ریال',
+        unit: 'نوبت',
+        quantity: 1740,
+        unitPrice: 200000,
+        discount: 0,
+        vatRate: 10,
+        taxAmount: 34800000,
+        totalAmount: 382800000,
+        subCategory: 'appointment',
+        notes: 'تعرفه اولیه نوبت‌دهی (۲۰۰,۰۰۰ ریال)',
+      },
+      {
+        id: 'vat-it-3',
+        rowNumber: 3,
+        internalCode: '03',
+        serviceCode: '2330001423019',
+        title: 'کارمزد نوبت دهی اینترنتی پزشکی',
+        unit: 'نوبت',
+        quantity: 11612,
+        unitPrice: 300000,
+        discount: 0,
+        vatRate: 10,
+        taxAmount: 348360000,
+        totalAmount: 3831960000,
+        subCategory: 'appointment',
+        notes: 'تعرفه جدید کارمزد نوبت‌دهی (۳۰۰,۰۰۰ ریال)',
+      },
+      {
+        id: 'vat-it-4',
+        rowNumber: 4,
+        internalCode: '001',
+        serviceCode: '2330001423019',
+        title: 'تفسیر آزمایش آنلاین نرخ 500000 ریال',
+        unit: 'نوبت',
+        quantity: 125,
+        unitPrice: 500000,
+        discount: 0,
+        vatRate: 10,
+        taxAmount: 6250000,
+        totalAmount: 68750000,
+        subCategory: 'ai_lab_interpretation',
+        notes: 'تعرفه ۵۰۰,۰۰۰ ریالی تفسیر آزمایش',
+      },
+      {
+        id: 'vat-it-5',
+        rowNumber: 5,
+        internalCode: '04',
+        serviceCode: '2330001423019',
+        title: 'تفسیر آزمایش',
+        unit: 'نوبت',
+        quantity: 7864,
+        unitPrice: 1000000,
+        discount: 0,
+        vatRate: 10,
+        taxAmount: 786400000,
+        totalAmount: 8650400000,
+        subCategory: 'ai_lab_interpretation',
+        notes: 'تعرفه ۱,۰۰۰,۰۰۰ ریالی تفسیر پیشرفته هوش مصنوعی',
+      },
+    ],
+
+    // سرجمع محاسبات رسمی صورتحساب
+    totalQuantity: 21531,
+    totalGrossAmount: 11872100000, // ۱۱,۸۷۲,۱۰۰,۰۰۰ ریال
+    totalDiscount: 0,
+    totalVatAmount: 1187210000,   // ۱,۱۸۷,۲۱۰,۰۰۰ ریال
+    article17Tax: 0,
+    finalAmount: 13059310000,     // ۱۳,۰۵۹,۳۱۰,۰۰۰ ریال
+    amountInWords: 'سیزده میلیارد و پنجاه و نه میلیون و سیصد و ده هزار ریال',
+
+    isSyncedToTransactions: true,
+    syncedTransactionId: 'tx-basina-spring-vat-1405',
+    notes: 'صورتحساب رسمی ارسال کیسان باسینا فصل بهار ۱۴۰۵ به سامانه امور مالیاتی کشور',
+    createdAt: '۱۴۰۵/۰۴/۰۲',
+  }
+];
+
 

@@ -190,6 +190,7 @@ export interface UserPermissions {
   canBackupRestore: boolean;        // تهیه پشتیبان و بازگردانی اطلاعات
   canManageUsers: boolean;          // افزودن، ویرایش و مدیریت کاربران سامانه
   canManageBankAccounts?: boolean;  // مدیریت حساب‌های بانکی شرکت
+  canManageVatReports?: boolean;    // مدیریت گزارش‌های فصلی و ارزش افزوده
   canUseAiAssistant?: boolean;      // استفاده از دستیار هوش مصنوعی
 }
 
@@ -216,10 +217,110 @@ export type ActiveTab =
   | 'transactions'
   | 'salary-matrix'
   | 'bank-accounts'
+  | 'vat-reports'
   | 'ai-assistant'
   | 'employees'
   | 'members'
   | 'loans'
   | 'fiscal-years'
   | 'users';
+
+// ==========================================
+// مدل‌های ارزش افزوده، سامانه مودیان و تعرفه‌ها
+// ==========================================
+
+export type VatPeriodType = 'seasonal' | 'monthly';
+export type VatSeason = 'بهار' | 'تابستان' | 'پاییز' | 'زمستان';
+
+export interface VatInvoiceItem {
+  id: string;
+  rowNumber: number;              // ردیف: ۱، ۲، ۳، ...
+  internalCode: string;           // شناسه کالا/خدمت داخلی (مانند 01، 002، 03، 001، 04)
+  serviceCode: string;            // شناسه عمومی مالیاتی کالا/خدمت (مانند 2330001423019)
+  title: string;                  // شرح کالا/خدمت (مانند مشاوره آنلاین پزشکی، نوبت دهی با نرخ فلان)
+  unit: string;                   // واحد اندازه‌گیری (مانند نوبت، عدد)
+  quantity: number;               // تعداد/مقدار (مثلاً 11612، 7864)
+  unitPrice: number;              // مبلغ واحد به ریال (کارمزد هر نوبت)
+  discount: number;               // مبلغ تخفیف به ریال
+  vatRate: number;                // درصد نرخ مالیات بر ارزش افزوده (معمولاً 10)
+  taxAmount: number;              // مبلغ مالیات بر ارزش افزوده به ریال
+  totalAmount: number;            // مبلغ کل ردیف (خالص + مالیات)
+  subCategory?: BasinaSubCategory; // زیردسته خدمت در پلتفرم باسینا
+  notes?: string;
+}
+
+export interface VatInvoice {
+  id: string;
+  invoiceNumber: string;          // شماره صورتحساب داخلی (مثلاً 01 یا 140501)
+  systemInvoiceId?: string;       // شماره و زمان ثبت صورتحساب اصلی الکترونیکی
+  invoiceType: 'نوع دوم' | 'نوع اول'; // نوع صورتحساب
+  invoicePattern: string;         // الگوی صورتحساب (پیش‌فرض: فروش)
+  invoiceSubject: 'اصلی' | 'اصلاحی' | 'ابطالی'; // موضوع صورتحساب
+  
+  // بازه زمانی
+  periodType: VatPeriodType;      // فصلی یا ماهانه
+  season?: VatSeason;             // در صورت فصلی بودن (بهار، تابستان، پاییز، زمستان)
+  month?: PersianMonthNumber;     // در صورت ماهانه بودن (۱ تا ۱۲)
+  year: number;                   // سال مالی (مثلاً 1405)
+  issueDateTime: string;          // تاریخ و زمان ثبت صورتحساب (مثلاً 1405/04/02 18:49:54)
+
+  // مشخصات فروشنده
+  sellerEconomicCode: string;     // 14012787320
+  sellerNationalId: string;       // 14012787320
+  sellerCompanyName: string;      // آینده نگاران خلاق
+  sellerPersonName: string;       // مصطفی راونگی نژاد
+  sellerPostalCode: string;       // 7981944383
+  sellerBranchCode?: string;
+
+  // مشخصات خریدار (در صورت نوع اول یا نوع دوم)
+  buyerTitle?: string;            // مصرف‌کننده نهایی یا نام شرکت خریدار
+  buyerEconomicCode?: string;
+  buyerNationalId?: string;
+  buyerPersonName?: string;
+  buyerPostalCode?: string;
+  buyerBranchCode?: string;
+
+  // ردیف‌های خدمات
+  items: VatInvoiceItem[];
+
+  // جمع‌ها و مقادیر نهایی
+  totalQuantity: number;          // مجموع تعداد نوبت‌ها/خدمات
+  totalGrossAmount: number;       // مجموع مبلغ خالص قبل از مالیات به ریال
+  totalDiscount: number;          // مجموع تخفیف به ریال
+  totalVatAmount: number;         // مجموع مالیات بر ارزش افزوده به ریال
+  article17Tax: number;           // مالیات موضوع ماده 17 به ریال (معمولاً 0)
+  finalAmount: number;            // مبلغ نهایی به ریال (خالص + مالیات)
+  amountInWords: string;          // مبلغ نهایی به حروف فارسی
+
+  // همگام‌سازی با دفتر کل تراکنش‌ها
+  isSyncedToTransactions: boolean; // آیا در تراکنش‌های درآمدی شرکت ثبت شده؟
+  syncedTransactionId?: string;
+
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ServicePriceHistoryItem {
+  id: string;
+  price: number;                  // کارمزد به ریال
+  effectiveDate: string;          // تاریخ شروع اعمال (مثلاً 1405/01/01)
+  periodLabel: string;            // برچسب دوره (مثلاً "نرخ اولیه فروردین" یا "تعرفه جدید")
+  notes?: string;
+}
+
+export interface ServiceTariff {
+  id: string;
+  internalCode: string;           // کد داخلی (01, 002, 03, 001, 04, ...)
+  serviceCode: string;            // شناسه کالا/خدمت سامانه مالیاتی (2330001423019)
+  title: string;                  // شرح خدمت
+  unit: string;                   // واحد اندازه‌گیری (نوبت)
+  currentPrice: number;           // آخرین کارمزد جاری به ریال
+  subCategory: BasinaSubCategory; // زیردسته پلتفرم باسینا
+  defaultVatRate: number;         // نرخ پیش‌فرض ارزش افزوده (10%)
+  priceHistory: ServicePriceHistoryItem[]; // تاریخچه تغییرات کارمزد در طول ماه، فصل و سال
+  isActive: boolean;
+  notes?: string;
+}
+
 

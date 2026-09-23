@@ -35,7 +35,9 @@ import {
   AppUser,
   IncomeCategory,
   ExpenseCategory,
-  BasinaSubCategory
+  BasinaSubCategory,
+  VatInvoice,
+  ServiceTariff
 } from '../types';
 import { 
   formatCurrency, 
@@ -57,6 +59,8 @@ interface AiAssistantViewProps {
   selectedYear: number;
   currencyMode: CurrencyMode;
   companyName: string;
+  vatInvoices?: VatInvoice[];
+  serviceTariffs?: ServiceTariff[];
   currentUser?: AppUser;
   onShowToast: (msg: string) => void;
 }
@@ -105,6 +109,13 @@ const PRESET_PROMPTS = [
     desc: 'بررسی اقساط وام‌ها، موجودی حساب‌ها و نقدینگی برای ماه‌های آتی',
     prompt: 'با توجه به اقساط باقی‌مانده تسهیلات و موجودی حساب‌های فعال بانکی، تحلیلی از جریان نقدینگی و توصیه‌های مدیریتی برای ماه‌های آینده بنویس.',
   },
+  {
+    id: 'vat_seasonal_audit',
+    icon: FileText,
+    title: 'گزارش فصلی ارزش افزوده و تعرفه باسینا',
+    desc: 'تحلیل صورتحساب‌های ۳ ماهه، مالیات بر ارزش افزوده و نوسان تعرفه‌ها',
+    prompt: 'وضعیت صورتحساب‌های فصلی ارزش افزوده، سامانه مودیان، تعداد نوبت‌های ثبت‌شده و تغییرات نرخ تعرفه خدمات پلتفرم باسینا در طول سال را بررسی و گزارش کن.',
+  },
 ];
 
 export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
@@ -117,6 +128,8 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
   selectedYear,
   currencyMode,
   companyName,
+  vatInvoices = [],
+  serviceTariffs = [],
   currentUser,
   onShowToast,
 }) => {
@@ -275,6 +288,13 @@ ${loansList.join('\n') || 'تسهیلاتی ثبت نشده'}
 - تعداد کارمندان فعال: ${activeEmployees.length} نفر
 - مجموع حقوق پایه ماهانه پرسنل: ${totalBaseSalary.toLocaleString('fa-IR')} ریال (${(totalBaseSalary / 10).toLocaleString('fa-IR')} تومان)
 ${activeEmployees.map((e) => `- ${e.name} (${e.role}): حقوق ماهانه ${e.baseSalary.toLocaleString('fa-IR')} ریال [وضعیت: ${e.status}]`).join('\n')}
+
+وضعیت ارزش افزوده، گزارش‌های فصلی و سامانه مودیان:
+- تعداد کل صورتحساب‌های ثبت‌شده: ${(vatInvoices || []).filter(i => i.year === selectedYear).length} فقره
+${(vatInvoices || []).filter(i => i.year === selectedYear).map(i => `- صورتحساب ${i.periodType === 'seasonal' ? `فصل ${i.season}` : `ماه ${i.month}`} (${i.invoiceNumber}): تعداد ${i.totalQuantity.toLocaleString('fa-IR')} نوبت، خالص ${i.totalGrossAmount.toLocaleString('fa-IR')} ریال، ارزش افزوده ۱۰٪ ${i.totalVatAmount.toLocaleString('fa-IR')} ریال، جمع نهایی ${i.finalAmount.toLocaleString('fa-IR')} ریال`).join('\n') || 'صورتحسابی ثبت نشده'}
+
+تعرفه‌های مصوب خدمات باسینا و سوابق تغییرات کارمزد:
+${(serviceTariffs || []).map(t => `- خدمت ${t.title}: کارمزد مصوب فعلی ${t.currentPrice.toLocaleString('fa-IR')} ریال (سابقه تغییر نرخ: ${(t.priceHistory || []).map(h => `${h.price.toLocaleString('fa-IR')} ریال از ${h.effectiveDate}`).join(' ← ')})`).join('\n') || 'تعرفه‌ای ثبت نشده'}
 `;
   };
 
@@ -287,6 +307,37 @@ ${activeEmployees.map((e) => `- ${e.name} (${e.role}): حقوق ماهانه ${e
     const totalExpense = yearTransactions.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
     const netProfit = totalIncome - totalExpense;
     const profitRate = totalIncome > 0 ? ((netProfit / totalIncome) * 100).toFixed(1) : '0';
+
+    // 0. Questions about VAT / Value Added Tax / Seasonal / Tariffs
+    if (q.includes('ارزش افزوده') || q.includes('مودیان') || q.includes('فصلی') || q.includes('فصل') || q.includes('تعرفه') || q.includes('کارمزد') || q.includes('صورتحساب') || q.includes('فاکتور')) {
+      const yearInvoices = (vatInvoices || []).filter(inv => inv.year === selectedYear);
+      const totalGross = yearInvoices.reduce((s, inv) => s + inv.totalGrossAmount, 0);
+      const totalVat = yearInvoices.reduce((s, inv) => s + inv.totalVatAmount, 0);
+      const totalFinal = yearInvoices.reduce((s, inv) => s + inv.finalAmount, 0);
+      const totalQty = yearInvoices.reduce((s, inv) => s + inv.totalQuantity, 0);
+
+      return `### 🧾 تحلیل جامع صورتحساب‌های ارزش افزوده و تعرفه کارمزد خدمات باسینا (سال ${toPersianDigits(selectedYear)})
+
+**۱. خلاصه گزارش فصلی ارزش افزوده (گزارش فروش ۳ ماهه):**
+- **تعداد کل صورتحساب‌های ثبت‌شده:** ${toPersianDigits(yearInvoices.length)} فقره
+- **مجموع نوبت‌ها و تراکنش‌های صادره:** ${toPersianDigits(totalQty.toLocaleString('fa-IR'))} نوبت
+- **مبلغ خالص فروش خدمات (پایه مالیاتی):** ${formatCurrency(totalGross, currencyMode)}
+- **مالیات بر ارزش افزوده (۱۰٪):** ${formatCurrency(totalVat, currencyMode)}
+- **مجموع ناخالص با ارزش افزوده (قابل تسویه با مودیان):** ${formatCurrency(totalFinal, currencyMode)}
+
+**۲. صورتحساب‌های ثبت‌شده به تفکیک دوره‌ها:**
+${yearInvoices.map((inv) => `* **${inv.periodType === 'seasonal' ? `فصل ${inv.season}` : `ماه ${inv.month}`}** (شماره ${inv.invoiceNumber}): تعداد ${toPersianDigits(inv.totalQuantity.toLocaleString('fa-IR'))} نوبت به مبلغ خالص ${formatCurrency(inv.totalGrossAmount, currencyMode)} و ارزش افزوده ${formatCurrency(inv.totalVatAmount, currencyMode)} (جمع نهایی: ${formatCurrency(inv.finalAmount, currencyMode)})`).join('\n') || '- هنوز صورتحساب فصلی برای این سال ثبت نشده است.'}
+
+**۳. وضعیت تعرفه متغیر خدمات و کارمزدها:**
+${(serviceTariffs || []).map(t => {
+  const historyDesc = (t.priceHistory || []).map(h => `${formatCurrency(h.price, currencyMode)} از تاریخ ${h.effectiveDate}`).join(' ← ');
+  return `- **${t.title}**: کارمزد مصوب فعلی **${formatCurrency(t.currentPrice, currencyMode)}** (سابقه تغییر نرخ: ${historyDesc})`;
+}).join('\n') || '- تعرفه‌ای تعریف نشده است.'}
+
+**۴. نکات مهم جهت ارسال به سامانه مودیان و دارایی:**
+- مهلت قانونی ارسال گزارش فصلی تا یک ماه پس از پایان هر فصل است.
+- کارمزدهای متغیر با ثبت بازه‌های اثربخشی در سیستم کاملاً تفکیک شده و محفوظ هستند؛ در صورت تغییر مجدد کارمزد در ماه‌ها یا فصول بعدی، سابقه تغییرات به دقت نگهداری می‌شود.`;
+    }
 
     // 1. Questions about Salaries / Payroll / Employees
     if (q.includes('حقوق') || q.includes('پرسنل') || q.includes('کارمند') || q.includes('دستمزد') || q.includes('استخدام')) {

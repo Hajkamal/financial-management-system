@@ -15,6 +15,7 @@ export const ALL_PERMISSIONS_GRANTED: UserPermissions = {
   canBackupRestore: true,
   canManageUsers: true,
   canManageBankAccounts: true,
+  canManageVatReports: true,
   canUseAiAssistant: true,
 };
 
@@ -33,6 +34,7 @@ export const FINANCE_MANAGER_PERMISSIONS: UserPermissions = {
   canBackupRestore: true,
   canManageUsers: false,
   canManageBankAccounts: true,
+  canManageVatReports: true,
   canUseAiAssistant: true,
 };
 
@@ -51,6 +53,7 @@ export const ACCOUNTANT_PERMISSIONS: UserPermissions = {
   canBackupRestore: false,
   canManageUsers: false,
   canManageBankAccounts: true,
+  canManageVatReports: true,
   canUseAiAssistant: true,
 };
 
@@ -69,6 +72,7 @@ export const VIEWER_PERMISSIONS: UserPermissions = {
   canBackupRestore: false,
   canManageUsers: false,
   canManageBankAccounts: false,
+  canManageVatReports: false,
   canUseAiAssistant: true,
 };
 
@@ -181,6 +185,12 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     key: 'canManageBankAccounts',
     title: 'مدیریت حساب‌های بانکی شرکت',
     description: 'تعریف و ویرایش حساب‌های فعال شرکت، شماره شبا، شماره کارت و موجودی‌ها',
+    category: 'financial',
+  },
+  {
+    key: 'canManageVatReports',
+    title: 'گزارش‌های فصلی، ارزش افزوده و سامانه مودیان',
+    description: 'صدور و مدیریت صورتحساب‌های فروش فصلی و ماهانه، ثبت تعرفه‌های چندگانه و خروجی رسمی',
     category: 'financial',
   },
   {

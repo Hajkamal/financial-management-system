@@ -35,6 +35,9 @@ import {
   AiAssistantView 
 } from './components/AiAssistantView';
 import { 
+  VatReportsView 
+} from './components/VatReportsView';
+import { 
   ExportExcelModal 
 } from './components/ExportExcelModal';
 import { 
@@ -59,7 +62,9 @@ import {
   MemberPayoutType,
   FiscalYear,
   AppUser,
-  BankAccount
+  BankAccount,
+  VatInvoice,
+  ServiceTariff
 } from './types';
 
 import { 
@@ -72,11 +77,14 @@ import {
   INITIAL_TRANSACTIONS,
   INITIAL_FISCAL_YEARS,
   INITIAL_USERS,
-  INITIAL_BANK_ACCOUNTS
+  INITIAL_BANK_ACCOUNTS,
+  INITIAL_VAT_INVOICES,
+  INITIAL_SERVICE_TARIFFS
 } from './data/initialData';
 
 import { 
   exportToExcel,
+  formatCurrency,
   PERSIAN_MONTHS,
   toEnglishDigits,
   normalizeEmail,
@@ -361,6 +369,38 @@ export default function App() {
       return INITIAL_BANK_ACCOUNTS;
     }
   });
+
+  const [vatInvoices, setVatInvoices] = useState<VatInvoice[]>(() => {
+    try {
+      const saved = localStorage.getItem('ayandeh_vat_invoices');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_VAT_INVOICES;
+    } catch {
+      return INITIAL_VAT_INVOICES;
+    }
+  });
+
+  const [serviceTariffs, setServiceTariffs] = useState<ServiceTariff[]>(() => {
+    try {
+      const saved = localStorage.getItem('ayandeh_service_tariffs');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_SERVICE_TARIFFS;
+    } catch {
+      return INITIAL_SERVICE_TARIFFS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ayandeh_vat_invoices', JSON.stringify(vatInvoices));
+    } catch {}
+  }, [vatInvoices]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ayandeh_service_tariffs', JSON.stringify(serviceTariffs));
+    } catch {}
+  }, [serviceTariffs]);
 
   // Automated one-time purge for any browser or phone carrying legacy 1404 cache
   useEffect(() => {
@@ -1040,6 +1080,80 @@ export default function App() {
     showToast('اطلاعات سال مالی ۱۴۰۴ با موفقیت پاکسازی شد و سال ۱۴۰۵ به عنوان سال پایه فعال گردید.');
   };
 
+  // VAT and Service Tariffs handlers
+  const handleSaveVatInvoice = (invoice: VatInvoice) => {
+    setVatInvoices(prev => {
+      const idx = prev.findIndex(inv => inv.id === invoice.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = invoice;
+        return copy;
+      }
+      return [invoice, ...prev];
+    });
+  };
+
+  const handleDeleteVatInvoice = (id: string) => {
+    setVatInvoices(prev => prev.filter(inv => inv.id !== id));
+    showToast('صورتحساب مالیاتی با موفقیت حذف گردید.');
+  };
+
+  const handleSaveServiceTariff = (tariff: ServiceTariff) => {
+    setServiceTariffs(prev => {
+      const idx = prev.findIndex(t => t.id === tariff.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = tariff;
+        return copy;
+      }
+      return [...prev, tariff];
+    });
+  };
+
+  const handleSyncVatInvoiceToTransactions = (invoice: VatInvoice) => {
+    const txId = `tx-vat-${invoice.id}`;
+    const now = getCurrentJalaliDateTime();
+    const periodTitle = invoice.periodType === 'seasonal' ? `فصل ${invoice.season}` : `ماه ${invoice.month}`;
+    
+    // Check if transaction already exists
+    const exists = transactions.some(t => t.id === txId || t.id === invoice.syncedTransactionId);
+    if (exists) {
+      showToast('این صورتحساب قبلاً در دفتر کل تراکنش‌ها ثبت شده است.');
+      return;
+    }
+
+    const newTx: FinancialTransaction = {
+      id: txId,
+      type: 'income',
+      category: 'sale_basina',
+      subCategory: 'appointment',
+      amount: invoice.finalAmount,
+      year: invoice.year,
+      month: invoice.periodType === 'seasonal' 
+        ? (invoice.season === 'بهار' ? 3 : invoice.season === 'تابستان' ? 6 : invoice.season === 'پاییز' ? 9 : 12)
+        : (invoice.month || 1),
+      day: 31,
+      dateString: invoice.issueDateTime.split(' ')[0] || `${invoice.year}/03/31`,
+      title: `فروش ${periodTitle} باسینا (ارزش افزوده و مودیان)`,
+      description: `صورتحساب فروش رسمی ${invoice.invoiceNumber} - تعداد ${invoice.totalQuantity.toLocaleString('fa-IR')} نوبت با خالص ${formatCurrency(invoice.totalGrossAmount, currencyMode)} و ارزش افزوده ${formatCurrency(invoice.totalVatAmount, currencyMode)}`,
+      recipientOrPayer: 'کاربران پلتفرم باسینا (سامانه مودیان)',
+      trackingCode: invoice.invoiceNumber,
+      createdBy: currentAppUser?.email,
+      createdByName: currentAppUser?.fullName,
+      createdAt: now.persianDateTimeFormatted
+    };
+
+    setTransactions(prev => [newTx, ...prev]);
+
+    handleSaveVatInvoice({
+      ...invoice,
+      isSyncedToTransactions: true,
+      syncedTransactionId: txId
+    });
+
+    showToast(`صورتحساب با موفقیت به مبلغ ${formatCurrency(invoice.finalAmount, currencyMode)} در دفتر کل تراکنش‌های درآمدی شرکت ثبت شد.`);
+  };
+
   // Restore and Reset
   const handleRestoreData = (data: {
     transactions: FinancialTransaction[];
@@ -1050,6 +1164,8 @@ export default function App() {
     fiscalYears?: FiscalYear[];
     users?: AppUser[];
     bankAccounts?: BankAccount[];
+    vatInvoices?: VatInvoice[];
+    serviceTariffs?: ServiceTariff[];
   }) => {
     if (data.transactions) {
       const cleanedTx = data.transactions.filter(tx => tx.year !== 1404);
@@ -1065,6 +1181,14 @@ export default function App() {
     if (data.bankAccounts && Array.isArray(data.bankAccounts)) {
       setBankAccounts(data.bankAccounts);
       localStorage.setItem('ayandeh_bank_accounts', JSON.stringify(data.bankAccounts));
+    }
+    if (data.vatInvoices && Array.isArray(data.vatInvoices)) {
+      setVatInvoices(data.vatInvoices);
+      localStorage.setItem('ayandeh_vat_invoices', JSON.stringify(data.vatInvoices));
+    }
+    if (data.serviceTariffs && Array.isArray(data.serviceTariffs)) {
+      setServiceTariffs(data.serviceTariffs);
+      localStorage.setItem('ayandeh_service_tariffs', JSON.stringify(data.serviceTariffs));
     }
     if (data.fiscalYears && Array.isArray(data.fiscalYears) && data.fiscalYears.length > 0) {
       const cleanedFY = sanitizeFiscalYearsList(data.fiscalYears);
@@ -1088,6 +1212,8 @@ export default function App() {
     setBankAccounts(INITIAL_BANK_ACCOUNTS);
     setFiscalYears(INITIAL_FISCAL_YEARS);
     setUsers(INITIAL_USERS);
+    setVatInvoices(INITIAL_VAT_INVOICES);
+    setServiceTariffs(INITIAL_SERVICE_TARIFFS);
     setSelectedYear(1405);
     showToast('داده‌های نمونه اولیه سال ۱۴۰۵ با موفقیت بازنشانی شدند.');
   };
@@ -1280,6 +1406,22 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'vat-reports' && (
+            <VatReportsView
+              invoices={vatInvoices}
+              serviceTariffs={serviceTariffs}
+              selectedYear={selectedYear}
+              currencyMode={currencyMode}
+              companyName={companyName}
+              onSaveInvoice={handleSaveVatInvoice}
+              onDeleteInvoice={handleDeleteVatInvoice}
+              onSyncInvoiceToTransactions={handleSyncVatInvoiceToTransactions}
+              onSaveServiceTariff={handleSaveServiceTariff}
+              onShowToast={showToast}
+              currentUser={currentAppUser}
+            />
+          )}
+
           {activeTab === 'salary-matrix' && (
             <SalaryMatrixView
               employees={employees}
@@ -1395,6 +1537,8 @@ export default function App() {
               selectedYear={selectedYear}
               currencyMode={currencyMode}
               companyName={companyName}
+              vatInvoices={vatInvoices}
+              serviceTariffs={serviceTariffs}
               currentUser={currentAppUser}
               onShowToast={showToast}
             />
@@ -1450,6 +1594,8 @@ export default function App() {
         fiscalYears={fiscalYears}
         users={users}
         bankAccounts={bankAccounts}
+        vatInvoices={vatInvoices}
+        serviceTariffs={serviceTariffs}
         onRestoreData={handleRestoreData}
         onResetToDefaults={handleResetToDefaults}
         onPurge1404={handlePurge1404}
