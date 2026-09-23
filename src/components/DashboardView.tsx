@@ -19,6 +19,7 @@ import {
   ExpenseCategory, 
   Loan 
 } from '../types';
+import { MonthlyFinanceChart } from './MonthlyFinanceChart';
 import { 
   PERSIAN_MONTHS, 
   formatCurrency, 
@@ -331,6 +332,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
       </div>
+
+      {/* Interactive Recharts Monthly Trend Chart */}
+      <MonthlyFinanceChart
+        transactions={transactions}
+        selectedYear={selectedYear}
+        currencyMode={currencyMode}
+      />
 
       {/* Monthly Performance Bar Chart (فروردین تا اسفند) */}
       <div className="bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-xs">
