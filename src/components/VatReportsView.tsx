@@ -6,7 +6,10 @@ import {
   CurrencyMode, 
   PersianMonthNumber,
   AppUser,
-  FinancialTransaction
+  FinancialTransaction,
+  SEASON_MONTHS,
+  VatSeason,
+  VatMonthlyAllocation
 } from '../types';
 import { 
   formatCurrency, 
@@ -40,9 +43,69 @@ import {
   AlertCircle,
   HelpCircle,
   X,
-  ChevronDown
+  ChevronDown,
+  Zap,
+  Check,
+  RotateCw,
+  CalendarCheck,
+  ArrowLeftRight,
+  ShieldCheck
 } from 'lucide-react';
 import { AmountInput } from './AmountInput';
+
+export interface SeasonConfigItem {
+  season: VatSeason;
+  label: string;
+  quarter: string;
+  months: PersianMonthNumber[];
+  accentColor: string;
+  headerBg: string;
+  borderColor: string;
+  badgeBg: string;
+}
+
+export const SEASONS_CONFIG: SeasonConfigItem[] = [
+  {
+    season: 'بهار',
+    label: 'فصل بهار',
+    quarter: '۳ ماهه اول',
+    months: [1, 2, 3],
+    accentColor: 'text-emerald-700',
+    headerBg: 'bg-emerald-50/70',
+    borderColor: 'border-emerald-200',
+    badgeBg: 'bg-emerald-100 text-emerald-800'
+  },
+  {
+    season: 'تابستان',
+    label: 'فصل تابستان',
+    quarter: '۳ ماهه دوم',
+    months: [4, 5, 6],
+    accentColor: 'text-amber-700',
+    headerBg: 'bg-amber-50/70',
+    borderColor: 'border-amber-200',
+    badgeBg: 'bg-amber-100 text-amber-800'
+  },
+  {
+    season: 'پاییز',
+    label: 'فصل پاییز',
+    quarter: '۳ ماهه سوم',
+    months: [7, 8, 9],
+    accentColor: 'text-orange-700',
+    headerBg: 'bg-orange-50/70',
+    borderColor: 'border-orange-200',
+    badgeBg: 'bg-orange-100 text-orange-800'
+  },
+  {
+    season: 'زمستان',
+    label: 'فصل زمستان',
+    quarter: '۳ ماهه چهارم',
+    months: [10, 11, 12],
+    accentColor: 'text-blue-700',
+    headerBg: 'bg-blue-50/70',
+    borderColor: 'border-blue-200',
+    badgeBg: 'bg-blue-100 text-blue-800'
+  }
+];
 
 interface VatReportsViewProps {
   invoices: VatInvoice[];
@@ -176,6 +239,258 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
 
     setEditingInvoice(newInv);
     setIsInvoiceModalOpen(true);
+  };
+
+  const handleOpenNewMonthlyInvoice = (season: VatSeason, month: PersianMonthNumber) => {
+    const now = getCurrentJalaliDateTime();
+    const mName = PERSIAN_MONTHS.find(m => m.num === month)?.name || `ماه ${month}`;
+    const defaultTariff = serviceTariffs[0];
+    const initialPrice = defaultTariff?.currentPrice || 600000;
+    const initialQty = 100;
+    const initialGross = initialQty * initialPrice;
+    const initialVat = Math.round(initialGross * 0.10);
+    const initialFinal = initialGross + initialVat;
+
+    const newInv: VatInvoice = {
+      id: `vat-inv-m-${selectedYear}-${month}-${Date.now()}`,
+      invoiceNumber: `M${selectedYear}${String(month).padStart(2, '0')}`,
+      systemInvoiceId: `${now.dateTimeFormatted}:00`,
+      invoiceType: 'نوع دوم',
+      invoicePattern: 'فروش',
+      invoiceSubject: 'اصلی',
+      periodType: 'monthly',
+      season: season,
+      month: month,
+      year: selectedYear,
+      issueDateTime: `${now.dateFormatted} ${now.timeFormatted}:00`,
+      sellerEconomicCode: '14012787320',
+      sellerNationalId: '14012787320',
+      sellerCompanyName: companyName || 'آینده نگاران خلاق',
+      sellerPersonName: 'مصطفی راونگی نژاد',
+      sellerPostalCode: '7981944383',
+      sellerBranchCode: '-',
+      buyerTitle: 'مصرف‌کنندگان نهایی خدمات پلتفرم سلامت باسینا',
+      items: [
+        {
+          id: `item-${Date.now()}-1`,
+          rowNumber: 1,
+          internalCode: defaultTariff?.internalCode || '01',
+          serviceCode: defaultTariff?.serviceCode || '2330001423019',
+          title: defaultTariff?.title || 'مشاوره آنلاین پزشکی',
+          unit: defaultTariff?.unit || 'نوبت',
+          quantity: initialQty,
+          unitPrice: initialPrice,
+          discount: 0,
+          vatRate: 10,
+          taxAmount: initialVat,
+          totalAmount: initialFinal,
+          subCategory: defaultTariff?.subCategory || 'online_consultation'
+        }
+      ],
+      totalQuantity: initialQty,
+      totalGrossAmount: initialGross,
+      totalDiscount: 0,
+      totalVatAmount: initialVat,
+      article17Tax: 0,
+      finalAmount: initialFinal,
+      amountInWords: numberToPersianWords(initialFinal, 'ریال'),
+      isSyncedToTransactions: false,
+      notes: `صورتحساب فروش ماهانه ${mName} سال ${selectedYear}`,
+      createdAt: now.dateFormatted
+    };
+
+    setEditingInvoice(newInv);
+    setIsInvoiceModalOpen(true);
+  };
+
+  const handleOpenNewSeasonalInvoice = (season: VatSeason) => {
+    const now = getCurrentJalaliDateTime();
+    const defaultTariff = serviceTariffs[0];
+    const months = SEASON_MONTHS[season] || [1, 2, 3];
+
+    const initialQuantity = 300;
+    const initialPrice = defaultTariff?.currentPrice || 600000;
+    const gross = initialQuantity * initialPrice;
+    const vat = Math.round(gross * 0.10);
+    const finalAmount = gross + vat;
+    const part = Math.floor(finalAmount / 3);
+    const remainder = finalAmount - (part * 2);
+
+    const initialAlloc: VatMonthlyAllocation[] = months.map((mNum, idx) => ({
+      month: mNum,
+      monthName: PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`,
+      amount: idx === 2 ? remainder : part,
+      quantity: Math.floor(initialQuantity / 3),
+      grossAmount: Math.floor(gross / 3),
+      vatAmount: Math.floor(vat / 3)
+    }));
+
+    const newInv: VatInvoice = {
+      id: `vat-inv-s-${selectedYear}-${season}-${Date.now()}`,
+      invoiceNumber: `S${selectedYear}-${season}`,
+      systemInvoiceId: `${now.dateTimeFormatted}:00`,
+      invoiceType: 'نوع دوم',
+      invoicePattern: 'فروش',
+      invoiceSubject: 'اصلی',
+      periodType: 'seasonal',
+      season: season,
+      year: selectedYear,
+      issueDateTime: `${now.dateFormatted} ${now.timeFormatted}:00`,
+      sellerEconomicCode: '14012787320',
+      sellerNationalId: '14012787320',
+      sellerCompanyName: companyName || 'آینده نگاران خلاق',
+      sellerPersonName: 'مصطفی راونگی نژاد',
+      sellerPostalCode: '7981944383',
+      sellerBranchCode: '-',
+      buyerTitle: 'مصرف‌کنندگان نهایی خدمات پلتفرم سلامت باسینا',
+      items: [
+        {
+          id: `item-${Date.now()}-1`,
+          rowNumber: 1,
+          internalCode: defaultTariff?.internalCode || '01',
+          serviceCode: defaultTariff?.serviceCode || '2330001423019',
+          title: defaultTariff?.title || 'مشاوره آنلاین پزشکی',
+          unit: defaultTariff?.unit || 'نوبت',
+          quantity: initialQuantity,
+          unitPrice: initialPrice,
+          discount: 0,
+          vatRate: 10,
+          taxAmount: vat,
+          totalAmount: finalAmount,
+          subCategory: defaultTariff?.subCategory || 'online_consultation'
+        }
+      ],
+      totalQuantity: initialQuantity,
+      totalGrossAmount: gross,
+      totalDiscount: 0,
+      totalVatAmount: vat,
+      article17Tax: 0,
+      finalAmount: finalAmount,
+      amountInWords: numberToPersianWords(finalAmount, 'ریال'),
+      isSyncedToTransactions: false,
+      monthlyAllocation: initialAlloc,
+      notes: `صورتحساب فروش فصلی ۳ ماهه ${season} سال ${selectedYear}`,
+      createdAt: now.dateFormatted
+    };
+
+    setEditingInvoice(newInv);
+    setIsInvoiceModalOpen(true);
+  };
+
+  const handleSynthesizeSeasonalInvoice = (season: VatSeason) => {
+    const months = SEASON_MONTHS[season] || [1, 2, 3];
+    const monthInvoices = invoices.filter(
+      i => i.year === selectedYear && i.periodType === 'monthly' && i.month && months.includes(i.month)
+    );
+
+    if (monthInvoices.length === 0) {
+      onShowToast(`هیچ صورتحساب ماهانه‌ای برای فصل ${season} ثبت نشده است.`);
+      return;
+    }
+
+    const now = getCurrentJalaliDateTime();
+
+    // Group items by serviceCode + unitPrice to aggregate quantities while keeping distinct tariffs separated
+    const groupedItemsMap: Record<string, VatInvoiceItem> = {};
+    monthInvoices.forEach(inv => {
+      inv.items.forEach(it => {
+        const key = `${it.serviceCode}_${it.unitPrice}`;
+        if (!groupedItemsMap[key]) {
+          groupedItemsMap[key] = {
+            ...it,
+            id: `synth-it-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            quantity: 0,
+            discount: 0,
+            taxAmount: 0,
+            totalAmount: 0,
+            notes: `تجمیع از ماه‌های فصل ${season}`
+          };
+        }
+        groupedItemsMap[key].quantity += it.quantity;
+        groupedItemsMap[key].discount += (it.discount || 0);
+        const gross = (groupedItemsMap[key].quantity * groupedItemsMap[key].unitPrice) - groupedItemsMap[key].discount;
+        groupedItemsMap[key].taxAmount = Math.round(gross * (groupedItemsMap[key].vatRate / 100));
+        groupedItemsMap[key].totalAmount = gross + groupedItemsMap[key].taxAmount;
+      });
+    });
+
+    const synthesizedItems: VatInvoiceItem[] = Object.values(groupedItemsMap).map((it, idx) => ({
+      ...it,
+      rowNumber: idx + 1
+    }));
+
+    let totalQuantity = 0;
+    let totalGrossAmount = 0;
+    let totalDiscount = 0;
+    let totalVatAmount = 0;
+    let finalAmount = 0;
+
+    synthesizedItems.forEach(it => {
+      totalQuantity += it.quantity;
+      const gross = (it.quantity * it.unitPrice) - it.discount;
+      totalGrossAmount += gross;
+      totalDiscount += it.discount;
+      totalVatAmount += it.taxAmount;
+      finalAmount += it.totalAmount;
+    });
+
+    // Build monthly allocation
+    const monthlyAllocation: VatMonthlyAllocation[] = months.map(mNum => {
+      const mName = PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`;
+      const inv = monthInvoices.find(i => i.month === mNum);
+      return {
+        month: mNum,
+        monthName: mName,
+        amount: inv ? inv.finalAmount : 0,
+        grossAmount: inv ? inv.totalGrossAmount : 0,
+        vatAmount: inv ? inv.totalVatAmount : 0,
+        quantity: inv ? inv.totalQuantity : 0,
+        notes: inv ? `از صورتحساب شماره ${inv.invoiceNumber}` : 'ثبت نشده'
+      };
+    });
+
+    // Check if existing seasonal invoice exists
+    const existingSeasonal = invoices.find(
+      i => i.year === selectedYear && i.periodType === 'seasonal' && i.season === season
+    );
+
+    const seasonalInv: VatInvoice = {
+      id: existingSeasonal ? existingSeasonal.id : `vat-inv-synth-${Date.now()}`,
+      invoiceNumber: existingSeasonal ? existingSeasonal.invoiceNumber : `S${selectedYear}-${season}`,
+      systemInvoiceId: existingSeasonal?.systemInvoiceId || `${now.dateTimeFormatted}:00`,
+      invoiceType: 'نوع دوم',
+      invoicePattern: 'فروش',
+      invoiceSubject: 'اصلی',
+      periodType: 'seasonal',
+      season: season,
+      year: selectedYear,
+      issueDateTime: `${now.dateFormatted} ${now.timeFormatted}:00`,
+      sellerEconomicCode: '14012787320',
+      sellerNationalId: '14012787320',
+      sellerCompanyName: companyName || 'آینده نگاران خلاق',
+      sellerPersonName: 'مصطفی راونگی نژاد',
+      sellerPostalCode: '7981944383',
+      sellerBranchCode: '-',
+      buyerTitle: 'مصرف‌کنندگان نهایی خدمات پلتفرم سلامت باسینا',
+      items: synthesizedItems,
+      totalQuantity,
+      totalGrossAmount,
+      totalDiscount,
+      totalVatAmount,
+      article17Tax: 0,
+      finalAmount,
+      amountInWords: numberToPersianWords(finalAmount, 'ریال'),
+      isSyncedToTransactions: true,
+      isSynthesizedFromMonthly: true,
+      synthesizedFromInvoiceIds: monthInvoices.map(i => i.id),
+      monthlyAllocation: monthlyAllocation,
+      notes: `صورتحساب فصلی ۳ ماهه ${season} تجمیع شده از ماه‌های (${monthInvoices.map(i => PERSIAN_MONTHS.find(m => m.num === i.month)?.name).join('، ')})`,
+      createdAt: existingSeasonal?.createdAt || now.dateFormatted,
+      updatedAt: now.dateFormatted
+    };
+
+    onSaveInvoice(seasonalInv);
+    onShowToast(`صورتحساب فصلی ۳ ماهه ${season} با موفقیت از ترکیب ${toPersianDigits(monthInvoices.length)} ماه ثبت‌شده صادر و محاسبه گردید.`);
   };
 
   const handleEditInvoice = (inv: VatInvoice) => {
@@ -379,6 +694,241 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
       {/* Main Tab Content */}
       {activeSubTab === 'invoices' && (
         <div className="space-y-4">
+          {/* 4 Seasons Hub & Quarterly Aggregator */}
+          <div className="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-5 text-white shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-blue-500/20 border border-blue-400/30 rounded-xl text-blue-300">
+                  <CalendarCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-sm sm:text-base text-white">
+                      مرکز مدیریت ۴ فصل سال و تجمیع هوشمند فاکتورها
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                      سال مالی {toPersianDigits(selectedYear)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    فاکتورهای ماهانه مستقیماً به درآمد ماه‌ها افزوده می‌شوند و سیستم از ترکیب سه ماهه، فاکتور رسمی فصلی را محاسبه و صادر می‌نماید.
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-400 flex items-center gap-3">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500/50" />
+                  <span>ثبت شده در سیستم</span>
+                </span>
+                <span>•</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-600" />
+                  <span>ثبت نشده</span>
+                </span>
+              </div>
+            </div>
+
+            {/* 4 Seasons Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {SEASONS_CONFIG.map(sc => {
+                // Find seasonal invoice for this season
+                const seasonalInv = invoices.find(i => i.year === selectedYear && i.periodType === 'seasonal' && i.season === sc.season);
+                
+                // Find monthly invoices for the 3 months of this season
+                const monthlyInvs = sc.months.map(mNum => {
+                  const inv = invoices.find(i => i.year === selectedYear && i.periodType === 'monthly' && i.month === mNum);
+                  return {
+                    monthNumber: mNum,
+                    monthName: PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`,
+                    invoice: inv
+                  };
+                });
+
+                const registeredCount = monthlyInvs.filter(m => !!m.invoice).length;
+
+                // Calculate displayed season revenue
+                const seasonRevenue = seasonalInv 
+                  ? seasonalInv.finalAmount 
+                  : monthlyInvs.reduce((acc, m) => acc + (m.invoice ? m.invoice.finalAmount : 0), 0);
+
+                const seasonServices = seasonalInv 
+                  ? seasonalInv.totalQuantity 
+                  : monthlyInvs.reduce((acc, m) => acc + (m.invoice ? m.invoice.totalQuantity : 0), 0);
+
+                return (
+                  <div 
+                    key={sc.season}
+                    className="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-4 flex flex-col justify-between space-y-3.5 hover:border-slate-600 transition-colors"
+                  >
+                    {/* Season Card Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                          {sc.quarter}
+                        </span>
+                        <h4 className="font-bold text-sm sm:text-base text-white">
+                          {sc.label}
+                        </h4>
+                      </div>
+
+                      <div className="text-left">
+                        <div className="text-[11px] text-slate-400">مجموع فروش فصل:</div>
+                        <div className="text-sm sm:text-base font-black text-emerald-400 font-mono">
+                          {formatCurrency(seasonRevenue, currencyMode)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3 Months Row */}
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
+                        <span>وضعیت ثبت ماه‌های ۳ گانه:</span>
+                        <span className="text-slate-300 font-mono">
+                          {toPersianDigits(registeredCount)} از ۳ ماه ثبت شده
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        {monthlyInvs.map(({ monthNumber, monthName, invoice }) => (
+                          <div 
+                            key={monthNumber}
+                            className={`p-2.5 rounded-xl border text-center transition-all ${
+                              invoice 
+                                ? 'bg-emerald-950/40 border-emerald-500/40 hover:border-emerald-400' 
+                                : 'bg-slate-850/60 border-slate-700/60 border-dashed hover:border-slate-600'
+                            }`}
+                          >
+                            <div className="text-xs font-bold text-slate-200 mb-1">
+                              {monthName}
+                            </div>
+
+                            {invoice ? (
+                              <div className="space-y-1">
+                                <div className="text-[10px] text-emerald-400 font-mono font-bold truncate">
+                                  {formatCurrency(invoice.finalAmount, currencyMode)}
+                                </div>
+                                <div className="text-[9px] text-slate-400">
+                                  {toPersianDigits(invoice.totalQuantity.toLocaleString('fa-IR'))} نوبت
+                                </div>
+                                <div className="flex items-center justify-center gap-1 pt-1 border-t border-emerald-500/20">
+                                  <button
+                                    onClick={() => handleEditInvoice(invoice)}
+                                    className="p-1 hover:bg-emerald-500/20 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                                    title="ویرایش فاکتور این ماه"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => handlePrintOfficialInvoice(invoice)}
+                                    className="p-1 hover:bg-emerald-500/20 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                                    title="مشاهده فاکتور استاندارد"
+                                  >
+                                    <Printer className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleOpenNewMonthlyInvoice(sc.season, monthNumber)}
+                                className="w-full py-2 px-1 text-[10px] font-bold text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 rounded-lg transition-colors cursor-pointer flex flex-col items-center justify-center gap-0.5"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>ثبت ماه</span>
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Quarterly VAT Declaration Status */}
+                    <div className="pt-2 border-t border-slate-800/80">
+                      {seasonalInv ? (
+                        <div className="p-3 bg-gradient-to-r from-blue-950/40 to-indigo-950/40 rounded-xl border border-blue-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-xs text-blue-200">
+                                صورتحساب فصلی ۳ ماهه {sc.season} (شماره {toPersianDigits(seasonalInv.invoiceNumber)})
+                              </span>
+                              {seasonalInv.isSynthesizedFromMonthly ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 flex items-center gap-1">
+                                  <Sparkles className="w-2.5 h-2.5" />
+                                  <span>تجمیع شده از ماه‌ها</span>
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                  ثبت فصلی مستقیم
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-2">
+                              <span>تعداد: {toPersianDigits(seasonalInv.totalQuantity.toLocaleString('fa-IR'))} نوبت</span>
+                              <span>•</span>
+                              <span>خالص: {formatCurrency(seasonalInv.totalGrossAmount, currencyMode)}</span>
+                              <span>•</span>
+                              <span>ارزش افزوده: {formatCurrency(seasonalInv.totalVatAmount, currencyMode)}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {registeredCount > 0 && (
+                              <button
+                                onClick={() => handleSynthesizeSeasonalInvoice(sc.season)}
+                                className="px-2.5 py-1.5 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                title="به‌روزرسانی خودکار اقلام فصلی بر اساس آخرین تغییرات ماه‌های ثبت‌شده"
+                              >
+                                <RotateCw className="w-3 h-3" />
+                                <span>تطبیق و Sync</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handlePrintOfficialInvoice(seasonalInv)}
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer transition-colors"
+                            >
+                              <Printer className="w-3 h-3" />
+                              <span>چاپ رسمی</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : registeredCount > 0 ? (
+                        <div className="p-3 bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-slate-900 rounded-xl border border-indigo-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5 font-bold text-xs text-indigo-200">
+                              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+                              <span>آماده صدور فاکتور فصلی ۳ ماهه {sc.season}</span>
+                            </div>
+                            <div className="text-[11px] text-slate-300">
+                              اطلاعات {toPersianDigits(registeredCount)} ماه ثبت شده و آماده صدور صورتحساب فصلی برای سامانه مودیان است.
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => handleSynthesizeSeasonalInvoice(sc.season)}
+                            className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/20 cursor-pointer shrink-0 transition-all"
+                          >
+                            <Zap className="w-3.5 h-3.5 text-amber-300" />
+                            <span>محاسبه و صدور فاکتور فصلی</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between text-xs text-slate-400">
+                          <span>هنوز صورتحسابی برای این فصل ثبت نشده است.</span>
+                          <button
+                            onClick={() => handleOpenNewSeasonalInvoice(sc.season)}
+                            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                          >
+                            + صدور مستقیم ۳ ماهه
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Filters Bar */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -1027,6 +1577,49 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
 }) => {
   const [formData, setFormData] = useState<VatInvoice>(JSON.parse(JSON.stringify(invoice)));
 
+  const seasonMonths = useMemo(() => {
+    return SEASON_MONTHS[formData.season || 'بهار'] || [1, 2, 3];
+  }, [formData.season]);
+
+  const [allocations, setAllocations] = useState<VatMonthlyAllocation[]>(() => {
+    if (formData.monthlyAllocation && formData.monthlyAllocation.length === 3) {
+      return formData.monthlyAllocation;
+    }
+    const part = Math.floor(formData.finalAmount / 3);
+    const remainder = formData.finalAmount - (part * 2);
+    const defaultMonths = SEASON_MONTHS[formData.season || 'بهار'] || [1, 2, 3];
+    return defaultMonths.map((mNum, idx) => ({
+      month: mNum,
+      monthName: PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`,
+      amount: idx === 2 ? remainder : part
+    }));
+  });
+
+  const allocatedSum = useMemo(() => {
+    return allocations.reduce((acc, a) => acc + (a.amount || 0), 0);
+  }, [allocations]);
+
+  const handleEqualizeAllocations = () => {
+    const part = Math.floor(formData.finalAmount / 3);
+    const remainder = formData.finalAmount - (part * 2);
+    const equalized: VatMonthlyAllocation[] = seasonMonths.map((mNum, idx) => ({
+      month: mNum,
+      monthName: PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`,
+      amount: idx === 2 ? remainder : part
+    }));
+    setAllocations(equalized);
+  };
+
+  const handleUpdateAllocationAmount = (idx: number, mNum: PersianMonthNumber, mName: string, amount: number) => {
+    const updated = [...allocations];
+    updated[idx] = {
+      month: mNum,
+      monthName: mName,
+      amount
+    };
+    setAllocations(updated);
+  };
+
   // Recalculate row totals and invoice totals
   const recalculateTotals = (items: VatInvoiceItem[]) => {
     let totalQuantity = 0;
@@ -1064,6 +1657,17 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
       finalAmount,
       amountInWords: numberToPersianWords(finalAmount, 'ریال')
     }));
+
+    // If seasonal, also update allocations proportionally
+    if (formData.periodType === 'seasonal') {
+      const part = Math.floor(finalAmount / 3);
+      const remainder = finalAmount - (part * 2);
+      setAllocations(seasonMonths.map((mNum, idx) => ({
+        month: mNum,
+        monthName: PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`,
+        amount: idx === 2 ? remainder : part
+      })));
+    }
   };
 
   // Add Item Row
@@ -1105,6 +1709,14 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
       [field]: val
     };
     recalculateTotals(updated);
+  };
+
+  const handleSaveInvoice = () => {
+    const finalPayload: VatInvoice = {
+      ...formData,
+      monthlyAllocation: formData.periodType === 'seasonal' ? allocations : undefined
+    };
+    onSave(finalPayload);
   };
 
   return (
@@ -1349,6 +1961,94 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
             </div>
           </div>
 
+          {/* Section 2.5: Monthly Allocation for Seasonal Invoices / Monthly Confirmation */}
+          {formData.periodType === 'seasonal' && (
+            <div className="bg-blue-50/70 p-4 rounded-xl border border-blue-200/80 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-blue-600 text-white rounded-lg">
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-blue-950 text-xs sm:text-sm">
+                      توزیع خودکار درآمد در ۳ ماهه فصل {formData.season} (اعمال مستقیم در درآمد سیستم)
+                    </h4>
+                    <p className="text-[11px] text-blue-800">
+                      با ذخیره این صورتحساب، سهم هر ماه مستقیماً به عنوان درآمد همان ماه در دفتر کل و نمودارها ثبت خواهد شد.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleEqualizeAllocations}
+                  className="px-3 py-1.5 bg-white hover:bg-blue-100 text-blue-700 border border-blue-300 rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-xs shrink-0 flex items-center gap-1"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>توزیع متوازن (۱/۳ هر ماه)</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {seasonMonths.map((mNum, idx) => {
+                  const mName = PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`;
+                  const alloc = allocations[idx] || {
+                    month: mNum,
+                    monthName: mName,
+                    amount: 0
+                  };
+
+                  return (
+                    <div key={mNum} className="bg-white p-3 rounded-xl border border-blue-200/90 shadow-xs">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-1.5">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-blue-500" />
+                          <span>سهم ماه {mName}</span>
+                        </span>
+                        <span className="text-slate-400 font-mono text-[11px]">ماه {toPersianDigits(mNum)}</span>
+                      </div>
+                      <AmountInput
+                        value={alloc.amount}
+                        onChange={(val) => handleUpdateAllocationAmount(idx, mNum, mName, val)}
+                        currencyMode={currencyMode}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-blue-900"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-blue-200/70">
+                <div className="flex items-center gap-1.5 text-blue-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>تطابق با مبلغ کل صورتحساب:</span>
+                  <strong className={`font-mono ${allocatedSum === formData.finalAmount ? 'text-emerald-700 font-bold' : 'text-amber-700'}`}>
+                    {formatCurrency(allocatedSum, currencyMode)}
+                  </strong>
+                  {allocatedSum === formData.finalAmount ? (
+                    <span className="text-emerald-600 text-[11px] font-bold">(کاملاً برابر با جمع فاکتور)</span>
+                  ) : (
+                    <span className="text-amber-700 text-[11px] font-bold">
+                      (اختلاف: {formatCurrency(Math.abs(formData.finalAmount - allocatedSum), currencyMode)})
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {formData.periodType === 'monthly' && (
+            <div className="bg-emerald-50/80 p-3.5 rounded-xl border border-emerald-200 flex items-center gap-2.5 text-xs text-emerald-900">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <div className="font-bold">ثبت مستقیم در درآمد ماهانه شرکت</div>
+                <div className="text-[11px] text-emerald-700 mt-0.5">
+                  این صورتحساب مستقیماً به عنوان درآمد <strong>ماه {PERSIAN_MONTHS.find(m => m.num === formData.month)?.name}</strong> در سیستم ثبت شده و در تابلوی ۴ فصل سال جهت تجمیع خودکار فصلی قرار خواهد گرفت.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Section 3: Calculated Totals Summary */}
           <div className="bg-slate-900 text-white p-4 rounded-xl space-y-2">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
@@ -1394,7 +2094,7 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
             انصراف
           </button>
           <button
-            onClick={() => onSave(formData)}
+            onClick={handleSaveInvoice}
             className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs transition-colors shadow-md shadow-blue-500/20 cursor-pointer"
           >
             ذخیره و صدور صورتحساب

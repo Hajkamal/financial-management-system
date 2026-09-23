@@ -848,6 +848,36 @@ export const INITIAL_VAT_INVOICES: VatInvoice[] = [
 
     isSyncedToTransactions: true,
     syncedTransactionId: 'tx-basina-spring-vat-1405',
+    syncedTransactionIds: ['tx-vat-vat-inv-1405-q1-m1', 'tx-vat-vat-inv-1405-q1-m2', 'tx-vat-vat-inv-1405-q1-m3'],
+    monthlyAllocation: [
+      {
+        month: 1,
+        monthName: 'فروردین',
+        amount: 3640000000,
+        grossAmount: 3309090909,
+        vatAmount: 330909091,
+        quantity: 6000,
+        notes: 'سهم درآمد فروردین'
+      },
+      {
+        month: 2,
+        monthName: 'اردیبهشت',
+        amount: 4550000000,
+        grossAmount: 4136363636,
+        vatAmount: 413636364,
+        quantity: 7500,
+        notes: 'سهم درآمد اردیبهشت'
+      },
+      {
+        month: 3,
+        monthName: 'خرداد',
+        amount: 4869310000,
+        grossAmount: 4426645455,
+        vatAmount: 442664545,
+        quantity: 8031,
+        notes: 'سهم درآمد خرداد'
+      }
+    ],
     notes: 'صورتحساب رسمی ارسال کیسان باسینا فصل بهار ۱۴۰۵ به سامانه امور مالیاتی کشور',
     createdAt: '۱۴۰۵/۰۴/۰۲',
   }

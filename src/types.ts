@@ -232,6 +232,30 @@ export type ActiveTab =
 export type VatPeriodType = 'seasonal' | 'monthly';
 export type VatSeason = 'بهار' | 'تابستان' | 'پاییز' | 'زمستان';
 
+export const SEASON_MONTHS: Record<VatSeason, PersianMonthNumber[]> = {
+  'بهار': [1, 2, 3],
+  'تابستان': [4, 5, 6],
+  'پاییز': [7, 8, 9],
+  'زمستان': [10, 11, 12],
+};
+
+export const MONTH_TO_SEASON: Record<PersianMonthNumber, VatSeason> = {
+  1: 'بهار', 2: 'بهار', 3: 'بهار',
+  4: 'تابستان', 5: 'تابستان', 6: 'تابستان',
+  7: 'پاییز', 8: 'پاییز', 9: 'پاییز',
+  10: 'زمستان', 11: 'زمستان', 12: 'زمستان',
+};
+
+export interface VatMonthlyAllocation {
+  month: PersianMonthNumber;
+  monthName: string;
+  amount: number;                 // سهم درآمد ناخالص این ماه به ریال
+  grossAmount?: number;          // مبلغ خالص قبل از ارزش افزوده
+  vatAmount?: number;            // سهم مالیات بر ارزش افزوده این ماه
+  quantity?: number;              // تعداد نوبت‌های این ماه
+  notes?: string;
+}
+
 export interface VatInvoiceItem {
   id: string;
   rowNumber: number;              // ردیف: ۱، ۲، ۳، ...
@@ -295,6 +319,12 @@ export interface VatInvoice {
   // همگام‌سازی با دفتر کل تراکنش‌ها
   isSyncedToTransactions: boolean; // آیا در تراکنش‌های درآمدی شرکت ثبت شده؟
   syncedTransactionId?: string;
+  syncedTransactionIds?: string[]; // در صورت توزیع ۳ ماهه، شناسه‌های ۳ تراکنش ایجاد شده
+
+  // تفکیک ماه‌های فصلی و تجمیع هوشمند
+  monthlyAllocation?: VatMonthlyAllocation[]; // سهم درآمدی هر یک از ۳ ماه فصل
+  isSynthesizedFromMonthly?: boolean;         // آیا صورتحساب فصلی تجمیعی از روی ماه‌ها صادر شده؟
+  synthesizedFromInvoiceIds?: string[];       // شناسه‌های صورتحساب‌های ماهانه ترکیب‌شده
 
   notes?: string;
   createdAt: string;

@@ -64,7 +64,8 @@ import {
   AppUser,
   BankAccount,
   VatInvoice,
-  ServiceTariff
+  ServiceTariff,
+  SEASON_MONTHS
 } from './types';
 
 import { 
@@ -1081,21 +1082,167 @@ export default function App() {
   };
 
   // VAT and Service Tariffs handlers
-  const handleSaveVatInvoice = (invoice: VatInvoice) => {
+  const handleSaveVatInvoice = (invoice: VatInvoice, options?: { skipToast?: boolean; customToastMsg?: string }) => {
+    const now = getCurrentJalaliDateTime();
+    let updatedInvoice: VatInvoice = { ...invoice };
+    const newTransactionsToAdd: FinancialTransaction[] = [];
+
+    // Case 1: Monthly Invoice
+    if (invoice.periodType === 'monthly') {
+      const mNum = (invoice.month || 1) as PersianMonthNumber;
+      const mName = PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`;
+      const txId = `tx-vat-${invoice.id}-m${mNum}`;
+      const day = mNum <= 6 ? 31 : (mNum <= 11 ? 30 : 29);
+      const dateString = `${invoice.year}/${String(mNum).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+
+      const primarySubCategory = invoice.items[0]?.subCategory || 'appointment';
+
+      const tx: FinancialTransaction = {
+        id: txId,
+        type: 'income',
+        category: 'sale_basina',
+        subCategory: primarySubCategory,
+        amount: invoice.finalAmount,
+        year: invoice.year,
+        month: mNum,
+        day: day,
+        dateString: dateString,
+        title: `فروش ماهانه باسینا (ارزش افزوده و مودیان) - ${mName}`,
+        description: `صورتحساب رسمی فروش ${invoice.invoiceNumber} - تعداد ${invoice.totalQuantity.toLocaleString('fa-IR')} خدمت/نوبت با خالص ${formatCurrency(invoice.totalGrossAmount, currencyMode)} و ارزش افزوده ۱۰٪ ${formatCurrency(invoice.totalVatAmount, currencyMode)}`,
+        recipientOrPayer: 'کاربران پلتفرم باسینا (سامانه مودیان)',
+        trackingCode: invoice.invoiceNumber,
+        createdBy: currentAppUser?.email,
+        createdByName: currentAppUser?.fullName,
+        createdAt: now.persianDateTimeFormatted
+      };
+
+      newTransactionsToAdd.push(tx);
+      updatedInvoice.isSyncedToTransactions = true;
+      updatedInvoice.syncedTransactionId = txId;
+      updatedInvoice.syncedTransactionIds = [txId];
+    }
+    // Case 2: Seasonal (3-Month) Invoice
+    else if (invoice.periodType === 'seasonal') {
+      const season = invoice.season || 'بهار';
+      const months = SEASON_MONTHS[season] || [1, 2, 3];
+      const primarySubCategory = invoice.items[0]?.subCategory || 'appointment';
+
+      // If this seasonal invoice was synthesized from monthly invoices,
+      // the income is ALREADY registered by the individual monthly invoices in those 3 months.
+      // So we don't duplicate transactions in the general ledger!
+      if (invoice.isSynthesizedFromMonthly) {
+        updatedInvoice.isSyncedToTransactions = true;
+      } else {
+        // Direct Seasonal Invoice: Distribute revenue across the 3 months of the season
+        const generatedTxIds: string[] = [];
+
+        // Check if custom monthly allocation is specified
+        if (invoice.monthlyAllocation && invoice.monthlyAllocation.length === 3) {
+          invoice.monthlyAllocation.forEach(alloc => {
+            const mNum = alloc.month;
+            const mName = alloc.monthName || PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`;
+            const txId = `tx-vat-${invoice.id}-m${mNum}`;
+            const day = mNum <= 6 ? 31 : (mNum <= 11 ? 30 : 29);
+            const dateString = `${invoice.year}/${String(mNum).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+
+            generatedTxIds.push(txId);
+            newTransactionsToAdd.push({
+              id: txId,
+              type: 'income',
+              category: 'sale_basina',
+              subCategory: primarySubCategory,
+              amount: alloc.amount,
+              year: invoice.year,
+              month: mNum,
+              day: day,
+              dateString: dateString,
+              title: `فروش باسینا (ارزش افزوده ۳ ماهه ${season}) - ${mName}`,
+              description: `سهم درآمد ماه ${mName} از صورتحساب فصلی ${invoice.invoiceNumber} به مبلغ کل فصل ${formatCurrency(invoice.finalAmount, currencyMode)} (تعداد کل نوبت‌ها: ${invoice.totalQuantity.toLocaleString('fa-IR')})`,
+              recipientOrPayer: 'کاربران پلتفرم باسینا (سامانه مودیان)',
+              trackingCode: invoice.invoiceNumber,
+              createdBy: currentAppUser?.email,
+              createdByName: currentAppUser?.fullName,
+              createdAt: now.persianDateTimeFormatted
+            });
+          });
+        } else {
+          // Automatic 1/3 split across the 3 months
+          const part = Math.floor(invoice.finalAmount / 3);
+          const remainder = invoice.finalAmount - (part * 2);
+
+          months.forEach((mNum, idx) => {
+            const mAmount = idx === 2 ? remainder : part;
+            const mName = PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`;
+            const txId = `tx-vat-${invoice.id}-m${mNum}`;
+            const day = mNum <= 6 ? 31 : (mNum <= 11 ? 30 : 29);
+            const dateString = `${invoice.year}/${String(mNum).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+
+            generatedTxIds.push(txId);
+            newTransactionsToAdd.push({
+              id: txId,
+              type: 'income',
+              category: 'sale_basina',
+              subCategory: primarySubCategory,
+              amount: mAmount,
+              year: invoice.year,
+              month: mNum,
+              day: day,
+              dateString: dateString,
+              title: `فروش باسینا (ارزش افزوده ۳ ماهه ${season}) - ${mName}`,
+              description: `سهم درآمد ماه ${mName} از صورتحساب فصلی ${invoice.invoiceNumber} به مبلغ کل فصل ${formatCurrency(invoice.finalAmount, currencyMode)} (تعداد کل نوبت‌ها: ${invoice.totalQuantity.toLocaleString('fa-IR')})`,
+              recipientOrPayer: 'کاربران پلتفرم باسینا (سامانه مودیان)',
+              trackingCode: invoice.invoiceNumber,
+              createdBy: currentAppUser?.email,
+              createdByName: currentAppUser?.fullName,
+              createdAt: now.persianDateTimeFormatted
+            });
+          });
+        }
+
+        updatedInvoice.isSyncedToTransactions = true;
+        updatedInvoice.syncedTransactionIds = generatedTxIds;
+        updatedInvoice.syncedTransactionId = generatedTxIds[0];
+      }
+    }
+
+    // Synchronize transactions: replace any old transactions for this invoice ID with new ones
+    setTransactions(prev => {
+      const filtered = prev.filter(t => !t.id.startsWith(`tx-vat-${invoice.id}`) && t.id !== invoice.syncedTransactionId);
+      return [...newTransactionsToAdd, ...filtered];
+    });
+
+    // Save invoice to vatInvoices
     setVatInvoices(prev => {
-      const idx = prev.findIndex(inv => inv.id === invoice.id);
+      const idx = prev.findIndex(inv => inv.id === updatedInvoice.id);
       if (idx >= 0) {
         const copy = [...prev];
-        copy[idx] = invoice;
+        copy[idx] = updatedInvoice;
         return copy;
       }
-      return [invoice, ...prev];
+      return [updatedInvoice, ...prev];
     });
+
+    if (!options?.skipToast) {
+      if (options?.customToastMsg) {
+        showToast(options.customToastMsg);
+      } else if (invoice.periodType === 'seasonal' && !invoice.isSynthesizedFromMonthly) {
+        showToast(`صورتحساب ۳ ماهه ${invoice.season} ثبت شد و درآمد آن بین ۳ ماه فصل (${PERSIAN_MONTHS.filter(m => (SEASON_MONTHS[invoice.season || 'بهار'] || []).includes(m.num)).map(m => m.name).join('، ')}) در سیستم توزیع و اعمال گردید.`);
+      } else if (invoice.periodType === 'monthly') {
+        const mName = PERSIAN_MONTHS.find(m => m.num === invoice.month)?.name;
+        showToast(`صورتحساب ماه ${mName} ثبت شد و به درآمد این ماه در دفتر کل اضافه گردید.`);
+      } else if (invoice.isSynthesizedFromMonthly) {
+        showToast(`صورتحساب فصلی ۳ ماهه با موفقیت از ترکیب ماه‌های ثبت‌شده صادر گردید.`);
+      } else {
+        showToast('صورتحساب با موفقیت ذخیره گردید.');
+      }
+    }
   };
 
   const handleDeleteVatInvoice = (id: string) => {
     setVatInvoices(prev => prev.filter(inv => inv.id !== id));
-    showToast('صورتحساب مالیاتی با موفقیت حذف گردید.');
+    // Also remove associated income transactions
+    setTransactions(prev => prev.filter(t => !t.id.startsWith(`tx-vat-${id}`)));
+    showToast('صورتحساب مالیاتی و تراکنش‌های درآمدی متصل به آن با موفقیت حذف گردید.');
   };
 
   const handleSaveServiceTariff = (tariff: ServiceTariff) => {
@@ -1111,47 +1258,7 @@ export default function App() {
   };
 
   const handleSyncVatInvoiceToTransactions = (invoice: VatInvoice) => {
-    const txId = `tx-vat-${invoice.id}`;
-    const now = getCurrentJalaliDateTime();
-    const periodTitle = invoice.periodType === 'seasonal' ? `فصل ${invoice.season}` : `ماه ${invoice.month}`;
-    
-    // Check if transaction already exists
-    const exists = transactions.some(t => t.id === txId || t.id === invoice.syncedTransactionId);
-    if (exists) {
-      showToast('این صورتحساب قبلاً در دفتر کل تراکنش‌ها ثبت شده است.');
-      return;
-    }
-
-    const newTx: FinancialTransaction = {
-      id: txId,
-      type: 'income',
-      category: 'sale_basina',
-      subCategory: 'appointment',
-      amount: invoice.finalAmount,
-      year: invoice.year,
-      month: invoice.periodType === 'seasonal' 
-        ? (invoice.season === 'بهار' ? 3 : invoice.season === 'تابستان' ? 6 : invoice.season === 'پاییز' ? 9 : 12)
-        : (invoice.month || 1),
-      day: 31,
-      dateString: invoice.issueDateTime.split(' ')[0] || `${invoice.year}/03/31`,
-      title: `فروش ${periodTitle} باسینا (ارزش افزوده و مودیان)`,
-      description: `صورتحساب فروش رسمی ${invoice.invoiceNumber} - تعداد ${invoice.totalQuantity.toLocaleString('fa-IR')} نوبت با خالص ${formatCurrency(invoice.totalGrossAmount, currencyMode)} و ارزش افزوده ${formatCurrency(invoice.totalVatAmount, currencyMode)}`,
-      recipientOrPayer: 'کاربران پلتفرم باسینا (سامانه مودیان)',
-      trackingCode: invoice.invoiceNumber,
-      createdBy: currentAppUser?.email,
-      createdByName: currentAppUser?.fullName,
-      createdAt: now.persianDateTimeFormatted
-    };
-
-    setTransactions(prev => [newTx, ...prev]);
-
-    handleSaveVatInvoice({
-      ...invoice,
-      isSyncedToTransactions: true,
-      syncedTransactionId: txId
-    });
-
-    showToast(`صورتحساب با موفقیت به مبلغ ${formatCurrency(invoice.finalAmount, currencyMode)} در دفتر کل تراکنش‌های درآمدی شرکت ثبت شد.`);
+    handleSaveVatInvoice(invoice, { customToastMsg: 'تراکنش‌های درآمدی این صورتحساب مجدداً در سیستم به‌روزرسانی و همگام گردید.' });
   };
 
   // Restore and Reset
