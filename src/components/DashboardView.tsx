@@ -20,6 +20,8 @@ import {
   Loan 
 } from '../types';
 import { MonthlyFinanceChart } from './MonthlyFinanceChart';
+import { CashFlowForecast } from './CashFlowForecast';
+import { AdvancedFinancialReporter } from './AdvancedFinancialReporter';
 import { 
   PERSIAN_MONTHS, 
   formatCurrency, 
@@ -37,6 +39,8 @@ interface DashboardViewProps {
   loans: Loan[];
   onOpenNewTransaction: () => void;
   onNavigateToSalaryMatrix: () => void;
+  companyName?: string;
+  onShowToast?: (msg: string) => void;
 }
 
 type PeriodFilter = 'all' | 'q1' | 'q2' | 'q3' | 'q4' | 'custom_month';
@@ -48,6 +52,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   loans,
   onOpenNewTransaction,
   onNavigateToSalaryMatrix,
+  companyName = 'آینده نگاران خلاق',
+  onShowToast,
 }) => {
   const [period, setPeriod] = useState<PeriodFilter>('all');
   const [selectedMonth, setSelectedMonth] = useState<PersianMonthNumber>(1);
@@ -332,6 +338,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
       </div>
+
+      {/* Advanced Visual Reporter: Month-by-Month Bar Chart with Net Balance */}
+      <AdvancedFinancialReporter
+        transactions={transactions}
+        selectedYear={selectedYear}
+        currencyMode={currencyMode}
+        companyName={companyName}
+        onShowToast={onShowToast}
+      />
+
+      {/* Cash Flow Forecast for Upcoming Months */}
+      <CashFlowForecast
+        transactions={transactions}
+        loans={loans}
+        selectedYear={selectedYear}
+        currencyMode={currencyMode}
+      />
 
       {/* Interactive Recharts Monthly Trend Chart */}
       <MonthlyFinanceChart

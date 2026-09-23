@@ -1260,6 +1260,8 @@ export default function App() {
               loans={loans}
               onOpenNewTransaction={handleOpenNewTransaction}
               onNavigateToSalaryMatrix={() => setActiveTab('salary-matrix')}
+              companyName={companyName}
+              onShowToast={showToast}
             />
           )}
 

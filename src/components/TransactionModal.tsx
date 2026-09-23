@@ -33,6 +33,9 @@ import {
   INFRASTRUCTURE_SUBCATEGORY_CONFIG
 } from '../utils/formatters';
 import { AmountInput } from './AmountInput';
+import { PersianDatePicker } from './PersianDatePicker';
+import { getTodayJalali } from '../utils/jalali';
+import { toPersianDigits } from '../utils/formatters';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -73,9 +76,23 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [amount, setAmount] = useState<string>(
     editingTransaction ? editingTransaction.amount.toString() : ''
   );
-  const [year, setYear] = useState<number>(editingTransaction ? editingTransaction.year : selectedYear);
-  const [month, setMonth] = useState<PersianMonthNumber>(editingTransaction ? editingTransaction.month : 1);
-  const [day, setDay] = useState<number>(editingTransaction ? editingTransaction.day : 15);
+  const today = getTodayJalali();
+  const [year, setYear] = useState<number>(editingTransaction ? editingTransaction.year : today.year);
+  const [month, setMonth] = useState<PersianMonthNumber>(editingTransaction ? editingTransaction.month : today.month);
+  const [day, setDay] = useState<number>(editingTransaction ? editingTransaction.day : today.day);
+
+  useEffect(() => {
+    if (editingTransaction) {
+      setYear(editingTransaction.year);
+      setMonth(editingTransaction.month);
+      setDay(editingTransaction.day);
+    } else {
+      const cur = getTodayJalali();
+      setYear(cur.year);
+      setMonth(cur.month);
+      setDay(cur.day);
+    }
+  }, [editingTransaction, isOpen]);
   const [title, setTitle] = useState<string>(editingTransaction ? editingTransaction.title : '');
   const [description, setDescription] = useState<string>(editingTransaction?.description || '');
   const [recipientOrPayer, setRecipientOrPayer] = useState<string>(editingTransaction?.recipientOrPayer || '');
@@ -328,41 +345,76 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* Date Fields (Year, Month, Day) */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">سال</label>
-              <input
-                type="number"
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-center font-bold"
-              />
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">ماه</label>
-              <select
-                value={month}
-                onChange={(e) => setMonth(Number(e.target.value) as PersianMonthNumber)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+          {/* Date Fields with Persian Calendar Picker */}
+          <div className="p-3.5 bg-slate-50/90 rounded-xl border border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                <Calendar className="w-4 h-4 text-blue-600" />
+                <span>تاریخ سند مالی (پیش‌فرض: امروز)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const t = getTodayJalali();
+                  setYear(t.year);
+                  setMonth(t.month);
+                  setDay(t.day);
+                }}
+                className="text-[11px] text-blue-700 hover:text-blue-900 font-bold cursor-pointer transition-colors"
               >
-                {PERSIAN_MONTHS.map(m => (
-                  <option key={m.num} value={m.num}>{m.name}</option>
-                ))}
-              </select>
+                تنظیم به امروز ({toPersianDigits(today.dateString)})
+              </button>
             </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">روز</label>
-              <input
-                type="number"
-                min="1"
-                max="31"
-                value={day}
-                onChange={(e) => setDay(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-center font-bold"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <PersianDatePicker
+                label="انتخاب از تقویم شمسی:"
+                value={`${year}/${month < 10 ? '0' + month : month}/${day < 10 ? '0' + day : day}`}
+                onChange={(_, details) => {
+                  if (details) {
+                    setYear(details.year);
+                    setMonth(details.month as PersianMonthNumber);
+                    setDay(details.day);
+                  }
+                }}
               />
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1 text-[11px]">سال</label>
+                  <input
+                    type="number"
+                    value={year}
+                    onChange={(e) => setYear(Number(e.target.value))}
+                    className="w-full px-2 py-2 border border-slate-300 rounded-lg text-center font-bold text-xs focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1 text-[11px]">ماه</label>
+                  <select
+                    value={month}
+                    onChange={(e) => setMonth(Number(e.target.value) as PersianMonthNumber)}
+                    className="w-full px-1 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:ring-1 focus:ring-blue-500"
+                  >
+                    {PERSIAN_MONTHS.map(m => (
+                      <option key={m.num} value={m.num}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1 text-[11px]">روز</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={day}
+                    onChange={(e) => setDay(Number(e.target.value))}
+                    className="w-full px-2 py-2 border border-slate-300 rounded-lg text-center font-bold text-xs focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 

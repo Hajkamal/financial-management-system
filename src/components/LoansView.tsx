@@ -16,6 +16,7 @@ import { Loan, CurrencyMode, FinancialTransaction, PersianMonthNumber } from '..
 import { formatCurrency, toPersianDigits, PERSIAN_MONTHS, exportLoansToExcel } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { AmountInput } from './AmountInput';
+import { PersianDatePicker } from './PersianDatePicker';
 
 interface LoansViewProps {
   loans: Loan[];
@@ -438,26 +439,18 @@ export const LoansView: React.FC<LoansViewProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">تاریخ شروع تسهیلات</label>
-                  <input
-                    type="text"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    placeholder="۱۴۰۳/۱۱/۰۱"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none text-left"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">تاریخ سررسید قسط بعدی</label>
-                  <input
-                    type="text"
-                    value={nextDueDate}
-                    onChange={(e) => setNextDueDate(e.target.value)}
-                    placeholder="۱۴۰۴/۰۸/۱۵"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none text-left"
-                  />
-                </div>
+                <PersianDatePicker
+                  label="تاریخ شروع تسهیلات"
+                  value={startDate}
+                  onChange={(val) => setStartDate(val)}
+                  placeholder="۱۴۰۳/۱۱/۰۱"
+                />
+                <PersianDatePicker
+                  label="تاریخ سررسید قسط بعدی"
+                  value={nextDueDate}
+                  onChange={(val) => setNextDueDate(val)}
+                  placeholder="۱۴۰۵/۰۸/۱۵"
+                />
               </div>
 
               <div>
