@@ -17,7 +17,7 @@ import {
   Smartphone,
   ShieldCheck
 } from 'lucide-react';
-import { FinancialTransaction, Employee, SalaryMatrixItem, CompanyMember, Loan, FiscalYear, AppUser } from '../types';
+import { FinancialTransaction, Employee, SalaryMatrixItem, CompanyMember, Loan, FiscalYear, AppUser, BankAccount } from '../types';
 import { toPersianDigits, getCurrentJalaliDateTime, generateBackupFilename } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
@@ -43,6 +43,7 @@ interface BackupModalProps {
   selectedYear: number;
   fiscalYears?: FiscalYear[];
   users?: AppUser[];
+  bankAccounts?: BankAccount[];
   onRestoreData: (data: {
     transactions: FinancialTransaction[];
     employees: Employee[];
@@ -51,9 +52,11 @@ interface BackupModalProps {
     loans: Loan[];
     fiscalYears?: FiscalYear[];
     users?: AppUser[];
+    bankAccounts?: BankAccount[];
   }) => void;
   onResetToDefaults: () => void;
   onPurge1404?: () => void;
+  onClearDemoTransactions?: () => void;
   onShowToast?: (msg: string) => void;
 }
 
@@ -69,9 +72,11 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   selectedYear,
   fiscalYears,
   users,
+  bankAccounts,
   onRestoreData,
   onResetToDefaults,
   onPurge1404,
+  onClearDemoTransactions,
   onShowToast,
 }) => {
   if (!isOpen) return null;
@@ -80,6 +85,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'snapshots' | 'purge'>('export');
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [confirmPurgeOpen, setConfirmPurgeOpen] = useState(false);
+  const [confirmCleanSlateOpen, setConfirmCleanSlateOpen] = useState(false);
   const [pendingRestoreData, setPendingRestoreData] = useState<any | null>(null);
   const [copiedSuccess, setCopiedSuccess] = useState(false);
   const [pastedJsonText, setPastedJsonText] = useState('');
@@ -116,6 +122,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       year: selectedYear,
       fiscalYears: fiscalYears || [],
       users: users || [],
+      bankAccounts: bankAccounts || [],
       transactions: transactions || [],
       employees: employees || [],
       salaryMatrix: salaryMatrix || [],
@@ -126,6 +133,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         totalEmployees: employees.length,
         totalMembers: members.length,
         totalLoans: loans.length,
+        totalBankAccounts: (bankAccounts || []).length,
       }
     };
   };
@@ -238,6 +246,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       loans: parsed.loans || [],
       fiscalYears: restoredFY,
       users: parsed.users,
+      bankAccounts: parsed.bankAccounts,
       sourceInfo: {
         exportDate: parsed.exportJalaliDateTime || parsed.exportDateIso || 'نامشخص',
         companyName: parsed.companyName || companyName,
@@ -611,6 +620,25 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           {/* TAB 4: PURGE 1404 & DEFAULTS */}
           {activeTab === 'purge' && (
             <div className="space-y-4">
+              {/* Clean Slate for Real Data Entry without GitHub leak */}
+              <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/70 space-y-2">
+                <div className="flex items-center gap-2 text-indigo-950 font-bold text-sm">
+                  <Sparkles className="w-5 h-5 text-indigo-600" />
+                  <span>آماده‌سازی ورود داده‌های واقعی شرکت (شروع تمیز - Clean Slate)</span>
+                </div>
+                <p className="text-slate-700 text-xs leading-relaxed">
+                  <strong>نکته امنیت و گیت‌هاب:</strong> کلیه اطلاعاتی که در این صفحه و مرورگر وارد می‌کنید، صرفاً در حافظه محلی مرورگر (LocalStorage) ذخیره شده و هیچ رکوردی در کدهای منبع یا گیت‌هاب ارسال نخواهد شد.
+                  با کلیک روی دکمه زیر می‌توانید تمام تراکنش‌ها و اسناد تستی را پاک نموده و یک دیتابیس تمیز و خالی آماده برای ثبت اسناد واقعی سال ۱۴۰۵ در اختیار داشته باشید.
+                </p>
+                <button
+                  onClick={() => setConfirmCleanSlateOpen(true)}
+                  className="mt-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>پاکسازی اسناد آزمایشی (آماده‌سازی برای داده‌های واقعی)</span>
+                </button>
+              </div>
+
               {/* Purge 1404 explicitly */}
               <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/60 space-y-2">
                 <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
@@ -632,7 +660,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/50 space-y-2">
                 <div className="flex items-center gap-2 text-rose-900 font-bold text-sm">
                   <RotateCcw className="w-4 h-4 text-rose-600" />
-                  <span>بازنشانی کامل سیستم به مقادیر اولیه</span>
+                  <span>بازنشانی کامل سیستم به مقادیر اولیه نمونه</span>
                 </div>
                 <p className="text-rose-700 text-xs leading-relaxed">
                   این عملیات کلیه داده‌های موجود را پاک کرده و اطلاعات پایه و ماتریس سال ۱۴۰۵ را مجدداً لود می‌نماید.
@@ -690,6 +718,20 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           onClose();
         }}
         onCancel={() => setConfirmPurgeOpen(false)}
+      />
+
+      {/* Confirmation Modal for Clean Slate (Real Data Setup) */}
+      <ConfirmDeleteModal
+        isOpen={confirmCleanSlateOpen}
+        title="آماده‌سازی ورود داده‌های واقعی (حذف تراکنش‌های تستی)"
+        confirmButtonText="بله، پاکسازی اسناد تستی"
+        warningText="آیا از پاکسازی کلیه تراکنش‌ها و اسناد تستی مطمئن هستید؟ اطلاعات حساب‌های کاربری، مشخصات پرسنل و حساب‌های بانکی حفظ می‌شوند تا بتوانید اسناد مالی واقعی شرکت را از ابتدا ثبت نمایید."
+        onConfirm={() => {
+          if (onClearDemoTransactions) onClearDemoTransactions();
+          setConfirmCleanSlateOpen(false);
+          onClose();
+        }}
+        onCancel={() => setConfirmCleanSlateOpen(false)}
       />
 
       {/* Confirmation & Summary Modal for Restoring from File/Text */}

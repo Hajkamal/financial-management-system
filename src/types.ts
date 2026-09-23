@@ -44,6 +44,28 @@ export interface PersianMonthInfo {
   season: 'بهار' | 'تابستان' | 'پاییز' | 'زمستان';
 }
 
+export type BankAccountType = 'current' | 'savings' | 'short_term' | 'gharzo_al_hasane' | 'foreign' | 'other';
+
+export interface BankAccount {
+  id: string;
+  bankName: string;           // نام بانک (سامان، ملت، پاسارگاد، رسالت، ملی، صادرات، تجارت، ...)
+  accountNumber: string;       // شماره حساب
+  cardNumber?: string;         // شماره کارت ۱۶ رقمی
+  shabaNumber: string;         // شماره شبا با پیشوند IR
+  branchName?: string;         // شعبه / کد شعبه
+  accountHolder: string;       // صاحب حساب / صاحبان امضا
+  accountType: BankAccountType; // نوع حساب (جاری، قرض‌الحسنه، پس‌انداز، کوتاه‌مدت)
+  balance: number;             // موجودی دفتری به ریال
+  currency?: 'rial' | 'toman' | 'usd' | 'eur';
+  isActive: boolean;           // فعال / غیرفعال
+  posTerminalId?: string;      // شماره پایانه کارتخوان POS در صورت وجود
+  internetBankingId?: string;  // شناسه اینترنت بانک / مشتری
+  colorTheme?: string;         // تم رنگی کارت
+  notes?: string;              // توضیحات و یادداشت
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface Employee {
   id: string;
   name: string;
@@ -167,6 +189,8 @@ export interface UserPermissions {
   canExportExcel: boolean;          // دریافت خروجی‌های اکسل
   canBackupRestore: boolean;        // تهیه پشتیبان و بازگردانی اطلاعات
   canManageUsers: boolean;          // افزودن، ویرایش و مدیریت کاربران سامانه
+  canManageBankAccounts?: boolean;  // مدیریت حساب‌های بانکی شرکت
+  canUseAiAssistant?: boolean;      // استفاده از دستیار هوش مصنوعی
 }
 
 export interface AppUser {
@@ -191,6 +215,8 @@ export type ActiveTab =
   | 'dashboard'
   | 'transactions'
   | 'salary-matrix'
+  | 'bank-accounts'
+  | 'ai-assistant'
   | 'employees'
   | 'members'
   | 'loans'

@@ -45,8 +45,10 @@ export const NAV_TABS = [
   { id: 'dashboard' as ActiveTab, label: 'داشبورد اصلی', icon: BarChart3 },
   { id: 'transactions' as ActiveTab, label: 'ثبت درآمد و هزینه', icon: ReceiptText },
   { id: 'salary-matrix' as ActiveTab, label: 'حقوق و دستمزد', icon: Table2 },
+  { id: 'bank-accounts' as ActiveTab, label: 'حساب‌های بانکی', icon: Landmark },
+  { id: 'ai-assistant' as ActiveTab, label: 'دستیار هوش مصنوعی', icon: Sparkles },
   { id: 'employees' as ActiveTab, label: 'مدیریت پرسنل', icon: Users2 },
-  { id: 'loans' as ActiveTab, label: 'تسهیلات و اقساط', icon: Landmark },
+  { id: 'loans' as ActiveTab, label: 'تسهیلات و اقساط', icon: Coins },
   { id: 'members' as ActiveTab, label: 'سهامداران و اعضا', icon: UserCheck },
   { id: 'fiscal-years' as ActiveTab, label: 'سال‌های مالی', icon: CalendarCheck },
   { id: 'users' as ActiveTab, label: 'مدیریت کاربران', icon: ShieldCheck },
@@ -64,6 +66,14 @@ export const TAB_META: Record<ActiveTab, { title: string; subtitle: string }> = 
   'salary-matrix': {
     title: 'ماتریس حقوق و دستمزد پرسنل',
     subtitle: 'جدول کامل ماهانه ۱۲ ماه سال با قابلیت ویرایش سلولی و خروجی هزینه'
+  },
+  'bank-accounts': {
+    title: 'حساب‌های بانکی و نقدینگی شرکت',
+    subtitle: 'پایش حساب‌های فعال، شماره شبا، شماره کارت و مدیریت موجودی دفتری'
+  },
+  'ai-assistant': {
+    title: 'دستیار هوشمند مالی و گزارش‌گیری',
+    subtitle: 'تحلیل داده‌های سال ۱۴۰۵، مشاوره مالی و پاسخگویی با هوش مصنوعی Gemini'
   },
   'employees': {
     title: 'مدیریت کارمندان و پرسنل',
@@ -580,25 +590,26 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         </div>
       )}
 
-      {/* 4. Salary Matrix */}
+      {/* 4. Bank Accounts */}
       <button
-        onClick={() => setActiveTab('salary-matrix')}
+        onClick={() => setActiveTab('bank-accounts')}
         className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors cursor-pointer ${
-          activeTab === 'salary-matrix' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          activeTab === 'bank-accounts' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
         }`}
       >
-        <Table2 className="w-5 h-5 mb-0.5" />
-        <span className="text-[10px]">حقوق</span>
+        <Landmark className="w-5 h-5 mb-0.5" />
+        <span className="text-[10px]">بانک‌ها</span>
       </button>
 
-      {/* 5. Backup & Maintenance */}
+      {/* 5. AI Assistant */}
       <button
-        onClick={onOpenBackupModal}
-        className="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer"
-        title="پشتیبان‌گیری و بازیابی داده‌ها"
+        onClick={() => setActiveTab('ai-assistant')}
+        className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors cursor-pointer ${
+          activeTab === 'ai-assistant' ? 'text-indigo-400 font-bold' : 'text-slate-400 hover:text-indigo-300'
+        }`}
       >
-        <DatabaseBackup className="w-5 h-5 mb-0.5 text-indigo-400" />
-        <span className="text-[10px]">بکاپ</span>
+        <Sparkles className="w-5 h-5 mb-0.5 text-indigo-400" />
+        <span className="text-[10px]">هوش‌مصنوعی</span>
       </button>
     </div>
   );

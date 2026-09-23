@@ -220,7 +220,29 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         // Verify password with normalized comparison
         const savedPass = normalizePassword(localMatchedUser.password || '123456');
         if (savedPass === cleanPassword) {
-          // Successful local login
+          // Successful local login - persist immediately to localStorage
+          try {
+            localStorage.setItem('ayandeh_active_user', JSON.stringify({
+              id: localMatchedUser.id,
+              email: localMatchedUser.email,
+              user_metadata: { full_name: localMatchedUser.fullName },
+              app_metadata: {},
+              aud: 'authenticated',
+              created_at: new Date().toISOString()
+            }));
+            localStorage.setItem('ayandeh_active_user_role', localMatchedUser.role);
+          } catch {}
+
+          // Also trigger Supabase sign-in in the background if configured
+          if (isSupabaseConfigured && supabase) {
+            supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password: cleanPassword,
+            }).catch(() => {
+              // Ignore background remote auth mismatch for local user
+            });
+          }
+
           if (onLoginUser) onLoginUser(localMatchedUser);
           if (onAuthSuccess) onAuthSuccess();
           return;
@@ -276,6 +298,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               createdAt: existing?.createdAt || 'امروز',
               phone: existing?.phone || meta.phone,
             };
+
+            // Save to localStorage immediately
+            try {
+              localStorage.setItem('ayandeh_active_user', JSON.stringify(data.user));
+              localStorage.setItem('ayandeh_active_user_role', userRole);
+            } catch {}
 
             // If not found in local users on this browser, register into local state so future lookups are immediate
             if (!existing && onRegisterUser) {

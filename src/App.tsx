@@ -29,6 +29,12 @@ import {
   UsersView 
 } from './components/UsersView';
 import { 
+  BankAccountsView 
+} from './components/BankAccountsView';
+import { 
+  AiAssistantView 
+} from './components/AiAssistantView';
+import { 
   ExportExcelModal 
 } from './components/ExportExcelModal';
 import { 
@@ -52,7 +58,8 @@ import {
   PersianMonthNumber,
   MemberPayoutType,
   FiscalYear,
-  AppUser
+  AppUser,
+  BankAccount
 } from './types';
 
 import { 
@@ -64,7 +71,8 @@ import {
   INITIAL_LOANS, 
   INITIAL_TRANSACTIONS,
   INITIAL_FISCAL_YEARS,
-  INITIAL_USERS
+  INITIAL_USERS,
+  INITIAL_BANK_ACCOUNTS
 } from './data/initialData';
 
 import { 
@@ -177,6 +185,15 @@ export default function App() {
     }
   }, [selectedYear]);
 
+  // Keep active user synchronized in localStorage
+  useEffect(() => {
+    if (user) {
+      try {
+        localStorage.setItem('ayandeh_active_user', JSON.stringify(user));
+      } catch {}
+    }
+  }, [user]);
+
   // Monitor Supabase auth session and maintain persistence
   useEffect(() => {
     const savedLocalUser = (() => {
@@ -205,12 +222,10 @@ export default function App() {
           localStorage.setItem('ayandeh_active_user', JSON.stringify(session.user));
         } catch {}
       } else if (savedLocalUser) {
+        // Robust re-hydration: Retain existing user on page refresh
         setUser(savedLocalUser);
       } else {
         setUser(null);
-        try {
-          localStorage.removeItem('ayandeh_active_user');
-        } catch {}
       }
       setIsAuthLoading(false);
     }).catch((err) => {
@@ -223,18 +238,19 @@ export default function App() {
 
     // Listen for auth state transitions
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
-      if (event === 'SIGNED_OUT') {
-        setSession(null);
-        setUser(null);
-        try {
-          localStorage.removeItem('ayandeh_active_user');
-        } catch {}
-      } else if (currentSession?.user) {
+      if (currentSession?.user) {
         setSession(currentSession);
         setUser(currentSession.user);
         try {
           localStorage.setItem('ayandeh_active_user', JSON.stringify(currentSession.user));
         } catch {}
+      } else if (event === 'SIGNED_OUT') {
+        // Only clear state if explicitly signed out (checked by whether ayandeh_active_user was cleared)
+        const checkActive = localStorage.getItem('ayandeh_active_user');
+        if (!checkActive) {
+          setSession(null);
+          setUser(null);
+        }
       }
       setIsAuthLoading(false);
     });
@@ -245,6 +261,14 @@ export default function App() {
   }, []);
 
   const handleLogout = async () => {
+    try {
+      localStorage.removeItem('ayandeh_active_user');
+      localStorage.removeItem('ayandeh_active_user_role');
+      localStorage.removeItem('ayandeh_impersonated_user');
+    } catch {}
+    setUser(null);
+    setSession(null);
+    setImpersonatedUser(null);
     if (supabase) {
       try {
         await supabase.auth.signOut();
@@ -252,13 +276,6 @@ export default function App() {
         console.error('Sign out error:', err);
       }
     }
-    setUser(null);
-    setSession(null);
-    setImpersonatedUser(null);
-    try {
-      localStorage.removeItem('ayandeh_active_user');
-      localStorage.removeItem('ayandeh_impersonated_user');
-    } catch {}
     showToast('با موفقیت از سامانه خارج شدید.');
   };
 
@@ -332,6 +349,16 @@ export default function App() {
       return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_USERS;
     } catch {
       return INITIAL_USERS;
+    }
+  });
+
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
+    try {
+      const saved = localStorage.getItem('ayandeh_bank_accounts');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_BANK_ACCOUNTS;
+    } catch {
+      return INITIAL_BANK_ACCOUNTS;
     }
   });
 
@@ -470,6 +497,38 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('ayandeh_users', JSON.stringify(users));
   }, [users]);
+
+  useEffect(() => {
+    localStorage.setItem('ayandeh_bank_accounts', JSON.stringify(bankAccounts));
+  }, [bankAccounts]);
+
+  // Bank Account Handlers
+  const handleAddBankAccount = (accountData: Omit<BankAccount, 'id' | 'createdAt'>) => {
+    const newAccount: BankAccount = {
+      ...accountData,
+      id: `bank-${Date.now()}`,
+      createdAt: '۱۴۰۵/۰۱/۰۱',
+    };
+    setBankAccounts(prev => [newAccount, ...prev]);
+    showToast(`حساب بانکی «${newAccount.bankName}» با موفقیت افزوده شد.`);
+  };
+
+  const handleUpdateBankAccount = (updatedAccount: BankAccount) => {
+    setBankAccounts(prev => prev.map(acc => acc.id === updatedAccount.id ? updatedAccount : acc));
+    showToast(`اطلاعات حساب بانکی «${updatedAccount.bankName}» به‌روزرسانی شد.`);
+  };
+
+  const handleDeleteBankAccount = (id: string) => {
+    setBankAccounts(prev => prev.filter(acc => acc.id !== id));
+    showToast('حساب بانکی مورد نظر حذف گردید.');
+  };
+
+  // Clean Slate: Clear demo transactions to prepare clean system for real company data
+  const handleClearDemoTransactions = () => {
+    setTransactions([]);
+    localStorage.setItem('ayandeh_transactions', JSON.stringify([]));
+    showToast('کلیه اسناد تستی پاکسازی شدند. سامانه با صفر تراکنش آماده ثبت اطلاعات واقعی شد.');
+  };
 
   // User Management Handlers
   const handleAddUser = (userData: Omit<AppUser, 'id' | 'createdAt'>) => {
@@ -917,6 +976,7 @@ export default function App() {
       year: selectedYear,
       fiscalYears,
       users,
+      bankAccounts,
       transactions,
       employees,
       salaryMatrix,
@@ -927,6 +987,7 @@ export default function App() {
         totalEmployees: employees.length,
         totalMembers: members.length,
         totalLoans: loans.length,
+        totalBankAccounts: bankAccounts.length,
       }
     };
     const jsonString = JSON.stringify(backupObj, null, 2);
@@ -988,6 +1049,7 @@ export default function App() {
     loans: Loan[];
     fiscalYears?: FiscalYear[];
     users?: AppUser[];
+    bankAccounts?: BankAccount[];
   }) => {
     if (data.transactions) {
       const cleanedTx = data.transactions.filter(tx => tx.year !== 1404);
@@ -1000,6 +1062,10 @@ export default function App() {
     }
     if (data.members) setMembers(data.members);
     if (data.loans) setLoans(data.loans);
+    if (data.bankAccounts && Array.isArray(data.bankAccounts)) {
+      setBankAccounts(data.bankAccounts);
+      localStorage.setItem('ayandeh_bank_accounts', JSON.stringify(data.bankAccounts));
+    }
     if (data.fiscalYears && Array.isArray(data.fiscalYears) && data.fiscalYears.length > 0) {
       const cleanedFY = sanitizeFiscalYearsList(data.fiscalYears);
       setFiscalYears(cleanedFY);
@@ -1019,7 +1085,9 @@ export default function App() {
     setSalaryMatrix(INITIAL_SALARY_MATRIX);
     setMembers(INITIAL_MEMBERS);
     setLoans(INITIAL_LOANS);
+    setBankAccounts(INITIAL_BANK_ACCOUNTS);
     setFiscalYears(INITIAL_FISCAL_YEARS);
+    setUsers(INITIAL_USERS);
     setSelectedYear(1405);
     showToast('داده‌های نمونه اولیه سال ۱۴۰۵ با موفقیت بازنشانی شدند.');
   };
@@ -1047,14 +1115,19 @@ export default function App() {
       <AuthScreen 
         users={users}
         onLoginUser={(loggedInUser) => {
-          setUser({
+          const authUser = {
             id: loggedInUser.id,
             email: loggedInUser.email,
             user_metadata: { full_name: loggedInUser.fullName },
             app_metadata: {},
             aud: 'authenticated',
             created_at: new Date().toISOString()
-          } as any);
+          } as any;
+          setUser(authUser);
+          try {
+            localStorage.setItem('ayandeh_active_user', JSON.stringify(authUser));
+            localStorage.setItem('ayandeh_active_user_role', loggedInUser.role);
+          } catch {}
         }}
         onRegisterUser={handleAddUser}
         onAuthSuccess={() => {
@@ -1295,6 +1368,36 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'bank-accounts' && (
+            <BankAccountsView
+              bankAccounts={bankAccounts}
+              currencyMode={currencyMode}
+              companyName={companyName}
+              onAddAccount={handleAddBankAccount}
+              onUpdateAccount={handleUpdateBankAccount}
+              onDeleteAccount={handleDeleteBankAccount}
+              onShowToast={showToast}
+              canManage={currentAppUser?.permissions.canManageBankAccounts ?? true}
+            />
+          )}
+
+          {activeTab === 'ai-assistant' && (
+            <AiAssistantView
+              transactions={transactions}
+              employees={employees}
+              salaryMatrix={salaryMatrix}
+              members={members}
+              loans={loans}
+              bankAccounts={bankAccounts}
+              fiscalYears={fiscalYears}
+              selectedYear={selectedYear}
+              currencyMode={currencyMode}
+              companyName={companyName}
+              currentUser={currentAppUser}
+              onShowToast={showToast}
+            />
+          )}
+
           {activeTab === 'users' && (
             <UsersView
               users={users}
@@ -1344,9 +1447,11 @@ export default function App() {
         selectedYear={selectedYear}
         fiscalYears={fiscalYears}
         users={users}
+        bankAccounts={bankAccounts}
         onRestoreData={handleRestoreData}
         onResetToDefaults={handleResetToDefaults}
         onPurge1404={handlePurge1404}
+        onClearDemoTransactions={handleClearDemoTransactions}
         onShowToast={showToast}
       />
 

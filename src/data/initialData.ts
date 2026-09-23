@@ -1,4 +1,4 @@
-import { Employee, SalaryMatrixItem, CompanyMember, Loan, FinancialTransaction, FiscalYear, AppUser } from '../types';
+import { Employee, SalaryMatrixItem, CompanyMember, Loan, FinancialTransaction, FiscalYear, AppUser, BankAccount } from '../types';
 import { ALL_PERMISSIONS_GRANTED, ACCOUNTANT_PERMISSIONS, VIEWER_PERMISSIONS } from '../utils/permissions';
 
 export const INITIAL_COMPANY_NAME = 'آینده نگاران خلاق';
@@ -546,3 +546,61 @@ export const INITIAL_TRANSACTIONS: FinancialTransaction[] = [
     trackingCode: 'PAY-140506',
   },
 ];
+
+export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
+  {
+    id: 'bank-1',
+    bankName: 'بانک سامان',
+    accountNumber: '۸۴۹-۸۱۰-۲۹۴۸۳۹۲-۱',
+    cardNumber: '۶۲۱۹۸۶۱۰۳۸۲۹۱۷۴۵',
+    shabaNumber: 'IR۸۹۰۵۶۰۸۴۹۸۱۰۲۹۴۸۳۹۲۰۰۰۰۱',
+    branchName: 'شعبه مرکزی / کد ۸۴۹',
+    accountHolder: 'شرکت آینده نگاران خلاق (وحید کمالی)',
+    accountType: 'current',
+    balance: 4850000000, // 4,850,000,000 Rials (~485 million Tomans)
+    currency: 'rial',
+    isActive: true,
+    posTerminalId: 'POS-892019',
+    internetBankingId: 'AYANDEH-SAMAN-01',
+    colorTheme: 'from-blue-700 via-indigo-800 to-slate-900',
+    notes: 'حساب اصلی درآمدها و متصل به درگاه اینترنتی زرین‌پال و باسینا',
+    createdAt: '۱۴۰۵/۰۱/۰۱',
+  },
+  {
+    id: 'bank-2',
+    bankName: 'بانک قرض‌الحسنه رسالت',
+    accountNumber: '۱۰-۴۸۳۹۲۸۱-۲',
+    cardNumber: '۵۰۴۱۷۲۱۰۹۳۸۴۷۱۶۲',
+    shabaNumber: 'IR۳۴۰۷۰۰۰۰۰۱۰۴۸۳۹۲۸۱۰۰۰۰۰۲',
+    branchName: 'شعبه رسالت مرکزی / کد ۳۴۰',
+    accountHolder: 'آینده نگاران خلاق',
+    accountType: 'gharzo_al_hasane',
+    balance: 1420000000, // 1,420,000,000 Rials
+    currency: 'rial',
+    isActive: true,
+    posTerminalId: '',
+    internetBankingId: 'RESALAT-CORP-99',
+    colorTheme: 'from-teal-700 via-emerald-800 to-slate-900',
+    notes: 'حساب پرداخت اقساط و گردش تسهیلات قرض‌الحسنه پرسنل و اعضا',
+    createdAt: '۱۴۰۵/۰۱/۰۱',
+  },
+  {
+    id: 'bank-3',
+    bankName: 'بانک پاسارگاد',
+    accountNumber: '۲۹۱-۸۰۰-۹۴۸۳۷۲-۱',
+    cardNumber: '۵۰۲۲۲۹۱۰۴۸۵۹۲۷۳۴',
+    shabaNumber: 'IR۵۷۰۵۷۰۲۹۱۸۰۰۹۴۸۳۷۲۰۰۰۰۰۱',
+    branchName: 'شعبه میرداماد / کد ۲۹۱',
+    accountHolder: 'شرکت آینده نگاران خلاق',
+    accountType: 'current',
+    balance: 2360000000, // 2,360,000,000 Rials
+    currency: 'rial',
+    isActive: true,
+    posTerminalId: 'POS-PAS-4819',
+    internetBankingId: 'PAS-AYANDEH-02',
+    colorTheme: 'from-amber-600 via-yellow-700 to-slate-900',
+    notes: 'حساب پرداخت حقوق ماهانه کارمندان و هزینه‌های زیرساخت سرور',
+    createdAt: '۱۴۰۵/۰۲/۰۱',
+  },
+];
+

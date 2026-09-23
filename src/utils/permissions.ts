@@ -14,6 +14,8 @@ export const ALL_PERMISSIONS_GRANTED: UserPermissions = {
   canExportExcel: true,
   canBackupRestore: true,
   canManageUsers: true,
+  canManageBankAccounts: true,
+  canUseAiAssistant: true,
 };
 
 export const FINANCE_MANAGER_PERMISSIONS: UserPermissions = {
@@ -30,6 +32,8 @@ export const FINANCE_MANAGER_PERMISSIONS: UserPermissions = {
   canExportExcel: true,
   canBackupRestore: true,
   canManageUsers: false,
+  canManageBankAccounts: true,
+  canUseAiAssistant: true,
 };
 
 export const ACCOUNTANT_PERMISSIONS: UserPermissions = {
@@ -46,6 +50,8 @@ export const ACCOUNTANT_PERMISSIONS: UserPermissions = {
   canExportExcel: true,
   canBackupRestore: false,
   canManageUsers: false,
+  canManageBankAccounts: true,
+  canUseAiAssistant: true,
 };
 
 export const VIEWER_PERMISSIONS: UserPermissions = {
@@ -62,6 +68,8 @@ export const VIEWER_PERMISSIONS: UserPermissions = {
   canExportExcel: true,
   canBackupRestore: false,
   canManageUsers: false,
+  canManageBankAccounts: false,
+  canUseAiAssistant: true,
 };
 
 export function getPermissionsByRole(role: UserRole): UserPermissions {
@@ -167,6 +175,18 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     key: 'canManageUsers',
     title: 'مدیریت کاربران و سطوح دسترسی',
     description: 'تعریف کاربر جدید، تخصیص دسترسی‌ها، تغییر کلمه عبور و فعال/غیرفعال‌سازی',
+    category: 'system',
+  },
+  {
+    key: 'canManageBankAccounts',
+    title: 'مدیریت حساب‌های بانکی شرکت',
+    description: 'تعریف و ویرایش حساب‌های فعال شرکت، شماره شبا، شماره کارت و موجودی‌ها',
+    category: 'financial',
+  },
+  {
+    key: 'canUseAiAssistant',
+    title: 'دستیار هوش مصنوعی و گزارش‌گیری هوشمند',
+    description: 'دسترسی به تحلیل وضعیت مالی، خلاصه عملکرد و مشاوره هوشمند مالی',
     category: 'system',
   },
 ];
