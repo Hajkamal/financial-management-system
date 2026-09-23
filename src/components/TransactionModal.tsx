@@ -34,7 +34,7 @@ import {
 } from '../utils/formatters';
 import { AmountInput } from './AmountInput';
 import { PersianDatePicker } from './PersianDatePicker';
-import { getTodayJalali } from '../utils/jalali';
+import { getTodayJalali, getCurrentJalaliDateTime } from '../utils/jalali';
 import { toPersianDigits } from '../utils/formatters';
 
 interface TransactionModalProps {
@@ -126,7 +126,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     const dayStr = day < 10 ? `0${day}` : `${day}`;
     const dateString = `${year}/${monthStr}/${dayStr}`;
 
-    const nowStr = `${year}/${monthStr}/${dayStr}`;
+    // زمان دقیق ثبت تراکنش در سامانه (متمایز از تاریخ وقوع هزینه/درآمد)
+    const currentRegistrationDateTime = getCurrentJalaliDateTime().fullString;
 
     const tx: FinancialTransaction = {
       id: editingTransaction ? editingTransaction.id : `tx-${Date.now()}`,
@@ -147,13 +148,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       relatedEmployeeId: category === 'salary' ? relatedEmployeeId : undefined,
       relatedLoanId: category === 'loan_installment' ? relatedLoanId : undefined,
 
-      // اطلاعات کاربر ثبت‌کننده و ویرایش‌کننده
+      // اطلاعات کاربر ثبت‌کننده و زمان ثبت در سامانه
       createdBy: editingTransaction?.createdBy || currentUser?.email || 'vahidkamali03@gmail.com',
       createdByName: editingTransaction?.createdByName || currentUser?.fullName || 'وحید کمالی',
-      createdAt: editingTransaction?.createdAt || nowStr,
+      createdAt: editingTransaction?.createdAt || currentRegistrationDateTime,
       updatedBy: editingTransaction ? (currentUser?.email || 'vahidkamali03@gmail.com') : undefined,
       updatedByName: editingTransaction ? (currentUser?.fullName || 'وحید کمالی') : undefined,
-      updatedAt: editingTransaction ? nowStr : undefined,
+      updatedAt: editingTransaction ? currentRegistrationDateTime : undefined,
     };
 
     onSave(tx);

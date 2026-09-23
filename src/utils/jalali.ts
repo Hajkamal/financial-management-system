@@ -2,7 +2,7 @@
  * Persian / Jalali calendar utilities
  */
 
-import { PersianMonthNumber } from '../types';
+import { PersianMonthNumber, FinancialTransaction } from '../types';
 import { toPersianDigits } from './formatters';
 
 export const PERSIAN_WEEKDAYS = [
@@ -158,3 +158,98 @@ export function parseJalaliDateString(dateStr: string): { year: number; month: n
   }
   return null;
 }
+
+/**
+ * Gets current Jalali date and time string for recording the system registration timestamp (تاریخ و زمان ثبت در سامانه)
+ * e.g. "1405/02/20 - 14:35"
+ */
+export function getCurrentJalaliDateTime(): {
+  dateString: string;
+  timeString: string;
+  fullString: string;
+} {
+  const now = new Date();
+  try {
+    const formatter = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    const parts = formatter.formatToParts(now);
+    const year = parts.find(p => p.type === 'year')?.value || '1405';
+    const month = parts.find(p => p.type === 'month')?.value || '01';
+    const day = parts.find(p => p.type === 'day')?.value || '01';
+    const hour = parts.find(p => p.type === 'hour')?.value || '12';
+    const minute = parts.find(p => p.type === 'minute')?.value || '00';
+    
+    const dateString = `${year}/${month}/${day}`;
+    const timeString = `${hour}:${minute}`;
+    return {
+      dateString,
+      timeString,
+      fullString: `${dateString} - ${timeString}`
+    };
+  } catch {
+    const today = getTodayJalali();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    return {
+      dateString: today.dateString,
+      timeString: `${h}:${m}`,
+      fullString: `${today.dateString} - ${h}:${m}`
+    };
+  }
+}
+
+/**
+ * Compares two transactions based on their transaction date (occurrence date / تاریخ وقوع هزینه یا درآمد)
+ * with secondary sorting on createdAt and id.
+ * 
+ * Order 'desc': Newest transaction date first (default in accounting ledger).
+ * Order 'asc': Oldest transaction date first.
+ */
+export function compareTransactionsByDate(
+  a: FinancialTransaction,
+  b: FinancialTransaction,
+  order: 'desc' | 'asc' = 'desc'
+): number {
+  // Primary sort: Year -> Month -> Day of the transaction (هزینه‌کرد یا درآمد)
+  const aYear = a.year || 0;
+  const aMonth = a.month || 0;
+  const aDay = a.day || 1;
+
+  const bYear = b.year || 0;
+  const bMonth = b.month || 0;
+  const bDay = b.day || 1;
+
+  const dateA = aYear * 10000 + aMonth * 100 + aDay;
+  const dateB = bYear * 10000 + bMonth * 100 + bDay;
+
+  if (dateA !== dateB) {
+    return order === 'desc' ? dateB - dateA : dateA - dateB;
+  }
+
+  // Secondary sort: registration timestamp (زمان ثبت در سامانه) if available
+  const createdA = a.createdAt || '';
+  const createdB = b.createdAt || '';
+  if (createdA && createdB && createdA !== createdB) {
+    return order === 'desc' ? createdB.localeCompare(createdA) : createdA.localeCompare(createdB);
+  }
+
+  // Final tie-breaker: transaction ID
+  return order === 'desc' ? (b.id || '').localeCompare(a.id || '') : (a.id || '').localeCompare(b.id || '');
+}
+
+/**
+ * Returns a new array of transactions cleanly sorted by transaction occurrence date.
+ */
+export function sortTransactionsByDate(
+  txs: FinancialTransaction[],
+  order: 'desc' | 'asc' = 'desc'
+): FinancialTransaction[] {
+  return [...txs].sort((a, b) => compareTransactionsByDate(a, b, order));
+}
+

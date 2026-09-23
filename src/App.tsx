@@ -93,6 +93,7 @@ import {
   generateBackupFilename,
   getCurrentJalaliDateTime
 } from './utils/formatters';
+import { sortTransactionsByDate } from './utils/jalali';
 
 import { 
   supabase, 
@@ -235,7 +236,7 @@ export const reconcileVatInvoicesWithTransactions = (
     }
   });
 
-  return { updatedTxs: txs, hasChanges };
+  return { updatedTxs: sortTransactionsByDate(txs, 'desc'), hasChanges };
 };
 
 export default function App() {
@@ -854,14 +855,16 @@ export default function App() {
   const handleSaveTransaction = (tx: FinancialTransaction) => {
     setTransactions(prev => {
       const idx = prev.findIndex(t => t.id === tx.id);
+      let updated: FinancialTransaction[];
       if (idx >= 0) {
-        const updated = [...prev];
+        updated = [...prev];
         updated[idx] = tx;
-        return updated;
+      } else {
+        updated = [tx, ...prev];
       }
-      return [tx, ...prev];
+      return sortTransactionsByDate(updated, 'desc');
     });
-    showToast(`سند مالی "${tx.title}" با موفقیت ذخیره شد.`);
+    showToast(`سند مالی "${tx.title}" بر اساس تاریخ وقوع سند در سیستم مرتب و ذخیره شد.`);
   };
 
   const handleDeleteTransaction = (id: string) => {
@@ -915,7 +918,7 @@ export default function App() {
       trackingCode: `SAL-${selectedYear}${month}`,
     };
 
-    setTransactions(prev => [newTx, ...prev]);
+    setTransactions(prev => sortTransactionsByDate([newTx, ...prev], 'desc'));
     showToast(`سند هزینه حقوق ماه ${monthName} با مبلغ کل در دفتر اسناد ثبت گردید.`);
   };
 
@@ -988,7 +991,7 @@ export default function App() {
       trackingCode: params.trackingCode || `MEM-${Date.now().toString().slice(-6)}`,
     };
 
-    setTransactions(prev => [newTx, ...prev]);
+    setTransactions(prev => sortTransactionsByDate([newTx, ...prev], 'desc'));
     showToast(`سند پرداخت به ${member?.name || 'عضو'} در هزینه‌ها ثبت شد.`);
   };
 
@@ -1047,7 +1050,7 @@ export default function App() {
       trackingCode: `LN-${Date.now().toString().slice(-6)}`,
     };
 
-    setTransactions(prev => [newTx, ...prev]);
+    setTransactions(prev => sortTransactionsByDate([newTx, ...prev], 'desc'));
     showToast(`قسط تسهیلات با موفقیت واریز و در هزینه‌ها ثبت شد.`);
   };
 

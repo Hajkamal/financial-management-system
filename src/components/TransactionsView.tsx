@@ -23,7 +23,9 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
-  Layers
+  Layers,
+  Clock,
+  ArrowUpDown
 } from 'lucide-react';
 import { 
   FinancialTransaction, 
@@ -48,7 +50,7 @@ import {
 } from '../utils/formatters';
 import { PersianDatePicker } from './PersianDatePicker';
 import { AmountInput } from './AmountInput';
-import { parseJalaliDateString, getTodayJalali } from '../utils/jalali';
+import { parseJalaliDateString, getTodayJalali, compareTransactionsByDate } from '../utils/jalali';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface TransactionsViewProps {
@@ -63,6 +65,13 @@ interface TransactionsViewProps {
   currentUser?: AppUser | null;
   users?: AppUser[];
 }
+
+export type TransactionSortOption = 
+  | 'date_desc'     // جدیدترین تاریخ سند (هزینه‌کرد/درآمد) [پیش‌فرض]
+  | 'date_asc'      // قدیمی‌ترین تاریخ سند (هزینه‌کرد/درآمد)
+  | 'created_desc'  // جدیدترین زمان ثبت در سامانه
+  | 'amount_desc'   // بیشترین مبلغ
+  | 'amount_asc';   // کمترین مبلغ
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({
   transactions = [],
@@ -82,6 +91,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [subCategoryFilter, setSubCategoryFilter] = useState<string>('all');
   const [monthFilter, setMonthFilter] = useState<string>('all');
   const [creatorFilter, setCreatorFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<TransactionSortOption>('date_desc');
   
   // Advanced filters state
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -158,8 +168,27 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       return true;
     }).sort((a, b) => {
-      if (b.month !== a.month) return b.month - a.month;
-      return b.day - a.day;
+      if (sortBy === 'date_asc') {
+        return compareTransactionsByDate(a, b, 'asc');
+      }
+      if (sortBy === 'created_desc') {
+        const createdA = a.createdAt || '';
+        const createdB = b.createdAt || '';
+        if (createdA !== createdB) {
+          return createdB.localeCompare(createdA);
+        }
+        return compareTransactionsByDate(a, b, 'desc');
+      }
+      if (sortBy === 'amount_desc') {
+        if (b.amount !== a.amount) return b.amount - a.amount;
+        return compareTransactionsByDate(a, b, 'desc');
+      }
+      if (sortBy === 'amount_asc') {
+        if (a.amount !== b.amount) return a.amount - b.amount;
+        return compareTransactionsByDate(a, b, 'asc');
+      }
+      // Default: 'date_desc' - مرتب‌سازی بر اساس تاریخ سند (هزینه‌کرد یا درآمد) به صورت نزولی
+      return compareTransactionsByDate(a, b, 'desc');
     });
   }, [
     transactions, 
@@ -174,7 +203,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     minAmount, 
     maxAmount, 
     currencyMode, 
-    searchTerm
+    searchTerm,
+    sortBy
   ]);
 
   // Date preset handler
@@ -452,26 +482,47 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </button>
           </div>
 
-          {/* Quick Month Selector */}
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-400 hidden sm:block" />
-            <select
-              value={monthFilter}
-              onChange={(e) => {
-                setMonthFilter(e.target.value);
-                if (e.target.value !== 'all') {
-                  setStartDate('');
-                  setEndDate('');
-                  setDatePreset('all');
-                }
-              }}
-              className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-slate-50 cursor-pointer"
-            >
-              <option value="all">تمام ماه‌های سال {selectedYear}</option>
-              {PERSIAN_MONTHS.map(m => (
-                <option key={m.num} value={m.num}>{m.name}</option>
-              ))}
-            </select>
+          {/* Quick Month & Sort Controls */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Sort Selector */}
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg shadow-2xs">
+              <ArrowUpDown className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span className="text-[11px] text-slate-500 font-bold hidden sm:inline">مرتب‌سازی:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as TransactionSortOption)}
+                className="text-xs bg-transparent border-none focus:outline-none font-bold text-slate-800 cursor-pointer"
+                aria-label="نحوه مرتب‌سازی اسناد مالی"
+              >
+                <option value="date_desc">📅 تاریخ سند: جدیدترین به قدیمی‌ترین (پیش‌فرض)</option>
+                <option value="date_asc">📅 تاریخ سند: قدیمی‌ترین به جدیدترین</option>
+                <option value="created_desc">⏱️ زمان ثبت در سیستم (جدیدترین ثبت)</option>
+                <option value="amount_desc">💰 مبلغ: بیشترین به کمترین</option>
+                <option value="amount_asc">💰 مبلغ: کمترین به بیشترین</option>
+              </select>
+            </div>
+
+            {/* Quick Month Selector */}
+            <div className="flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-slate-400 hidden sm:block" />
+              <select
+                value={monthFilter}
+                onChange={(e) => {
+                  setMonthFilter(e.target.value);
+                  if (e.target.value !== 'all') {
+                    setStartDate('');
+                    setEndDate('');
+                    setDatePreset('all');
+                  }
+                }}
+                className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-slate-50 cursor-pointer"
+              >
+                <option value="all">تمام ماه‌های سال {selectedYear}</option>
+                {PERSIAN_MONTHS.map(m => (
+                  <option key={m.num} value={m.num}>{m.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -871,14 +922,26 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
         {/* Filter Summary Banner */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 text-xs">
-          <span className="text-slate-500 font-medium">
-            تعداد اسناد یافت شده: <strong className="text-slate-900 font-bold">{toPersianDigits(filtered.length)}</strong> مورد
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-slate-500 font-medium">
+              تعداد اسناد یافت شده: <strong className="text-slate-900 font-bold">{toPersianDigits(filtered.length)}</strong> مورد
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-blue-50 text-blue-800 border border-blue-200/80 font-medium">
+              <Calendar className="w-3 h-3 text-blue-600 shrink-0" />
+              <span>
+                {sortBy === 'date_desc' && 'مرتب‌سازی: جدیدترین تاریخ وقوع سند (هزینه‌کرد/درآمد)'}
+                {sortBy === 'date_asc' && 'مرتب‌سازی: قدیمی‌ترین تاریخ وقوع سند (هزینه‌کرد/درآمد)'}
+                {sortBy === 'created_desc' && 'مرتب‌سازی: جدیدترین زمان ثبت در سامانه'}
+                {sortBy === 'amount_desc' && 'مرتب‌سازی: بالاترین مبلغ'}
+                {sortBy === 'amount_asc' && 'مرتب‌سازی: پایین‌ترین مبلغ'}
+              </span>
+            </span>
             {activeFilterCount > 0 && (
-              <span className="mr-2 text-blue-600 font-bold">
+              <span className="text-blue-600 font-bold">
                 (با اعمال {toPersianDigits(activeFilterCount)} فیلتر جستجو)
               </span>
             )}
-          </span>
+          </div>
 
           <div className="flex items-center gap-3">
             <span className="text-emerald-600 font-bold">
@@ -955,11 +1018,20 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                         </div>
                         <div>
                           <h4 className="font-bold text-slate-900 text-xs sm:text-sm line-clamp-1">{t.title}</h4>
-                          <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
-                            <span>{t.dateString}</span>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-600 mt-0.5 flex-wrap">
+                            <span className="font-bold text-slate-800 flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-blue-600" />
+                              تاریخ سند: {t.dateString}
+                            </span>
                             <span>•</span>
                             <span>ماه {monthName}</span>
                           </div>
+                          {t.createdAt && (
+                            <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5" title="زمان ثبت سند در سامانه">
+                              <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span>ثبت در سیستم: {t.createdAt}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -1031,7 +1103,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                     <th className="px-4 py-3">دسته‌بندی</th>
                     <th className="px-4 py-3">طرف حساب / ذینفع</th>
                     <th className="px-4 py-3">کاربر ثبت‌کننده</th>
-                    <th className="px-4 py-3">تاریخ و ماه</th>
+                    <th className="px-4 py-3">تاریخ سند و ثبت</th>
                     <th className="px-4 py-3 text-left">مبلغ ({currencyMode === 'rial' ? 'ریال' : 'تومان'})</th>
                     {(canEdit || canDelete) && (
                       <th className="px-4 py-3 w-20 text-center">عملیات</th>
@@ -1134,8 +1206,17 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
                         {/* Date */}
                         <td className="p-3 text-slate-600">
-                          <span className="font-semibold block">{t.dateString}</span>
-                          <span className="text-[11px] text-slate-400">ماه {monthName}</span>
+                          <div className="flex items-center gap-1 font-bold text-slate-900">
+                            <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                            <span>{t.dateString}</span>
+                          </div>
+                          <span className="text-[11px] text-slate-500 block mt-0.5">ماه {monthName}</span>
+                          {t.createdAt && (
+                            <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1 font-normal" title="زمان دقیق ثبت سند در سامانه">
+                              <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span>ثبت در سیستم: {t.createdAt}</span>
+                            </div>
+                          )}
                         </td>
 
                         {/* Amount */}
