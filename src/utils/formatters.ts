@@ -222,6 +222,11 @@ export const INCOME_CATEGORY_CONFIG: Record<IncomeCategory, { label: string; col
     color: 'text-amber-700',
     badgeBg: 'bg-amber-100 text-amber-800 border-amber-300',
   },
+  guarantee_refund: {
+    label: 'استرداد سپرده حسن انجام تعهدات / پیش‌پرداخت',
+    color: 'text-sky-700',
+    badgeBg: 'bg-sky-100 text-sky-800 border-sky-300',
+  },
   other_income: {
     label: 'سایر درآمدها',
     color: 'text-slate-700',
@@ -277,6 +282,11 @@ export const EXPENSE_CATEGORY_CONFIG: Record<ExpenseCategory, { label: string; c
     label: 'بدهی و اقساط تسهیلات',
     color: 'text-red-700',
     badgeBg: 'bg-red-100 text-red-800 border-red-300',
+  },
+  guarantee_deposit: {
+    label: 'واریز سپرده حسن انجام تعهدات / پیش‌پرداخت قرارداد',
+    color: 'text-indigo-700',
+    badgeBg: 'bg-indigo-100 text-indigo-800 border-indigo-300',
   },
   office_site: {
     label: 'هزینه‌های سایت و اداری',

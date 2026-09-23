@@ -114,6 +114,130 @@ const sanitizeFiscalYearsList = (list: any): FiscalYear[] => {
   return cleaned;
 };
 
+/**
+ * Ensures that every VAT invoice (seasonal or monthly) is recognized in the company's financial transactions (General Ledger).
+ * If transactions are missing or amounts mismatch, it synchronizes them without duplicating.
+ */
+export const reconcileVatInvoicesWithTransactions = (
+  invoices: VatInvoice[],
+  currentTxs: FinancialTransaction[],
+  currencyMode: CurrencyMode = 'rial'
+): { updatedTxs: FinancialTransaction[]; hasChanges: boolean } => {
+  let txs = [...currentTxs];
+  let hasChanges = false;
+
+  if (!Array.isArray(invoices) || invoices.length === 0) {
+    return { updatedTxs: txs, hasChanges: false };
+  }
+
+  invoices.forEach(inv => {
+    // 1. Monthly Invoice
+    if (inv.periodType === 'monthly') {
+      const mNum = (inv.month || 1) as PersianMonthNumber;
+      const mName = PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`;
+      const txId = `tx-vat-${inv.id}-m${mNum}`;
+      const existingTxIdx = txs.findIndex(t => t.id === txId || t.id === `tx-vat-${inv.id}`);
+      const day = mNum <= 6 ? 31 : (mNum <= 11 ? 30 : 29);
+      const dateString = `${inv.year}/${String(mNum).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+      const subCat = inv.items?.[0]?.subCategory || 'appointment';
+
+      if (existingTxIdx === -1) {
+        txs.unshift({
+          id: txId,
+          type: 'income',
+          category: 'sale_basina',
+          subCategory: subCat,
+          amount: inv.totalGrossAmount,
+          year: inv.year,
+          month: mNum,
+          day: day,
+          dateString: dateString,
+          title: `فروش خالص ماهانه باسینا (قبل از مالیات) - ${mName}`,
+          description: `صورتحساب رسمی فروش شماره ${inv.invoiceNumber} - مبلغ خالص فروش قبل از مالیات: ${formatCurrency(inv.totalGrossAmount, currencyMode)} (مالیات بر ارزش افزوده ۱۰٪: ${formatCurrency(inv.totalVatAmount, currencyMode)} در تعهدات مالیاتی منظور شد)`,
+          recipientOrPayer: 'کاربران پلتفرم باسینا (سامانه مودیان)',
+          trackingCode: inv.invoiceNumber,
+          createdAt: inv.issueDateTime
+        });
+        hasChanges = true;
+      } else if (txs[existingTxIdx].amount !== inv.totalGrossAmount) {
+        txs[existingTxIdx] = {
+          ...txs[existingTxIdx],
+          amount: inv.totalGrossAmount,
+          title: `فروش خالص ماهانه باسینا (قبل از مالیات) - ${mName}`,
+        };
+        hasChanges = true;
+      }
+    } 
+    // 2. Seasonal Invoice (3-Month)
+    else if (inv.periodType === 'seasonal') {
+      const season = inv.season || 'بهار';
+      const months = SEASON_MONTHS[season] || [1, 2, 3];
+      const subCat = inv.items?.[0]?.subCategory || 'appointment';
+
+      // Check if individual monthly invoices already exist and are registered in transactions
+      const hasSeparateMonthlyInvoices = invoices.some(
+        other => other.id !== inv.id && other.year === inv.year && other.periodType === 'monthly' && months.includes((other.month || 1) as any)
+      );
+
+      // Only skip if this is synthesized AND all 3 months already have their separate monthly transactions in the ledger
+      const allMonthlyTransactionsExist = months.every(mNum => 
+        txs.some(t => t.year === inv.year && t.month === mNum && t.type === 'income' && (t.id.startsWith('tx-vat-') || t.category === 'sale_basina'))
+      );
+
+      if (inv.isSynthesizedFromMonthly && hasSeparateMonthlyInvoices && allMonthlyTransactionsExist) {
+        return;
+      }
+
+      // Reconcile 3 months for this season using NET SALES BEFORE TAX
+      const totalGross = inv.totalGrossAmount || Math.round(inv.finalAmount / 1.1);
+      const part = Math.floor(totalGross / 3);
+      const remainder = totalGross - (part * 2);
+
+      months.forEach((mNum, idx) => {
+        const alloc = inv.monthlyAllocation?.find(a => a.month === mNum);
+        const mAmount = alloc && alloc.grossAmount && alloc.grossAmount > 0 
+          ? alloc.grossAmount 
+          : (alloc && alloc.amount > 0 ? Math.round(alloc.amount / 1.1) : (idx === 2 ? remainder : part));
+        const mName = PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`;
+        const txId = `tx-vat-${inv.id}-m${mNum}`;
+        const existingTxIdx = txs.findIndex(t => t.id === txId);
+        const day = mNum <= 6 ? 31 : (mNum <= 11 ? 30 : 29);
+        const dateString = `${inv.year}/${String(mNum).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+
+        if (existingTxIdx === -1) {
+          txs.unshift({
+            id: txId,
+            type: 'income',
+            category: 'sale_basina',
+            subCategory: subCat,
+            amount: mAmount,
+            year: inv.year,
+            month: mNum,
+            day: day,
+            dateString: dateString,
+            title: `فروش خالص باسینا (قبل از مالیات ۳ ماهه ${season}) - ${mName}`,
+            description: `سهم فروش خالص ماه ${mName} قبل از مالیات از صورتحساب فصلی ${inv.invoiceNumber} (مجموع خالص فصل: ${formatCurrency(totalGross, currencyMode)}، مالیات ارزش افزوده ۱۰٪: ${formatCurrency(inv.totalVatAmount, currencyMode)})`,
+            recipientOrPayer: 'کاربران پلتفرم باسینا (سامانه مودیان)',
+            trackingCode: inv.invoiceNumber,
+            createdAt: inv.issueDateTime
+          });
+          hasChanges = true;
+        } else if (txs[existingTxIdx].amount !== mAmount) {
+          txs[existingTxIdx] = {
+            ...txs[existingTxIdx],
+            amount: mAmount,
+            title: `فروش خالص باسینا (قبل از مالیات ۳ ماهه ${season}) - ${mName}`,
+            description: `سهم فروش خالص ماه ${mName} قبل از مالیات از صورتحساب فصلی ${inv.invoiceNumber} (مجموع خالص فصل: ${formatCurrency(totalGross, currencyMode)}، مالیات ارزش افزوده ۱۰٪: ${formatCurrency(inv.totalVatAmount, currencyMode)})`,
+          };
+          hasChanges = true;
+        }
+      });
+    }
+  });
+
+  return { updatedTxs: txs, hasChanges };
+};
+
 export default function App() {
   const [companyName] = useState<string>(INITIAL_COMPANY_NAME);
   const [currencyMode, setCurrencyMode] = useState<CurrencyMode>('rial');
@@ -289,6 +413,16 @@ export default function App() {
   };
 
   // Core Data States (persisted to localStorage)
+  const [vatInvoices, setVatInvoices] = useState<VatInvoice[]>(() => {
+    try {
+      const saved = localStorage.getItem('ayandeh_vat_invoices');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_VAT_INVOICES;
+    } catch {
+      return INITIAL_VAT_INVOICES;
+    }
+  });
+
   const [transactions, setTransactions] = useState<FinancialTransaction[]>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_transactions');
@@ -301,7 +435,15 @@ export default function App() {
         !tx.dateString?.startsWith('1404') && 
         !tx.dateString?.startsWith('۱۴۰۴')
       );
-      return cleaned.length > 0 ? cleaned : INITIAL_TRANSACTIONS;
+      const baseList = cleaned.length > 0 ? cleaned : INITIAL_TRANSACTIONS;
+
+      // Always guarantee that VAT invoices (seasonal & monthly) are recognized in the general ledger
+      const savedVat = localStorage.getItem('ayandeh_vat_invoices');
+      const parsedVat = savedVat ? JSON.parse(savedVat) : INITIAL_VAT_INVOICES;
+      const invoices = Array.isArray(parsedVat) && parsedVat.length > 0 ? parsedVat : INITIAL_VAT_INVOICES;
+
+      const { updatedTxs } = reconcileVatInvoicesWithTransactions(invoices, baseList);
+      return updatedTxs;
     } catch {
       return INITIAL_TRANSACTIONS;
     }
@@ -371,16 +513,6 @@ export default function App() {
     }
   });
 
-  const [vatInvoices, setVatInvoices] = useState<VatInvoice[]>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_vat_invoices');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_VAT_INVOICES;
-    } catch {
-      return INITIAL_VAT_INVOICES;
-    }
-  });
-
   const [serviceTariffs, setServiceTariffs] = useState<ServiceTariff[]>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_service_tariffs');
@@ -396,6 +528,17 @@ export default function App() {
       localStorage.setItem('ayandeh_vat_invoices', JSON.stringify(vatInvoices));
     } catch {}
   }, [vatInvoices]);
+
+  // Automated continuous synchronization: Guarantee every VAT invoice revenue is recognized in company transactions
+  useEffect(() => {
+    const { updatedTxs, hasChanges } = reconcileVatInvoicesWithTransactions(vatInvoices, transactions, currencyMode);
+    if (hasChanges) {
+      setTransactions(updatedTxs);
+      try {
+        localStorage.setItem('ayandeh_transactions', JSON.stringify(updatedTxs));
+      } catch {}
+    }
+  }, [vatInvoices, currencyMode]);
 
   useEffect(() => {
     try {
@@ -1102,13 +1245,13 @@ export default function App() {
         type: 'income',
         category: 'sale_basina',
         subCategory: primarySubCategory,
-        amount: invoice.finalAmount,
+        amount: invoice.totalGrossAmount,
         year: invoice.year,
         month: mNum,
         day: day,
         dateString: dateString,
-        title: `فروش ماهانه باسینا (ارزش افزوده و مودیان) - ${mName}`,
-        description: `صورتحساب رسمی فروش ${invoice.invoiceNumber} - تعداد ${invoice.totalQuantity.toLocaleString('fa-IR')} خدمت/نوبت با خالص ${formatCurrency(invoice.totalGrossAmount, currencyMode)} و ارزش افزوده ۱۰٪ ${formatCurrency(invoice.totalVatAmount, currencyMode)}`,
+        title: `فروش خالص ماهانه باسینا (قبل از مالیات) - ${mName}`,
+        description: `صورتحساب رسمی فروش ${invoice.invoiceNumber} - مبلغ خالص فروش قبل از مالیات: ${formatCurrency(invoice.totalGrossAmount, currencyMode)} (مالیات بر ارزش افزوده ۱۰٪: ${formatCurrency(invoice.totalVatAmount, currencyMode)} در تعهدات مالیاتی منظور شد)`,
         recipientOrPayer: 'کاربران پلتفرم باسینا (سامانه مودیان)',
         trackingCode: invoice.invoiceNumber,
         createdBy: currentAppUser?.email,
@@ -1127,14 +1270,19 @@ export default function App() {
       const months = SEASON_MONTHS[season] || [1, 2, 3];
       const primarySubCategory = invoice.items[0]?.subCategory || 'appointment';
 
-      // If this seasonal invoice was synthesized from monthly invoices,
-      // the income is ALREADY registered by the individual monthly invoices in those 3 months.
-      // So we don't duplicate transactions in the general ledger!
-      if (invoice.isSynthesizedFromMonthly) {
+      // Check how many months already have transactions in the general ledger
+      const existingMonthlyTxsCount = months.reduce((cnt, mNum) => {
+        const hasTx = transactions.some(t => t.year === invoice.year && t.month === mNum && t.type === 'income' && (t.id.startsWith('tx-vat-') || t.category === 'sale_basina'));
+        return cnt + (hasTx ? 1 : 0);
+      }, 0);
+
+      // Only skip if all 3 individual months are ALREADY registered in the general ledger
+      if (invoice.isSynthesizedFromMonthly && existingMonthlyTxsCount === 3) {
         updatedInvoice.isSyncedToTransactions = true;
       } else {
-        // Direct Seasonal Invoice: Distribute revenue across the 3 months of the season
+        // Direct Seasonal Invoice: Distribute revenue across the 3 months of the season using NET SALES BEFORE TAX
         const generatedTxIds: string[] = [];
+        const totalGross = invoice.totalGrossAmount || Math.round(invoice.finalAmount / 1.1);
 
         // Check if custom monthly allocation is specified
         if (invoice.monthlyAllocation && invoice.monthlyAllocation.length === 3) {
@@ -1144,6 +1292,9 @@ export default function App() {
             const txId = `tx-vat-${invoice.id}-m${mNum}`;
             const day = mNum <= 6 ? 31 : (mNum <= 11 ? 30 : 29);
             const dateString = `${invoice.year}/${String(mNum).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+            const mGross = alloc.grossAmount && alloc.grossAmount > 0 
+              ? alloc.grossAmount 
+              : (alloc.amount > 0 ? Math.round(alloc.amount / 1.1) : 0);
 
             generatedTxIds.push(txId);
             newTransactionsToAdd.push({
@@ -1151,13 +1302,13 @@ export default function App() {
               type: 'income',
               category: 'sale_basina',
               subCategory: primarySubCategory,
-              amount: alloc.amount,
+              amount: mGross,
               year: invoice.year,
               month: mNum,
               day: day,
               dateString: dateString,
-              title: `فروش باسینا (ارزش افزوده ۳ ماهه ${season}) - ${mName}`,
-              description: `سهم درآمد ماه ${mName} از صورتحساب فصلی ${invoice.invoiceNumber} به مبلغ کل فصل ${formatCurrency(invoice.finalAmount, currencyMode)} (تعداد کل نوبت‌ها: ${invoice.totalQuantity.toLocaleString('fa-IR')})`,
+              title: `فروش خالص باسینا (قبل از مالیات ۳ ماهه ${season}) - ${mName}`,
+              description: `سهم فروش خالص ماه ${mName} قبل از مالیات از صورتحساب فصلی ${invoice.invoiceNumber} (مجموع خالص فصل: ${formatCurrency(totalGross, currencyMode)}، مالیات ارزش افزوده ۱۰٪: ${formatCurrency(invoice.totalVatAmount, currencyMode)})`,
               recipientOrPayer: 'کاربران پلتفرم باسینا (سامانه مودیان)',
               trackingCode: invoice.invoiceNumber,
               createdBy: currentAppUser?.email,
@@ -1166,9 +1317,9 @@ export default function App() {
             });
           });
         } else {
-          // Automatic 1/3 split across the 3 months
-          const part = Math.floor(invoice.finalAmount / 3);
-          const remainder = invoice.finalAmount - (part * 2);
+          // Automatic 1/3 split of NET SALES across the 3 months
+          const part = Math.floor(totalGross / 3);
+          const remainder = totalGross - (part * 2);
 
           months.forEach((mNum, idx) => {
             const mAmount = idx === 2 ? remainder : part;
@@ -1188,8 +1339,8 @@ export default function App() {
               month: mNum,
               day: day,
               dateString: dateString,
-              title: `فروش باسینا (ارزش افزوده ۳ ماهه ${season}) - ${mName}`,
-              description: `سهم درآمد ماه ${mName} از صورتحساب فصلی ${invoice.invoiceNumber} به مبلغ کل فصل ${formatCurrency(invoice.finalAmount, currencyMode)} (تعداد کل نوبت‌ها: ${invoice.totalQuantity.toLocaleString('fa-IR')})`,
+              title: `فروش خالص باسینا (قبل از مالیات ۳ ماهه ${season}) - ${mName}`,
+              description: `سهم فروش خالص ماه ${mName} قبل از مالیات از صورتحساب فصلی ${invoice.invoiceNumber} (مجموع خالص فصل: ${formatCurrency(totalGross, currencyMode)}، مالیات ارزش افزوده ۱۰٪: ${formatCurrency(invoice.totalVatAmount, currencyMode)})`,
               recipientOrPayer: 'کاربران پلتفرم باسینا (سامانه مودیان)',
               trackingCode: invoice.invoiceNumber,
               createdBy: currentAppUser?.email,

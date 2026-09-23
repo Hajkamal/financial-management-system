@@ -6,6 +6,7 @@ export type IncomeCategory =
   | 'shareholder_deposit' // واریزی سهامداران
   | 'capital_raise'       // جذب سرمایه
   | 'zarinpal_gateway'    // درگاه زرین پال / آنلاین
+  | 'guarantee_refund'    // استرداد و برگشت سپرده حسن انجام تعهدات قراردادها / پیش‌پرداخت
   | 'other_income';       // سایر درآمدها
 
 export type BasinaSubCategory =
@@ -24,6 +25,7 @@ export type ExpenseCategory =
   | 'insurance'             // هزینه بیمه کارمندان
   | 'shareholder_payout'    // پرداختی به اعضا (حقوق یا برداشت)
   | 'loan_installment'      // بدهی های شرکت / تسهیلات پرداختی
+  | 'guarantee_deposit'     // واریز سپرده حسن انجام تعهدات قراردادها / پیش‌پرداخت‌ها در تراز مالی
   | 'office_site';          // هزینه های سایت و امور جاری
 
 export type InfrastructureSubCategory =

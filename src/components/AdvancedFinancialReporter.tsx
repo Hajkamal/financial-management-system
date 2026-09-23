@@ -42,7 +42,7 @@ interface AdvancedFinancialReporterProps {
   onShowToast?: (msg: string) => void;
 }
 
-type CategoryFilterType = 'all' | 'basina' | 'salary' | 'infrastructure' | 'loans';
+type CategoryFilterType = 'all' | 'basina' | 'salary' | 'infrastructure' | 'loans' | 'guarantee';
 type QuarterFilterType = 'all' | 'h1' | 'h2' | 'q1' | 'q2' | 'q3' | 'q4';
 
 export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps> = ({
@@ -81,6 +81,9 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
       }
       if (catFilter === 'loans') {
         return t.category === 'loan_installment';
+      }
+      if (catFilter === 'guarantee') {
+        return t.category === 'guarantee_deposit' || t.category === 'guarantee_refund' || t.title.includes('حسن انجام تعهدات') || t.title.includes('پیش‌پرداخت');
       }
 
       return true;
@@ -271,6 +274,7 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
             <option value="salary">فقط حقوق و دستمزد پرسنل</option>
             <option value="infrastructure">فقط زیرساخت، سرور و پیامک</option>
             <option value="loans">فقط اقساط تسهیلات و وام‌ها</option>
+            <option value="guarantee">فقط پیش‌پرداخت‌ها و سپرده‌های تعهدات (تراز مالی)</option>
           </select>
         </div>
 

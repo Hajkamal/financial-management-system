@@ -883,6 +883,14 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
                               </button>
                             )}
                             <button
+                              onClick={() => onSyncInvoiceToTransactions(seasonalInv)}
+                              className="px-2.5 py-1.5 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/40 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                              title="تطبیق و ثبت رسمی این فاکتور فصلی در دفاتر درآمدی شرکت (دفتر کل)"
+                            >
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              <span>تطبیق با درآمد شرکت</span>
+                            </button>
+                            <button
                               onClick={() => handlePrintOfficialInvoice(seasonalInv)}
                               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer transition-colors"
                             >
@@ -1039,10 +1047,19 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
 
                     <div className="flex items-center gap-2 shrink-0">
                       {inv.isSyncedToTransactions ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>ثبت در تراکنش‌های درآمدی</span>
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>ثبت در درآمدهای شرکت</span>
+                          </span>
+                          <button
+                            onClick={() => onSyncInvoiceToTransactions(inv)}
+                            className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                            title="تطبیق و به‌روزرسانی مجدد در دفتر کل درآمدها"
+                          >
+                            <RotateCw className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       ) : (
                         <button
                           onClick={() => onSyncInvoiceToTransactions(inv)}

@@ -979,6 +979,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                     <div className="flex items-center justify-between gap-2 pt-1 text-[11px]">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {badge}
+                        {(t.id.startsWith('tx-vat-') || t.recipientOrPayer?.includes('مودیان')) && (
+                          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold">
+                            <span>سند فروش ارزش افزوده و مودیان</span>
+                          </span>
+                        )}
                         {t.recipientOrPayer && (
                           <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
                             طرف حساب: {t.recipientOrPayer}

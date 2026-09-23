@@ -9,7 +9,13 @@ import {
   Calendar, 
   PieChart, 
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  ShieldCheck,
+  Building2,
+  ArrowDownLeft,
+  ArrowUpRight,
+  RotateCcw,
+  Sparkles
 } from 'lucide-react';
 import { 
   FinancialTransaction, 
@@ -137,6 +143,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       infraSubTotals[sub] = (infraSubTotals[sub] || 0) + t.amount;
     });
 
+    // VAT / Modian recognized revenue in period (فروش خالص قبل از مالیات)
+    const vatSalesInPeriod = filteredTxs
+      .filter(t => t.type === 'income' && (t.id.startsWith('tx-vat-') || t.recipientOrPayer?.includes('مودیان') || t.title?.includes('ارزش افزوده')))
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Prepayments & Guarantee Deposits (سپرده‌های حسن انجام تعهدات و پیش‌پرداخت‌ها در تراز مالی)
+    const guaranteeDepositsPaid = filteredTxs
+      .filter(t => t.type === 'expense' && (t.category === 'guarantee_deposit' || t.title.includes('حسن انجام تعهدات') || t.title.includes('سپرده قرارداد') || t.title.includes('پیش‌پرداخت')))
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const guaranteeDepositsRefunded = filteredTxs
+      .filter(t => t.type === 'income' && (t.category === 'guarantee_refund' || t.title.includes('استرداد سپرده') || t.title.includes('برگشت سپرده') || t.title.includes('برگشت پیش‌پرداخت')))
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // مانده خالص پیش‌پرداخت‌ها و سپرده‌ها در تراز مالی شرکت
+    const guaranteeActiveBalance = guaranteeDepositsPaid - guaranteeDepositsRefunded;
+
+    // لیست تراکنش‌های مرتبط با پیش‌پرداخت‌ها و سپرده‌های تعهدات
+    const guaranteeTransactions = filteredTxs.filter(t => 
+      t.category === 'guarantee_deposit' || 
+      t.category === 'guarantee_refund' || 
+      t.title.includes('حسن انجام تعهدات') || 
+      t.title.includes('سپرده قرارداد') || 
+      t.title.includes('پیش‌پرداخت')
+    );
+
     return {
       totalIncome,
       totalExpense,
@@ -145,6 +177,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       totalSalaries,
       totalMemberPayout,
       totalLoanRemaining,
+      vatSalesInPeriod,
+      guaranteeDepositsPaid,
+      guaranteeDepositsRefunded,
+      guaranteeActiveBalance,
+      guaranteeTransactions,
       incomeByCategory: Object.values(incomeByCategory),
       expenseByCategory: Object.values(expenseByCategory),
       basinaSubTotals,
@@ -267,12 +304,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Main KPI Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
         
-        {/* Total Income */}
+        {/* Total Income (Net Sales Before Tax) */}
         <div className="bg-white border-2 border-slate-100 p-5 rounded-xl flex flex-col items-start shadow-xs hover:border-slate-200 transition-colors relative">
           <div className="w-full flex items-center justify-between mb-1">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">کل درآمدها</span>
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">کل درآمدها (فروش خالص)</span>
             <div className="w-6 h-6 rounded bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <TrendingUp className="w-3.5 h-3.5" />
             </div>
@@ -280,9 +317,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="text-2xl font-black text-slate-900 tracking-tight mt-1">
             {formatCurrency(stats.totalIncome, currencyMode)}
           </div>
-          <p className="text-xs text-slate-400 mt-2">
-            فروش باسینا، سپید، سرمایه و درگاه
-          </p>
+          {stats.vatSalesInPeriod > 0 ? (
+            <div className="mt-2 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 font-medium">
+              شامل {formatCurrency(stats.vatSalesInPeriod, currencyMode)} فروش خالص مودیان (قبل از مالیات)
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 mt-2">
+              فروش خالص باسینا، سپید، سرمایه و درگاه
+            </p>
+          )}
         </div>
 
         {/* Total Expense */}
@@ -297,7 +340,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {formatCurrency(stats.totalExpense, currencyMode)}
           </div>
           <p className="text-xs text-slate-400 mt-2">
-            حقوق، مارکتینگ علیزاده، سرور، اقساط
+            حقوق، مارکتینگ، زیرساخت، اقساط
           </p>
         </div>
 
@@ -319,6 +362,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xs text-slate-400 mt-2">
             حاشیه سود دوره: {toPersianDigits(stats.profitMargin)}%
           </p>
+        </div>
+
+        {/* Prepayments & Guarantees in Balance Sheet */}
+        <div className="bg-white border-2 border-indigo-100 p-5 rounded-xl flex flex-col items-start shadow-xs hover:border-indigo-200 transition-colors relative bg-indigo-50/10">
+          <div className="w-full flex items-center justify-between mb-1">
+            <span className="text-xs text-indigo-900 font-bold uppercase tracking-tighter">پیش‌پرداخت‌ها در تراز مالی</span>
+            <div className="w-6 h-6 rounded bg-indigo-100 text-indigo-700 flex items-center justify-center">
+              <ShieldCheck className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-indigo-900 tracking-tight mt-1">
+            {formatCurrency(stats.guaranteeActiveBalance, currencyMode)}
+          </div>
+          {stats.guaranteeDepositsRefunded > 0 ? (
+            <div className="mt-2 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 font-medium">
+              برگشت به شرکت: +{formatCurrency(stats.guaranteeDepositsRefunded, currencyMode)}
+            </div>
+          ) : (
+            <p className="text-xs text-indigo-600 mt-2">
+              سپرده حسن انجام تعهدات قراردادها
+            </p>
+          )}
         </div>
 
         {/* Debt / Loans Remaining */}
@@ -451,6 +516,161 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Prepayments & Performance Guarantees in Balance Sheet */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+        <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between bg-slate-50/50 gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900">
+                  پیش‌پرداخت‌ها و سپرده‌های حسن انجام تعهدات در تراز مالی
+                </h3>
+                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-bold border border-indigo-200">
+                  دارایی جاری در تراز مالی شرکت
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                مبالغ تودیع‌شده بابت تضمین قراردادهای دانشگاه‌ها، دانشکده‌ها و بیمارستان‌ها که پس از خاتمه یا تحویل پروژه به حساب شرکت بازمی‌گردد
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onOpenNewTransaction}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer shadow-2xs"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>ثبت واریز یا برگشت سپرده</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 3 Metric Summary Boxes */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-5 sm:p-6 bg-slate-50/40 border-b border-slate-100">
+          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+            <span className="text-xs text-slate-500 font-medium block mb-1">
+              کل سپرده‌های واریزی حسن انجام تعهدات
+            </span>
+            <div className="text-xl font-black text-indigo-700">
+              {formatCurrency(stats.guaranteeDepositsPaid, currencyMode)}
+            </div>
+            <span className="text-[11px] text-slate-400 mt-1 block">
+              تودیع شده نزد دانشکده‌ها و کارفرمایان طرف قرارداد
+            </span>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+            <span className="text-xs text-slate-500 font-medium block mb-1">
+              وجوه استرداد و برگشت‌خورده به حساب شرکت
+            </span>
+            <div className="text-xl font-black text-emerald-600">
+              +{formatCurrency(stats.guaranteeDepositsRefunded, currencyMode)}
+            </div>
+            <span className="text-[11px] text-emerald-600/90 mt-1 block font-medium">
+              آزادسازی شده پس از اتمام تعهدات و اخذ مفاصاحساب
+            </span>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-indigo-200 shadow-2xs bg-indigo-50/30">
+            <span className="text-xs text-indigo-900 font-bold block mb-1">
+              مانده پیش‌پرداخت‌ها در تراز مالی (سپرده باز)
+            </span>
+            <div className="text-xl font-black text-indigo-950">
+              {formatCurrency(stats.guaranteeActiveBalance, currencyMode)}
+            </div>
+            <span className="text-[11px] text-indigo-700 mt-1 block font-medium">
+              سرمایه نقدی شرکت در انتظار تسویه و عودت نزد کارفرمایان
+            </span>
+          </div>
+        </div>
+
+        {/* Transactions list */}
+        <div className="p-5 sm:p-6">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-bold text-slate-700">
+              گردش حساب پیش‌پرداخت‌ها و استرداد سپرده‌های قراردادها:
+            </h4>
+            <span className="text-xs text-slate-400 font-medium">
+              {toPersianDigits(stats.guaranteeTransactions.length)} سند مالی
+            </span>
+          </div>
+
+          {stats.guaranteeTransactions.length === 0 ? (
+            <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+              <ShieldCheck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-slate-500 font-medium">
+                هیچ سپرده حسن انجام تعهدات یا پیش‌پرداختی در این بازه زمانی ثبت نشده است.
+              </p>
+              <button
+                onClick={onOpenNewTransaction}
+                className="mt-3 text-xs text-indigo-600 hover:text-indigo-700 font-bold underline cursor-pointer"
+              >
+                ثبت اولین واریز یا استرداد سپرده قرارداد
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {stats.guaranteeTransactions.map(tx => {
+                const isRefund = tx.type === 'income' || tx.category === 'guarantee_refund';
+                return (
+                  <div
+                    key={tx.id}
+                    className="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                        isRefund ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'
+                      }`}>
+                        {isRefund ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h5 className="text-xs sm:text-sm font-bold text-slate-900">{tx.title}</h5>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                            isRefund 
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                              : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                          }`}>
+                            {isRefund ? 'استرداد و برگشت وجه به شرکت' : 'واریز سپرده حسن انجام تعهدات'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1 flex-wrap">
+                          {tx.recipientOrPayer && (
+                            <span className="font-medium text-slate-700">طرف حساب: {tx.recipientOrPayer}</span>
+                          )}
+                          <span>تاریخ: {tx.dateString}</span>
+                          {tx.trackingCode && <span>کد پیگیری: {tx.trackingCode}</span>}
+                        </div>
+                        {tx.description && (
+                          <p className="text-[11px] text-slate-600 mt-1.5 bg-slate-50 px-2 py-1 rounded">
+                            {tx.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-left shrink-0 self-end sm:self-center">
+                      <span className={`text-sm sm:text-base font-black ${
+                        isRefund ? 'text-emerald-600' : 'text-indigo-700'
+                      }`}>
+                        {isRefund ? '+' : '-'}{formatCurrency(tx.amount, currencyMode)}
+                      </span>
+                      <span className="block text-[10px] text-slate-400">
+                        {isRefund ? 'افزایش نقدینگی و تسویه پیش‌پرداخت' : 'افزایش مانده پیش‌پرداخت در تراز'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
