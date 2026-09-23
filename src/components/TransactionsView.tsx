@@ -14,7 +14,16 @@ import {
   UserCheck,
   ShieldAlert,
   User,
-  FileSpreadsheet
+  FileSpreadsheet,
+  SlidersHorizontal,
+  RotateCcw,
+  CalendarRange,
+  Banknote,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  Layers
 } from 'lucide-react';
 import { 
   FinancialTransaction, 
@@ -37,6 +46,9 @@ import {
   toPersianDigits,
   exportTransactionsToExcel
 } from '../utils/formatters';
+import { PersianDatePicker } from './PersianDatePicker';
+import { AmountInput } from './AmountInput';
+import { parseJalaliDateString, getTodayJalali } from '../utils/jalali';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface TransactionsViewProps {
@@ -67,8 +79,19 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | TransactionType>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [subCategoryFilter, setSubCategoryFilter] = useState<string>('all');
   const [monthFilter, setMonthFilter] = useState<string>('all');
   const [creatorFilter, setCreatorFilter] = useState<string>('all');
+  
+  // Advanced filters state
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [minAmount, setMinAmount] = useState<number | ''>('');
+  const [maxAmount, setMaxAmount] = useState<number | ''>('');
+  const [datePreset, setDatePreset] = useState<string>('all');
+  const [amountPreset, setAmountPreset] = useState<string>('all');
+
   const [deletingTransaction, setDeletingTransaction] = useState<{ id: string; title: string } | null>(null);
 
   // Permission flags
@@ -77,12 +100,31 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const canDelete = currentUser?.permissions.canDeleteTransactions ?? true;
   const canExport = currentUser?.permissions.canExportExcel ?? true;
 
+  const toComparableDateNum = (year: number, month: number, day: number) => {
+    return year * 10000 + month * 100 + day;
+  };
+
   // Filter transactions
   const filtered = useMemo(() => {
+    const parsedStart = parseJalaliDateString(startDate);
+    const startNum = parsedStart ? toComparableDateNum(parsedStart.year, parsedStart.month, parsedStart.day) : null;
+
+    const parsedEnd = parseJalaliDateString(endDate);
+    const endNum = parsedEnd ? toComparableDateNum(parsedEnd.year, parsedEnd.month, parsedEnd.day) : null;
+
+    // Convert amount to Rial for unified comparison
+    const minRial = minAmount !== '' && Number(minAmount) > 0
+      ? (currencyMode === 'toman' ? Number(minAmount) * 10 : Number(minAmount))
+      : null;
+    const maxRial = maxAmount !== '' && Number(maxAmount) > 0
+      ? (currencyMode === 'toman' ? Number(maxAmount) * 10 : Number(maxAmount))
+      : null;
+
     return transactions.filter(t => {
       if (t.year !== selectedYear) return false;
       if (typeFilter !== 'all' && t.type !== typeFilter) return false;
       if (categoryFilter !== 'all' && t.category !== categoryFilter) return false;
+      if (subCategoryFilter !== 'all' && t.subCategory !== subCategoryFilter) return false;
       if (monthFilter !== 'all' && t.month !== Number(monthFilter)) return false;
 
       // Creator filter
@@ -94,6 +136,16 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         }
       }
 
+      // Date range filter
+      const txDateNum = toComparableDateNum(t.year, t.month, t.day || 1);
+      if (startNum !== null && txDateNum < startNum) return false;
+      if (endNum !== null && txDateNum > endNum) return false;
+
+      // Amount range filter
+      if (minRial !== null && t.amount < minRial) return false;
+      if (maxRial !== null && t.amount > maxRial) return false;
+
+      // Text search in title, description, recipient/payer, tracking code, creator
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const matchTitle = t.title.toLowerCase().includes(query);
@@ -109,7 +161,112 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       if (b.month !== a.month) return b.month - a.month;
       return b.day - a.day;
     });
-  }, [transactions, selectedYear, typeFilter, categoryFilter, monthFilter, creatorFilter, searchTerm]);
+  }, [
+    transactions, 
+    selectedYear, 
+    typeFilter, 
+    categoryFilter, 
+    subCategoryFilter, 
+    monthFilter, 
+    creatorFilter, 
+    startDate, 
+    endDate, 
+    minAmount, 
+    maxAmount, 
+    currencyMode, 
+    searchTerm
+  ]);
+
+  // Date preset handler
+  const handleDatePreset = (preset: string) => {
+    setDatePreset(preset);
+    if (preset === 'all') {
+      setStartDate('');
+      setEndDate('');
+    } else if (preset === 'today') {
+      const today = getTodayJalali();
+      setStartDate(today.dateString);
+      setEndDate(today.dateString);
+    } else if (preset === 'this_month') {
+      const today = getTodayJalali();
+      const mStr = today.month < 10 ? `0${today.month}` : `${today.month}`;
+      const days = today.month <= 6 ? 31 : (today.month <= 11 ? 30 : 29);
+      setStartDate(`${selectedYear}/${mStr}/01`);
+      setEndDate(`${selectedYear}/${mStr}/${days < 10 ? '0' + days : days}`);
+    } else if (preset === 'q1') {
+      setStartDate(`${selectedYear}/01/01`);
+      setEndDate(`${selectedYear}/03/31`);
+    } else if (preset === 'q2') {
+      setStartDate(`${selectedYear}/04/01`);
+      setEndDate(`${selectedYear}/06/31`);
+    } else if (preset === 'q3') {
+      setStartDate(`${selectedYear}/07/01`);
+      setEndDate(`${selectedYear}/09/30`);
+    } else if (preset === 'q4') {
+      setStartDate(`${selectedYear}/10/01`);
+      setEndDate(`${selectedYear}/12/29`);
+    } else if (preset === 'h1') {
+      setStartDate(`${selectedYear}/01/01`);
+      setEndDate(`${selectedYear}/06/31`);
+    } else if (preset === 'h2') {
+      setStartDate(`${selectedYear}/07/01`);
+      setEndDate(`${selectedYear}/12/29`);
+    }
+  };
+
+  // Amount preset handler
+  const handleAmountPreset = (preset: string) => {
+    setAmountPreset(preset);
+    const factor = currencyMode === 'toman' ? 1 : 10;
+    if (preset === 'all') {
+      setMinAmount('');
+      setMaxAmount('');
+    } else if (preset === 'under10m') {
+      setMinAmount('');
+      setMaxAmount(10000000 * factor);
+    } else if (preset === '10to50m') {
+      setMinAmount(10000000 * factor);
+      setMaxAmount(50000000 * factor);
+    } else if (preset === '50to100m') {
+      setMinAmount(50000000 * factor);
+      setMaxAmount(100000000 * factor);
+    } else if (preset === 'above100m') {
+      setMinAmount(100000000 * factor);
+      setMaxAmount('');
+    }
+  };
+
+  // Reset all filters
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setTypeFilter('all');
+    setCategoryFilter('all');
+    setSubCategoryFilter('all');
+    setMonthFilter('all');
+    setCreatorFilter('all');
+    setStartDate('');
+    setEndDate('');
+    setMinAmount('');
+    setMaxAmount('');
+    setAmountPreset('all');
+    setDatePreset('all');
+  };
+
+  // Count active filters
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (searchTerm.trim()) count++;
+    if (typeFilter !== 'all') count++;
+    if (categoryFilter !== 'all') count++;
+    if (subCategoryFilter !== 'all') count++;
+    if (monthFilter !== 'all') count++;
+    if (creatorFilter !== 'all') count++;
+    if (startDate) count++;
+    if (endDate) count++;
+    if (minAmount !== '' && Number(minAmount) > 0) count++;
+    if (maxAmount !== '' && Number(maxAmount) > 0) count++;
+    return count;
+  }, [searchTerm, typeFilter, categoryFilter, subCategoryFilter, monthFilter, creatorFilter, startDate, endDate, minAmount, maxAmount]);
 
   // Totals for filtered records
   const totalIncome = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
@@ -157,8 +314,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           {canExport && (
             <button
               onClick={() => {
-                exportTransactionsToExcel(companyName, selectedYear, transactions);
-                if (onShowToast) onShowToast(`فایل اکسل تراکنش‌های سال مالی ${selectedYear} با موفقیت دانلود شد.`);
+                exportTransactionsToExcel(companyName, selectedYear, filtered);
+                if (onShowToast) {
+                  onShowToast(
+                    activeFilterCount > 0
+                      ? `فایل اکسل اسناد فیلترشده (${filtered.length} مورد) با موفقیت دانلود شد.`
+                      : `فایل اکسل تراکنش‌های سال مالی ${selectedYear} با موفقیت دانلود شد.`
+                  );
+                }
               }}
               className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
               title={`دانلود فایل اکسل تراکنش‌های سال ${selectedYear}`}
@@ -185,69 +348,124 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       </div>
 
-      {/* Filters and Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          
-          {/* Search */}
-          <div className="relative">
-            <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
+      {/* Advanced Search & Filtering Box */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        
+        {/* Quick Search & Toggle Bar */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+          {/* Main Search Input */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 absolute right-3.5 top-3 text-slate-400" />
             <input
               type="text"
-              placeholder="جستجو در عنوان، شرح، کاربر..."
+              placeholder="جستجو در عنوان سند، شرح، طرف حساب، شماره رهگیری یا نام کاربر..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pr-9 pl-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none"
+              className="w-full pr-10 pl-3 py-2.5 text-xs bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 focus:outline-none transition-all"
             />
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')}
+                className="absolute left-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Type Filter */}
-          <div>
-            <select
-              value={typeFilter}
-              onChange={(e) => {
-                setTypeFilter(e.target.value as any);
-                setCategoryFilter('all');
-              }}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-slate-50/50 cursor-pointer"
+          {/* Advanced Search Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+            className={`flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+              isAdvancedOpen || activeFilterCount > 0
+                ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-2xs'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4 text-blue-600" />
+            <span>جستجوی پیشرفته و فیلترها</span>
+            {activeFilterCount > 0 && (
+              <span className="px-2 py-0.5 text-[10px] font-black bg-blue-600 text-white rounded-full">
+                {toPersianDigits(activeFilterCount)}
+              </span>
+            )}
+            {isAdvancedOpen ? (
+              <ChevronUp className="w-3.5 h-3.5 text-blue-600 mr-1" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 mr-1" />
+            )}
+          </button>
+
+          {/* Quick Clear All Button */}
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer"
+              title="پاک کردن تمامی فیلترها"
             >
-              <option value="all">همه اسناد (درآمد و هزینه)</option>
-              <option value="income">فقط درآمدها (+)</option>
-              <option value="expense">فقط هزینه‌ها (-)</option>
-            </select>
-          </div>
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>پاک‌سازی فیلترها</span>
+            </button>
+          )}
+        </div>
 
-          {/* Category Filter */}
-          <div>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-slate-50/50 cursor-pointer"
+        {/* Quick Month & Type Pills (Always visible for fast navigation) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          {/* Transaction Type Segmented Control */}
+          <div className="inline-flex p-1 bg-slate-100 rounded-xl text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => { setTypeFilter('all'); setCategoryFilter('all'); }}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                typeFilter === 'all' 
+                  ? 'bg-white text-slate-900 font-bold shadow-2xs' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              <option value="all">همه دسته‌بندی‌ها</option>
-              {typeFilter !== 'expense' && (
-                <optgroup label="درآمدها">
-                  {Object.entries(INCOME_CATEGORY_CONFIG).map(([k, v]) => (
-                    <option key={k} value={k}>{v.label}</option>
-                  ))}
-                </optgroup>
-              )}
-              {typeFilter !== 'income' && (
-                <optgroup label="هزینه‌ها">
-                  {Object.entries(EXPENSE_CATEGORY_CONFIG).map(([k, v]) => (
-                    <option key={k} value={k}>{v.label}</option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
+              همه اسناد
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTypeFilter('income'); setCategoryFilter('all'); }}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                typeFilter === 'income' 
+                  ? 'bg-emerald-600 text-white font-bold shadow-2xs' 
+                  : 'text-emerald-700 hover:bg-emerald-50'
+              }`}
+            >
+              <ArrowDownLeft className="w-3.5 h-3.5" />
+              <span>فقط درآمدها (+)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTypeFilter('expense'); setCategoryFilter('all'); }}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                typeFilter === 'expense' 
+                  ? 'bg-rose-600 text-white font-bold shadow-2xs' 
+                  : 'text-rose-700 hover:bg-rose-50'
+              }`}
+            >
+              <ArrowUpRight className="w-3.5 h-3.5" />
+              <span>فقط هزینه‌ها (-)</span>
+            </button>
           </div>
 
-          {/* Month Filter */}
-          <div>
+          {/* Quick Month Selector */}
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-slate-400 hidden sm:block" />
             <select
               value={monthFilter}
-              onChange={(e) => setMonthFilter(e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-slate-50/50 cursor-pointer"
+              onChange={(e) => {
+                setMonthFilter(e.target.value);
+                if (e.target.value !== 'all') {
+                  setStartDate('');
+                  setEndDate('');
+                  setDatePreset('all');
+                }
+              }}
+              className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-slate-50 cursor-pointer"
             >
               <option value="all">تمام ماه‌های سال {selectedYear}</option>
               {PERSIAN_MONTHS.map(m => (
@@ -255,32 +473,409 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               ))}
             </select>
           </div>
-
-          {/* Creator Filter */}
-          <div>
-            <select
-              value={creatorFilter}
-              onChange={(e) => setCreatorFilter(e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-slate-50/50 cursor-pointer"
-            >
-              <option value="all">همه کاربران ثبت‌کننده</option>
-              {users.map(u => (
-                <option key={u.id} value={u.fullName}>
-                  ثبت توسط: {u.fullName}
-                </option>
-              ))}
-            </select>
-          </div>
-
         </div>
+
+        {/* Expandable Advanced Filters Drawer */}
+        {isAdvancedOpen && (
+          <div className="mt-4 pt-4 border-t border-slate-100 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+            
+            {/* Section 1: Persian Date Range Filtering */}
+            <div className="p-4 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                  <CalendarRange className="w-4 h-4 text-blue-600" />
+                  <span>فیلتر بر اساس بازه تاریخی (تقویم شمسی)</span>
+                </div>
+                {/* Date Quick Presets */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleDatePreset('today')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      datePreset === 'today' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    امروز
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDatePreset('this_month')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      datePreset === 'this_month' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ماه جاری
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDatePreset('q1')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      datePreset === 'q1' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    بهار (۳ ماه اول)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDatePreset('q2')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      datePreset === 'q2' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    تابستان (۳ ماه دوم)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDatePreset('q3')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      datePreset === 'q3' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    پاییز
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDatePreset('q4')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      datePreset === 'q4' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    زمستان
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDatePreset('h1')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      datePreset === 'h1' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ۶ ماهه اول
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDatePreset('h2')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      datePreset === 'h2' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ۶ ماهه دوم
+                  </button>
+                  {(startDate || endDate) && (
+                    <button
+                      type="button"
+                      onClick={() => handleDatePreset('all')}
+                      className="px-2 py-1 text-[11px] rounded-md font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 cursor-pointer"
+                    >
+                      حذف بازه تاریخ
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Date Picker Pickers */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div>
+                  <PersianDatePicker
+                    value={startDate}
+                    onChange={(val) => {
+                      setStartDate(val);
+                      setDatePreset('custom');
+                      setMonthFilter('all');
+                    }}
+                    label="از تاریخ (شروع بازه)"
+                    placeholder={`مثلاً ${selectedYear}/۰۱/۰۱`}
+                  />
+                </div>
+                <div>
+                  <PersianDatePicker
+                    value={endDate}
+                    onChange={(val) => {
+                      setEndDate(val);
+                      setDatePreset('custom');
+                      setMonthFilter('all');
+                    }}
+                    label="تا تاریخ (پایان بازه)"
+                    placeholder={`مثلاً ${selectedYear}/۰۶/۳۱`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Category, Subcategory & Creator */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {/* Category */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  دسته‌بندی اصلی اسناد
+                </label>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => {
+                    setCategoryFilter(e.target.value);
+                    setSubCategoryFilter('all');
+                  }}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-white cursor-pointer"
+                >
+                  <option value="all">همه دسته‌بندی‌ها</option>
+                  {typeFilter !== 'expense' && (
+                    <optgroup label="درآمدها (+)">
+                      {Object.entries(INCOME_CATEGORY_CONFIG).map(([k, v]) => (
+                        <option key={k} value={k}>{v.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {typeFilter !== 'income' && (
+                    <optgroup label="هزینه‌ها (-)">
+                      {Object.entries(EXPENSE_CATEGORY_CONFIG).map(([k, v]) => (
+                        <option key={k} value={k}>{v.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+
+              {/* SubCategory (conditional if Basina or Infrastructure selected) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  زیردسته تخصصی
+                </label>
+                <select
+                  value={subCategoryFilter}
+                  onChange={(e) => setSubCategoryFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-white cursor-pointer"
+                >
+                  <option value="all">همه زیردسته‌ها</option>
+                  {categoryFilter === 'sale_basina' || categoryFilter === 'all' ? (
+                    <optgroup label="خدمات پلتفرم باسینا">
+                      {Object.entries(BASINA_SUBCATEGORY_CONFIG).map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  {categoryFilter === 'infrastructure' || categoryFilter === 'all' ? (
+                    <optgroup label="فناوری و زیرساخت سرور">
+                      {Object.entries(INFRASTRUCTURE_SUBCATEGORY_CONFIG).map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                </select>
+              </div>
+
+              {/* Creator Filter */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  کاربر ثبت‌کننده سند
+                </label>
+                <select
+                  value={creatorFilter}
+                  onChange={(e) => setCreatorFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-white cursor-pointer"
+                >
+                  <option value="all">همه کاربران سیستم</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.fullName}>
+                      ثبت توسط: {u.fullName} ({u.roleTitle})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Section 3: Amount Range Filtering */}
+            <div className="p-4 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                  <Banknote className="w-4 h-4 text-emerald-600" />
+                  <span>فیلتر بر اساس بازه مبلغ ({currencyMode === 'toman' ? 'تومان' : 'ریال'})</span>
+                </div>
+                {/* Amount Quick Presets */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleAmountPreset('all')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      amountPreset === 'all' && minAmount === '' && maxAmount === ''
+                        ? 'bg-slate-900 text-white font-bold'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    همه مبالغ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAmountPreset('under10m')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      amountPreset === 'under10m' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    زیر ۱۰ میلیون تومان
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAmountPreset('10to50m')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      amountPreset === '10to50m' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ۱۰ تا ۵۰ میلیون تومان
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAmountPreset('50to100m')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      amountPreset === '50to100m' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ۵۰ تا ۱۰۰ میلیون تومان
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAmountPreset('above100m')}
+                    className={`px-2 py-1 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+                      amountPreset === 'above100m' ? 'bg-blue-600 text-white font-bold' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    بالای ۱۰۰ میلیون تومان
+                  </button>
+                  {(minAmount !== '' || maxAmount !== '') && (
+                    <button
+                      type="button"
+                      onClick={() => { setMinAmount(''); setMaxAmount(''); setAmountPreset('all'); }}
+                      className="px-2 py-1 text-[11px] rounded-md font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 cursor-pointer"
+                    >
+                      حذف فیلتر مبلغ
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Amount Range Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div>
+                  <AmountInput
+                    value={minAmount}
+                    onChange={(val) => {
+                      setMinAmount(val || '');
+                      setAmountPreset('custom');
+                    }}
+                    label="از مبلغ (حداقل)"
+                    placeholder="مثلاً ۱۰,۰۰۰,۰۰۰"
+                    unit={currencyMode === 'toman' ? 'تومان' : 'ریال'}
+                    showZeroShortcuts={false}
+                  />
+                </div>
+                <div>
+                  <AmountInput
+                    value={maxAmount}
+                    onChange={(val) => {
+                      setMaxAmount(val || '');
+                      setAmountPreset('custom');
+                    }}
+                    label="تا مبلغ (حداکثر)"
+                    placeholder="مثلاً ۱۰۰,۰۰۰,۰۰۰"
+                    unit={currencyMode === 'toman' ? 'تومان' : 'ریال'}
+                    showZeroShortcuts={false}
+                  />
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* Active Filter Chips Row */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
+            <span className="text-slate-400 font-medium ml-1">فیلترهای فعال:</span>
+
+            {searchTerm && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
+                <span>جستجو: {searchTerm}</span>
+                <button onClick={() => setSearchTerm('')} className="hover:text-blue-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {typeFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-800 border border-slate-200 rounded-lg">
+                <span>نوع: {typeFilter === 'income' ? 'درآمدها' : 'هزینه‌ها'}</span>
+                <button onClick={() => setTypeFilter('all')} className="hover:text-slate-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {(startDate || endDate) && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg">
+                <span>
+                  بازه تاریخ: {startDate || 'ابتدای سال'} تا {endDate || 'پایان سال'}
+                </span>
+                <button onClick={() => { setStartDate(''); setEndDate(''); setDatePreset('all'); }} className="hover:text-indigo-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {categoryFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg">
+                <span>
+                  دسته: {INCOME_CATEGORY_CONFIG[categoryFilter as IncomeCategory]?.label || EXPENSE_CATEGORY_CONFIG[categoryFilter as ExpenseCategory]?.label || categoryFilter}
+                </span>
+                <button onClick={() => setCategoryFilter('all')} className="hover:text-amber-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {subCategoryFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-50 text-teal-800 border border-teal-200 rounded-lg">
+                <span>
+                  زیردسته: {BASINA_SUBCATEGORY_CONFIG[subCategoryFilter as BasinaSubCategory] || INFRASTRUCTURE_SUBCATEGORY_CONFIG[subCategoryFilter as InfrastructureSubCategory] || subCategoryFilter}
+                </span>
+                <button onClick={() => setSubCategoryFilter('all')} className="hover:text-teal-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {(minAmount !== '' || maxAmount !== '') && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg">
+                <span>
+                  مبلغ: {minAmount ? `از ${formatCurrency(currencyMode === 'toman' ? Number(minAmount) * 10 : Number(minAmount), currencyMode)}` : ''} {maxAmount ? `تا ${formatCurrency(currencyMode === 'toman' ? Number(maxAmount) * 10 : Number(maxAmount), currencyMode)}` : ''}
+                </span>
+                <button onClick={() => { setMinAmount(''); setMaxAmount(''); setAmountPreset('all'); }} className="hover:text-emerald-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {creatorFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 text-purple-800 border border-purple-200 rounded-lg">
+                <span>کاربر: {creatorFilter}</span>
+                <button onClick={() => setCreatorFilter('all')} className="hover:text-purple-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            <button
+              onClick={handleResetFilters}
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 underline mr-auto cursor-pointer"
+            >
+              پاک کردن همه ({toPersianDigits(activeFilterCount)})
+            </button>
+          </div>
+        )}
 
         {/* Filter Summary Banner */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 text-xs">
           <span className="text-slate-500 font-medium">
             تعداد اسناد یافت شده: <strong className="text-slate-900 font-bold">{toPersianDigits(filtered.length)}</strong> مورد
-            {creatorFilter !== 'all' && (
+            {activeFilterCount > 0 && (
               <span className="mr-2 text-blue-600 font-bold">
-                (فیلتر کاربر: {creatorFilter})
+                (با اعمال {toPersianDigits(activeFilterCount)} فیلتر جستجو)
               </span>
             )}
           </span>

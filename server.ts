@@ -15,27 +15,29 @@ const port = parseInt(process.env.PORT || '3000', 10);
 
 app.use(express.json({ limit: '10mb' }));
 
-// Initialize Gemini on the server side
-const apiKey = process.env.GEMINI_API_KEY || '';
-const ai = apiKey
-  ? new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
+// Initialize Gemini helper with resilient multi-model fallback
+const getAIClient = () => {
+  const key = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+  if (!key) return null;
+  return new GoogleGenAI({
+    apiKey: key,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
       },
-    })
-  : null;
+    },
+  });
+};
 
 // POST /api/gemini/analyze
 app.post('/api/gemini/analyze', async (req, res) => {
   try {
-    const { prompt, systemContext } = req.body;
+    const { prompt, systemContext, history } = req.body;
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
+    const ai = getAIClient();
     if (!ai) {
       return res.status(503).json({
         error: 'کلید دسترسی هوش مصنوعی (GEMINI_API_KEY) در سرور تنظیم نشده است.',
@@ -43,28 +45,71 @@ app.post('/api/gemini/analyze', async (req, res) => {
     }
 
     const systemInstruction = `شما «دستیار هوشمند مالی و تحلیل‌گر ارشد شرکت آینده نگاران خلاق» هستید.
-وظیفه شما:
-۱. تحلیل و بررسی جامع وضعیت مالی، درآمدها، هزینه‌ها، تراز نقدینگی و جریان وجوه نقد سال ۱۴۰۵ شرکت.
-۲. ارائه گزارش‌های دقیق، خلاصه وضعیت اجرایی، پاسخ به پرسش‌های کاربر با آمار و ارقام مستند بر اساس داده‌های مالی ارائه شده.
-۳. شناسایی فرصت‌های صرفه‌جویی و کاهش هزینه‌ها (به‌ویژه در بخش‌های سرور، پیامک، کارمزدها و هزینه‌های جاری).
-۴. تحلیل وضعیت حقوق و دستمزد پرسنل، بازپرداخت اقساط تسهیلات و موجودی حساب‌های فعال بانکی شرکت.
-۵. لحن پاسخ‌ها باید کاملاً فارسی، حرفه‌ای، محترمانه، ساختاریافته با قالب‌بندی مرتب (عناوین با #، بولیت‌ها، نکات کلیدی و جداکننده هزارگان اعداد) باشد.
-۶. همیشه مشخص کنید که مبالغ بر حسب ریال یا تومان برآورد شده‌اند.
+دستورالعمل‌های حیاتی:
+۱. تحلیل دقیق و اختصاصی بر اساس پرسش مشخص کاربر. به هیچ عنوان پاسخ کلی، تکراری یا قالب از پیش آماده ارائه ندهید.
+۲. اگر کاربر درباره پرسنل یا حقوق پرسید، منحصراً روی اطلاعات حقوق، پرسنل و دستمزد متمرکز شوید.
+۳. اگر کاربر درباره وام، تسهیلات یا اقساط پرسید، منحصراً وضعیت تسهیلات، مانده بدهی و اقساط ماهانه را تحلیل کنید.
+۴. اگر کاربر درباره ماه مشخصی (مثلاً فروردین یا اردیبهشت) یا روند ماه‌ها پرسید، اعداد و تراز دقیق همان ماه را تحلیل کنید.
+۵. اگر کاربر درباره کاهش هزینه‌ها پرسید، سرفصل‌های پرهزینه را شناسایی کرده و راهکارهای عملیاتی ارائه دهید.
+۶. اگر کاربر درباره درآمدهای پلتفرم باسینا پرسید، سرفصل‌های فروش باسینا، نوبت‌دهی آنلاین، تریاژ هوش مصنوعی و اشتراک را تفکیک کنید.
+۷. ارقام را با ذکر واحد (ریال / تومان) و با فرمت تفکیک‌شده و فارسی نمایش دهید.
+۸. لحن پاسخ‌ها حرفه‌ای، محترمانه، ساختاریافته (با استفاده از مارک‌داون، بولیت‌ها و عناوین مجزا) باشد.
 
-اطلاعات زنده مالی شرکت آینده نگاران خلاق در دسترس شما:
+داده‌های مالی واقعی شرکت آینده نگاران خلاق (سال ۱۴۰۵):
 ${systemContext || 'اطلاعاتی ارائه نشده است.'}
 `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-      },
-    });
+    // Cascade of available models in case of temporary 503/429 spikes
+    const candidateModels = [
+      'gemini-3.1-flash-lite',
+      'gemini-flash-latest',
+      'gemini-3.8-flash',
+      'gemini-3.1-pro-preview',
+    ];
 
-    return res.json({ text: response.text });
+    // Format conversation history for Gemini SDK if provided
+    let contents: any = prompt;
+    if (Array.isArray(history) && history.length > 0) {
+      const formattedHistory = history
+        .filter((msg: any) => msg && msg.text && msg.sender)
+        .slice(-6) // recent turns
+        .map((msg: any) => ({
+          role: msg.sender === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.text }],
+        }));
+      contents = [...formattedHistory, { role: 'user', parts: [{ text: prompt }] }];
+    }
+
+    let lastError: any = null;
+    let generatedText: string | null = null;
+
+    for (const model of candidateModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents,
+          config: {
+            systemInstruction,
+            temperature: 0.5,
+          },
+        });
+
+        if (response && response.text) {
+          generatedText = response.text;
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Model ${model} returned error:`, err?.status || err?.message || err);
+        // Continue to next model in cascade
+      }
+    }
+
+    if (generatedText) {
+      return res.json({ text: generatedText });
+    }
+
+    throw lastError || new Error('خطا در پردازش هوش مصنوعی با تمامی مدل‌ها');
   } catch (err: any) {
     console.error('Gemini API Error in /api/gemini/analyze:', err);
     return res.status(500).json({

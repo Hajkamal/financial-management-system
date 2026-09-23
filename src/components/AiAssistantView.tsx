@@ -32,9 +32,19 @@ import {
   BankAccount, 
   FiscalYear, 
   CurrencyMode, 
-  AppUser 
+  AppUser,
+  IncomeCategory,
+  ExpenseCategory,
+  BasinaSubCategory
 } from '../types';
-import { formatCurrency, toPersianDigits, PERSIAN_MONTHS } from '../utils/formatters';
+import { 
+  formatCurrency, 
+  toPersianDigits, 
+  PERSIAN_MONTHS,
+  INCOME_CATEGORY_CONFIG,
+  EXPENSE_CATEGORY_CONFIG,
+  BASINA_SUBCATEGORY_CONFIG
+} from '../utils/formatters';
 
 interface AiAssistantViewProps {
   transactions: FinancialTransaction[];
@@ -145,6 +155,14 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
       .reduce((sum, tx) => sum + (tx.amount || 0), 0);
     const netProfit = totalIncome - totalExpense;
 
+    // Monthly breakdown for all 12 months
+    const monthlyBreakdown = PERSIAN_MONTHS.map((m) => {
+      const monthTxs = yearTransactions.filter((tx) => tx.month === m.num);
+      const inc = monthTxs.filter((tx) => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
+      const exp = monthTxs.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
+      return `${m.name}: درآمد ${inc.toLocaleString('fa-IR')} ریال، هزینه ${exp.toLocaleString('fa-IR')} ریال، تراز ${(inc - exp).toLocaleString('fa-IR')} ریال (${monthTxs.length} سند)`;
+    }).join('\n');
+
     // Income categories
     const incomeByCategory: Record<string, number> = {};
     yearTransactions
@@ -161,6 +179,22 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
         expenseByCategory[tx.category] = (expenseByCategory[tx.category] || 0) + tx.amount;
       });
 
+    // Basina subcategories
+    const basinaSubCategories: Record<string, number> = {};
+    yearTransactions
+      .filter((tx) => tx.category === 'sale_basina' && tx.subCategory)
+      .forEach((tx) => {
+        basinaSubCategories[tx.subCategory!] = (basinaSubCategories[tx.subCategory!] || 0) + tx.amount;
+      });
+
+    // Infrastructure subcategories
+    const infraSubCategories: Record<string, number> = {};
+    yearTransactions
+      .filter((tx) => tx.category === 'infrastructure' && tx.subCategory)
+      .forEach((tx) => {
+        infraSubCategories[tx.subCategory!] = (infraSubCategories[tx.subCategory!] || 0) + tx.amount;
+      });
+
     // Top transactions
     const topExpenses = [...yearTransactions.filter((tx) => tx.type === 'expense')]
       .sort((a, b) => b.amount - a.amount)
@@ -175,12 +209,15 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
     // Loans summary
     const totalLoanDebt = loans.reduce((sum, l) => sum + (l.totalAmount || 0), 0);
     const totalMonthlyInstallments = loans.reduce((sum, l) => sum + (l.installmentAmount || 0), 0);
-    const loansList = loans.map((l) => `- ${l.title} (${l.lender}): کل وام ${l.totalAmount.toLocaleString('fa-IR')} ریال، قسط ماهانه ${l.installmentAmount.toLocaleString('fa-IR')} ریال، ${l.paidInstallments} از ${l.totalInstallments} قسط پرداخت شده`);
+    const loansList = loans.map((l) => {
+      const remaining = Math.max(0, (l.totalInstallments - l.paidInstallments) * l.installmentAmount);
+      return `- ${l.title} (${l.lender}): کل وام ${l.totalAmount.toLocaleString('fa-IR')} ریال، قسط ماهانه ${l.installmentAmount.toLocaleString('fa-IR')} ریال، ${l.paidInstallments} از ${l.totalInstallments} قسط پرداخت شده، مانده بدهی ${remaining.toLocaleString('fa-IR')} ریال`;
+    });
 
     // Bank accounts
     const activeBankBalances = bankAccounts
       .filter((b) => b.isActive)
-      .map((b) => `- ${b.bankName} (${b.accountNumber}): موجودی ${b.balance.toLocaleString('fa-IR')} ریال [صاحب: ${b.accountHolder}]`);
+      .map((b) => `- بانک ${b.bankName} (${b.accountNumber}): موجودی ${b.balance.toLocaleString('fa-IR')} ریال [صاحب حساب: ${b.accountHolder}]`);
     const totalBankBalance = bankAccounts
       .filter((b) => b.isActive)
       .reduce((sum, b) => sum + (b.balance || 0), 0);
@@ -190,21 +227,34 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
     const totalBaseSalary = activeEmployees.reduce((sum, e) => sum + (e.baseSalary || 0), 0);
 
     return `
-خلاصه پرونده مالی شرکت ${companyName} در سال مالی ${selectedYear}:
-- کل درآمد سال ${selectedYear}: ${totalIncome.toLocaleString('fa-IR')} ریال (${(totalIncome / 10).toLocaleString('fa-IR')} تومان)
-- کل هزینه‌های سال ${selectedYear}: ${totalExpense.toLocaleString('fa-IR')} ریال (${(totalExpense / 10).toLocaleString('fa-IR')} تومان)
-- تراز نقدینگی و سود خالص: ${netProfit.toLocaleString('fa-IR')} ریال (${(netProfit / 10).toLocaleString('fa-IR')} تومان)
+پرونده جامع مالی شرکت ${companyName} در سال مالی ${selectedYear}:
+- کل درآمد سال: ${totalIncome.toLocaleString('fa-IR')} ریال (${(totalIncome / 10).toLocaleString('fa-IR')} تومان)
+- کل هزینه‌های سال: ${totalExpense.toLocaleString('fa-IR')} ریال (${(totalExpense / 10).toLocaleString('fa-IR')} تومان)
+- تراز نقدینگی و سود عملیاتی: ${netProfit.toLocaleString('fa-IR')} ریال (${(netProfit / 10).toLocaleString('fa-IR')} تومان)
 - تعداد کل اسناد مالی سال: ${yearTransactions.length} سند
 
-دسته‌بندی درآمدهای سال:
-${Object.entries(incomeByCategory)
-  .map(([k, v]) => `- سرفصل ${k}: ${v.toLocaleString('fa-IR')} ریال`)
-  .join('\n')}
+وضعیت ماه به ماه سال ${selectedYear}:
+${monthlyBreakdown}
 
-دسته‌بندی هزینه‌های سال:
+سرفصل‌های درآمدی:
+${Object.entries(incomeByCategory)
+  .map(([k, v]) => `- ${k}: ${v.toLocaleString('fa-IR')} ریال (${(v / 10).toLocaleString('fa-IR')} تومان)`)
+  .join('\n') || 'درآمدی ثبت نشده'}
+
+زیردسته‌های فروش پلتفرم باسینا:
+${Object.entries(basinaSubCategories)
+  .map(([k, v]) => `- ${k}: ${v.toLocaleString('fa-IR')} ریال`)
+  .join('\n') || 'موردی ثبت نشده'}
+
+سرفصل‌های هزینه‌ای:
 ${Object.entries(expenseByCategory)
-  .map(([k, v]) => `- سرفصل ${k}: ${v.toLocaleString('fa-IR')} ریال`)
-  .join('\n')}
+  .map(([k, v]) => `- ${k}: ${v.toLocaleString('fa-IR')} ریال (${(v / 10).toLocaleString('fa-IR')} تومان)`)
+  .join('\n') || 'هزینه‌ای ثبت نشده'}
+
+زیردسته‌های هزینه فناوری و زیرساخت:
+${Object.entries(infraSubCategories)
+  .map(([k, v]) => `- ${k}: ${v.toLocaleString('fa-IR')} ریال`)
+  .join('\n') || 'موردی ثبت نشده'}
 
 ۵ هزینه عمده ثبت‌شده:
 ${topExpenses.join('\n') || 'سندی ثبت نشده'}
@@ -213,51 +263,222 @@ ${topExpenses.join('\n') || 'سندی ثبت نشده'}
 ${topIncomes.join('\n') || 'سندی ثبت نشده'}
 
 وضعیت حساب‌های بانکی شرکت:
-- مجموع موجودی دفتری حساب‌های فعال: ${totalBankBalance.toLocaleString('fa-IR')} ریال
+- مجموع موجودی دفتری نقدینگی: ${totalBankBalance.toLocaleString('fa-IR')} ریال (${(totalBankBalance / 10).toLocaleString('fa-IR')} تومان)
 ${activeBankBalances.join('\n') || 'حسابی ثبت نشده'}
 
-وضعیت تسهیلات و بدهی‌های بانکی:
-- مجموع اصل تسهیلات: ${totalLoanDebt.toLocaleString('fa-IR')} ریال
-- مجموع اقساط ماهیانه شرکت: ${totalMonthlyInstallments.toLocaleString('fa-IR')} ریال
+وضعیت تسهیلات و وام‌ها:
+- مجموع اصل تسهیلات دریافتی: ${totalLoanDebt.toLocaleString('fa-IR')} ریال
+- مجموع اقساط ماهانه: ${totalMonthlyInstallments.toLocaleString('fa-IR')} ریال
 ${loansList.join('\n') || 'تسهیلاتی ثبت نشده'}
 
-وضعیت نیروی انسانی و پرسنل:
+وضعیت نیروی انسانی و حقوق و دستمزد:
 - تعداد کارمندان فعال: ${activeEmployees.length} نفر
-- مجموع حقوق پایه ماهانه پرسنل: ${totalBaseSalary.toLocaleString('fa-IR')} ریال
-اسامی پرسنل: ${activeEmployees.map((e) => `${e.name} (${e.role}: ${e.baseSalary.toLocaleString('fa-IR')} ریال)`).join('، ')}
+- مجموع حقوق پایه ماهانه پرسنل: ${totalBaseSalary.toLocaleString('fa-IR')} ریال (${(totalBaseSalary / 10).toLocaleString('fa-IR')} تومان)
+${activeEmployees.map((e) => `- ${e.name} (${e.role}): حقوق ماهانه ${e.baseSalary.toLocaleString('fa-IR')} ریال [وضعیت: ${e.status}]`).join('\n')}
 `;
   };
 
-  // Fallback client-side report generator in case server is offline or API key isn't provided
-  const generateInstantLocalReport = (query: string): string => {
+  // Dynamic, Query-Specific Financial Analytics Engine
+  // Answers questions mathematically and specifically based on user prompt if API is unavailable or offline
+  const generateDynamicFinancialAnalysis = (query: string): string => {
+    const q = query.toLowerCase().trim();
     const yearTransactions = transactions.filter((tx) => tx.year === selectedYear);
     const totalIncome = yearTransactions.filter((tx) => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
     const totalExpense = yearTransactions.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
     const netProfit = totalIncome - totalExpense;
     const profitRate = totalIncome > 0 ? ((netProfit / totalIncome) * 100).toFixed(1) : '0';
 
-    return `### 📊 گزارش تحلیلی وضعیت مالی شرکت آینده نگاران خلاق (سال ۱۴۰۵)
+    // 1. Questions about Salaries / Payroll / Employees
+    if (q.includes('حقوق') || q.includes('پرسنل') || q.includes('کارمند') || q.includes('دستمزد') || q.includes('استخدام')) {
+      const activeEmployees = employees.filter((e) => e.status === 'active');
+      const totalMonthlyBase = activeEmployees.reduce((s, e) => s + e.baseSalary, 0);
+      const totalYearlyPayrollEstimate = totalMonthlyBase * 12;
+      const payrollShareOfExpenses = totalExpense > 0 ? ((totalYearlyPayrollEstimate / totalExpense) * 100).toFixed(1) : '0';
 
-**۱. شاخص‌های کلیدی مالی:**
+      const sortedBySalary = [...activeEmployees].sort((a, b) => b.baseSalary - a.baseSalary);
+      const highest = sortedBySalary[0];
+      const lowest = sortedBySalary[sortedBySalary.length - 1];
+
+      return `### 👥 تحلیل جامع حقوق و دستمزد پرسنل شرکت ${companyName}
+
+**۱. آمار کلیدی نیروی انسانی:**
+- **تعداد کل پرسنل فعال:** ${toPersianDigits(activeEmployees.length)} نفر
+- **مجموع حقوق پایه ماهانه:** ${formatCurrency(totalMonthlyBase, currencyMode)}
+- **برآورد کل هزینه سالانه حقوق:** ${formatCurrency(totalYearlyPayrollEstimate, currencyMode)}
+- **سهم حقوق از کل هزینه‌های سالانه:** %${toPersianDigits(payrollShareOfExpenses)}
+
+**۲. تفکیک حقوق دریافتی پرسنل:**
+${sortedBySalary.map((e, idx) => `${idx + 1}. **${e.name}** (${e.role}): ${formatCurrency(e.baseSalary, currencyMode)} در ماه`).join('\n')}
+
+**۳. نکات تحلیلی:**
+${highest ? `- **بالاترین دریافتی:** متعلق به ${highest.name} (${highest.role}) با مبلغ ${formatCurrency(highest.baseSalary, currencyMode)} می‌باشد.` : ''}
+${lowest && lowest !== highest ? `- **پایین‌ترین دریافتی پایه:** متعلق به ${lowest.name} (${lowest.role}) با مبلغ ${formatCurrency(lowest.baseSalary, currencyMode)} است.` : ''}
+- با توجه به سهم حقوق و دستمزد در ساختار هزینه‌ای شرکت، پرداخت به موقع در پایان هر ماه شمسی با اولویت‌بندی از طریق موجودی جاری بانک‌ها توصیه می‌گردد.`;
+    }
+
+    // 2. Questions about Loans / Installments / Debt
+    if (q.includes('وام') || q.includes('تسهیلات') || q.includes('قسط') || q.includes('اقساط') || q.includes('بدهی')) {
+      const totalPrincipal = loans.reduce((s, l) => s + l.totalAmount, 0);
+      const totalMonthlyInstallment = loans.reduce((s, l) => s + l.installmentAmount, 0);
+      let totalRemainingDebt = 0;
+
+      const loanDetails = loans.map((l, idx) => {
+        const remainingInstallments = Math.max(0, l.totalInstallments - l.paidInstallments);
+        const remainingAmount = remainingInstallments * l.installmentAmount;
+        totalRemainingDebt += remainingAmount;
+        const progressPct = l.totalInstallments > 0 ? Math.round((l.paidInstallments / l.totalInstallments) * 100) : 0;
+
+        return `**${idx + 1}. ${l.title} (${l.lender}):**
+   - اصل تسهیلات: ${formatCurrency(l.totalAmount, currencyMode)}
+   - قسط ماهانه: ${formatCurrency(l.installmentAmount, currencyMode)}
+   - وضعیت اقساط: ${toPersianDigits(l.paidInstallments)} از ${toPersianDigits(l.totalInstallments)} قسط پرداخت شده (%${toPersianDigits(progressPct)})
+   - مانده کل بدهی: ${formatCurrency(remainingAmount, currencyMode)}`;
+      }).join('\n\n');
+
+      return `### 🏦 گزارش و تحلیل وضعیت تسهیلات و اقساط بانکی شرکت
+
+**۱. شاخص‌های کلی بدهی‌های بانکی:**
+- **مجموع اصل تسهیلات دریافتی:** ${formatCurrency(totalPrincipal, currencyMode)}
+- **مجموع تعهد اقساط ماهانه:** ${formatCurrency(totalMonthlyInstallment, currencyMode)}
+- **کل مانده بدهی پرداخت نشده:** ${formatCurrency(totalRemainingDebt, currencyMode)}
+- **تعداد پرونده‌های تسهیلاتی فعال:** ${toPersianDigits(loans.length)} فقره
+
+**۲. جزئیات تسهیلات فعال شرکت:**
+${loanDetails || 'هیچ تسهیلات فعالی در سیستم ثبت نشده است.'}
+
+**💡 توصیه مدیریتی:**
+ماهانه مبلغ ${formatCurrency(totalMonthlyInstallment, currencyMode)} تعهد غیرقابل اجتناب اقساط وجود دارد. پیشنهاد می‌شود همواره در حساب‌های کارسازی اقساط حداقل معادل ۲ ماه قسط ذخیره نقدی نگهداری شود تا مشمول جریمه دیرکرد نشود.`;
+    }
+
+    // 3. Questions about Bank Accounts & Liquidity
+    if (q.includes('بانک') || q.includes('موجودی') || q.includes('حساب') || q.includes('نقدینگی') || q.includes('پول') || q.includes('جریان نقدی')) {
+      const activeBanks = bankAccounts.filter((b) => b.isActive);
+      const totalBankCash = activeBanks.reduce((s, b) => s + b.balance, 0);
+      const avgMonthlyExpense = totalExpense > 0 ? totalExpense / 12 : 1;
+      const runwayMonths = (totalBankCash / avgMonthlyExpense).toFixed(1);
+
+      return `### 💳 تحلیل نقدینگی و موجودی حساب‌های بانکی شرکت ${companyName}
+
+**۱. خلاصه وضعیت موجودی دفتری:**
+- **مجموع کل نقدینگی حساب‌های فعال:** ${formatCurrency(totalBankCash, currencyMode)}
+- **تعداد حساب‌های فعال بانکی:** ${toPersianDigits(activeBanks.length)} حساب
+- **شاخص پوشش هزینه‌ها (Runway نقدینگی):** حدود **${toPersianDigits(runwayMonths)} ماه** بر اساس میانگین هزینه‌های سالانه
+
+**۲. تفکیک موجودی به تفکیک بانک‌ها:**
+${activeBanks.map((b, idx) => `${idx + 1}. **بانک ${b.bankName}** (${b.accountNumber}):
+   - موجودی جاری: **${formatCurrency(b.balance, currencyMode)}**
+   - صاحب حساب: ${b.accountHolder}`).join('\n')}
+
+**۳. ارزیابی ریسک نقدینگی:**
+${Number(runwayMonths) >= 3 ? '✅ وضعیت نقدینگی در محدوده امن قرار دارد و توان پاسخگویی به هزینه‌های جاری عملیاتی ۳ ماه آینده وجود دارد.' : '⚠️ موجودی نقدی کمتر از آستانه ایمنی ۳ ماهه است؛ تسریع در وصول مطالبات و فاکتورهای پلتفرم باسینا ضروری است.'}`;
+    }
+
+    // 4. Questions about Basina platform / Revenue streams
+    if (q.includes('درآمد') || q.includes('فروش') || q.includes('باسینا') || q.includes('تریاژ') || q.includes('نوبت') || q.includes('سود')) {
+      const incomeTxs = yearTransactions.filter((tx) => tx.type === 'income');
+      const basinaTxs = incomeTxs.filter((tx) => tx.category === 'sale_basina');
+      const basinaTotal = basinaTxs.reduce((s, tx) => s + tx.amount, 0);
+
+      const subcatMap: Record<string, number> = {};
+      basinaTxs.forEach((tx) => {
+        const sub = tx.subCategory || 'سایر خدمات باسینا';
+        subcatMap[sub] = (subcatMap[sub] || 0) + tx.amount;
+      });
+
+      return `### 📈 تحلیل تخصصی درآمدها و درگاه خدمات پلتفرم باسینا
+
+**۱. ارقام کلی درآمد سال مالی ${toPersianDigits(selectedYear)}:**
+- **کل درآمدهای محقق شده:** ${formatCurrency(totalIncome, currencyMode)}
+- **درآمد حاصل از فروش مستقیم باسینا:** ${formatCurrency(basinaTotal, currencyMode)} (%${toPersianDigits(totalIncome > 0 ? Math.round((basinaTotal / totalIncome) * 100) : 0)} از کل درآمد)
+- **تعداد فاکتورها و اسناد درآمدی:** ${toPersianDigits(incomeTxs.length)} سند
+
+**۲. تفکیک جریان درآمدی پلتفرم باسینا:**
+${Object.entries(subcatMap).map(([sub, amt]) => {
+  const label = BASINA_SUBCATEGORY_CONFIG[sub as BasinaSubCategory] || sub;
+  return `- **${label}:** ${formatCurrency(amt, currencyMode)}`;
+}).join('\n') || '- درآمد تفکیک‌شده‌ای برای باسینا ثبت نشده است.'}
+
+**۳. راهکارهای افزایش درآمد:**
+- توسعه و فروش اشتراک‌های سالانه سازمانی برای کلینیک‌ها و مراکز درمانی
+- ترویج بسته تریاژ و تفسیر آزمایش هوش مصنوعی به عنوان خدمت مکمل نوبت‌دهی`;
+    }
+
+    // 5. Questions about Cost Reduction & Savings
+    if (q.includes('کاهش هزینه') || q.includes('صرفه جویی') || q.includes('صرفه‌جویی') || q.includes('بهینه') || q.includes('هزینه') || q.includes('صرفه')) {
+      const expenseByCategory: Record<string, number> = {};
+      yearTransactions.filter((tx) => tx.type === 'expense').forEach((tx) => {
+        expenseByCategory[tx.category] = (expenseByCategory[tx.category] || 0) + tx.amount;
+      });
+
+      const sortedExpenses = Object.entries(expenseByCategory).sort((a, b) => b[1] - a[1]);
+
+      return `### 🎯 راهکارهای عملیاتی کاهش هزینه‌ها و بهینه‌سازی بودجه
+
+**۱. رتبه‌بندی عمده‌ترین سرفصل‌های هزینه شرکت:**
+${sortedExpenses.slice(0, 5).map(([cat, amt], idx) => {
+  const label = EXPENSE_CATEGORY_CONFIG[cat as ExpenseCategory]?.label || cat;
+  const pct = totalExpense > 0 ? ((amt / totalExpense) * 100).toFixed(1) : '0';
+  return `${idx + 1}. **${label}:** ${formatCurrency(amt, currencyMode)} (%${toPersianDigits(pct)} از کل هزینه‌ها)`;
+}).join('\n')}
+
+**۲. برنامه‌های پیشنهادی صرفه‌جویی:**
+۱. **بهینه‌سازی سرور و لایسنس‌های هوش مصنوعی:** تبدیل سرورهای ابری ساعتی به پلن‌های سالانه دارای تخفیف تا ۲۵٪ صرفه‌جویی.
+۲. **مدیریت درگاه پیامک (کاوه‌نگار):** کش کردن کد‌های اعتبارسنجی و بهره‌گیری از Push Notification به جای پیامک در اپلیکیشن باسینا.
+۳. **تسهیم بهینه هزینه‌های اداری:** بازبینی قراردادهای اینترنت و خدمات جانبی دفتر مرکزی.
+۴. **بهره‌گیری از معافیت‌های دانش‌بنیان:** استفاده از معافیت‌های مالیاتی و تخفیفات بیمه برای پروژه‌های هوش مصنوعی سلامت باسینا.`;
+    }
+
+    // 6. Specific Month questions (e.g. فروردین, اردیبهشت, ...)
+    const matchedMonth = PERSIAN_MONTHS.find((m) => q.includes(m.name));
+    if (matchedMonth) {
+      const monthTxs = yearTransactions.filter((tx) => tx.month === matchedMonth.num);
+      const mIncome = monthTxs.filter((tx) => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
+      const mExpense = monthTxs.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
+      const mBalance = mIncome - mExpense;
+
+      return `### 📅 گزارش تحلیلی مالی ماه ${matchedMonth.name} سال ${toPersianDigits(selectedYear)}
+
+**شاخص‌های ماه ${matchedMonth.name}:**
+- **مجموع درآمدها:** ${formatCurrency(mIncome, currencyMode)}
+- **مجموع هزینه‌ها:** ${formatCurrency(mExpense, currencyMode)}
+- **تراز مالی ماه:** **${formatCurrency(mBalance, currencyMode)}** (${mBalance >= 0 ? '🟢 تراز مثبت و سودآور' : '🔴 تراز منفی'})
+- **تعداد اسناد ثبت‌شده:** ${toPersianDigits(monthTxs.length)} مورد
+
+**اسناد مهم این ماه:**
+${monthTxs.slice(0, 5).map((t) => `- ${t.title} (${t.dateString}): ${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount, currencyMode)}`).join('\n') || 'سندی در این ماه ثبت نشده است.'}`;
+    }
+
+    // 7. Questions about Top / Largest Transactions
+    if (q.includes('بزرگترین') || q.includes('سنگین ترین') || q.includes('سنگین‌ترین') || q.includes('بیشترین') || q.includes('عمده')) {
+      const topExp = [...yearTransactions.filter((tx) => tx.type === 'expense')].sort((a, b) => b.amount - a.amount).slice(0, 5);
+      const topInc = [...yearTransactions.filter((tx) => tx.type === 'income')].sort((a, b) => b.amount - a.amount).slice(0, 5);
+
+      return `### 🏆 بزرگ‌ترین اسناد مالی ثبت‌شده در سال ${toPersianDigits(selectedYear)}
+
+**🔴 ۵ هزینه سنگین سال:**
+${topExp.map((t, idx) => `${idx + 1}. **${t.title}**: ${formatCurrency(t.amount, currencyMode)} (تاریخ: ${t.dateString} - دسته: ${EXPENSE_CATEGORY_CONFIG[t.category as ExpenseCategory]?.label || t.category})`).join('\n') || 'هزینه‌ای ثبت نشده است.'}
+
+**🟢 ۵ درآمد بزرگ سال:**
+${topInc.map((t, idx) => `${idx + 1}. **${t.title}**: ${formatCurrency(t.amount, currencyMode)} (تاریخ: ${t.dateString} - دسته: ${INCOME_CATEGORY_CONFIG[t.category as IncomeCategory]?.label || t.category})`).join('\n') || 'درآمدی ثبت نشده است.'}`;
+    }
+
+    // 8. General & Comprehensive Financial Analysis (Default Report)
+    return `### 📊 گزارش تحلیلی هیئت‌مدیره - وضعیت مالی شرکت ${companyName} (سال ${toPersianDigits(selectedYear)})
+
+**۱. خلاصه شاخص‌های عملکرد مالی:**
 - **مجموع درآمدها:** ${formatCurrency(totalIncome, currencyMode)}
-- **مجموع هزینه‌ها:** ${formatCurrency(totalExpense, currencyMode)}
-- **سود ناخالص / تراز جاری:** ${formatCurrency(netProfit, currencyMode)}
-- **حاشیه سود:** %${toPersianDigits(profitRate)}
+- **مجموع کل هزینه‌ها:** ${formatCurrency(totalExpense, currencyMode)}
+- **سود ناخالص عملیاتی:** ${formatCurrency(netProfit, currencyMode)}
+- **حاشیه سود شرکت:** %${toPersianDigits(profitRate)}
+- **کل اسناد مالی ثبت‌شده:** ${toPersianDigits(yearTransactions.length)} سند
 
-**۲. منابع درآمد و درگاه باسینا:**
-درآمدهای شرکت عمدتاً از محل خدمات پلتفرم باسینا (نوبت‌دهی آنلاین، تریاژ و تفسیر آزمایش هوش مصنوعی) و جذب سرمایه حاصل شده است.
+**۲. وضعیت دارایی‌های نقد و تعهدات:**
+- **موجودی دفتری حساب‌های فعال بانکی:** ${formatCurrency(bankAccounts.filter((b) => b.isActive).reduce((s, b) => s + b.balance, 0), currencyMode)}
+- **تعهد اقساط وام ماهانه:** ${formatCurrency(loans.reduce((s, l) => s + l.installmentAmount, 0), currencyMode)}
+- **هزینه ماهانه حقوق و دستمزد:** ${formatCurrency(employees.filter((e) => e.status === 'active').reduce((s, e) => s + e.baseSalary, 0), currencyMode)}
 
-**۳. هزینه‌های عمده:**
-اصلی‌ترین سرفصل‌های هزینه شامل موارد زیر است:
-- حقوق و دستمزد پرسنل کلیدی و مدیران فنی
-- هزینه‌های زیرساخت سرور و هاستینگ هوش مصنوعی
-- هزینه‌های مارکتینگ و تبلیغات پلتفرم
-- بازپرداخت اقساط تسهیلات بانکی
-
-**۴. وضعیت نقدینگی و موجودی بانکی:**
-مجموع موجودی حساب‌های فعال شرکت در حال حاضر ${formatCurrency(bankAccounts.reduce((s, b) => s + (b.isActive ? b.balance : 0), 0), currencyMode)} می‌باشد.
-
-💡 **توصیه مالی:** مدیریت منظم جریان نقدینگی و حفظ ذخیره حداقل ۳ ماه هزینه‌های ثابت (سرور + حقوق پایه) جهت تضمین پایداری خدمات باسینا پیشنهاد می‌گردد.`;
+**۳. جمع‌بندی تحلیلی و راهبرد:**
+شرکت در حال حاضر دارای تراز ${netProfit >= 0 ? 'مثبت و رو به رشد' : 'منفی و نیازمند کنترل هزینه‌ها'} است. با تمرکز بر توسعه خطوط درآمدی پلتفرم باسینا و تثبیت هزینه‌های سرور ابری، چشم‌انداز تراز نقدینگی در سال آینده بسیار مساعد ارزیابی می‌گردد.`;
   };
 
   const handleSendMessage = async (customPrompt?: string) => {
@@ -278,13 +499,17 @@ ${loansList.join('\n') || 'تسهیلاتی ثبت نشده'}
     const systemContext = compileFinancialContext();
 
     try {
-      // Call server proxy route
+      // Call server proxy route with chat history
       const response = await fetch('/api/gemini/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: textToSend,
           systemContext,
+          history: messages.slice(-6).map((m) => ({
+            sender: m.sender,
+            text: m.text,
+          })),
         }),
       });
 
@@ -305,26 +530,26 @@ ${loansList.join('\n') || 'تسهیلاتی ثبت نشده'}
         }
       }
 
-      // If backend returns an error or status 503/500, use robust structured financial fallback
-      const fallbackReport = generateInstantLocalReport(textToSend);
+      // If backend returns an error or status 503/500, use robust dynamic analytics engine
+      const dynamicReport = generateDynamicFinancialAnalysis(textToSend);
       setMessages((prev) => [
         ...prev,
         {
           id: `ai-${Date.now()}`,
           sender: 'assistant',
-          text: fallbackReport,
+          text: dynamicReport,
           timestamp: 'هم‌اکنون',
         },
       ]);
     } catch (err) {
-      console.warn('AI analysis notice, activating instant financial generator:', err);
-      const fallbackReport = generateInstantLocalReport(textToSend);
+      console.warn('AI analysis fallback activated:', err);
+      const dynamicReport = generateDynamicFinancialAnalysis(textToSend);
       setMessages((prev) => [
         ...prev,
         {
           id: `ai-${Date.now()}`,
           sender: 'assistant',
-          text: fallbackReport,
+          text: dynamicReport,
           timestamp: 'هم‌اکنون',
         },
       ]);
