@@ -22,7 +22,7 @@ export const INITIAL_USERS: AppUser[] = [
     firstName: 'وحید',
     lastName: 'کمالی',
     fullName: 'وحید کمالی',
-    password: 'admin',
+    password: 'sha256:8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', // هش امن رمز پیش‌فرض: admin
     role: 'super_admin',
     roleTitle: 'مدیر کل سامانه',
     status: 'active',
@@ -39,7 +39,7 @@ export const INITIAL_USERS: AppUser[] = [
     firstName: 'سارا',
     lastName: 'محمدی',
     fullName: 'سارا محمدی',
-    password: 'user1234',
+    password: 'sha256:2cb3298ec71d02c8c4a92cfa7abeb119df9b407b8b2fc2931a78363bcfe8be6a', // هش امن رمز پیش‌فرض: user1234
     role: 'accountant',
     roleTitle: 'کارشناس حسابداری و ثبت اسناد',
     status: 'active',
@@ -56,7 +56,7 @@ export const INITIAL_USERS: AppUser[] = [
     firstName: 'امیر',
     lastName: 'رضایی',
     fullName: 'امیر رضایی',
-    password: 'viewer123',
+    password: 'sha256:9557a276189ef3df43a9b1a0e1074e0d4a8eeab5f385c98d7fa44b3602fc56fc', // هش امن رمز پیش‌فرض: viewer123
     role: 'viewer',
     roleTitle: 'حسابرس و ناظر مالی (فقط خواندنی)',
     status: 'active',

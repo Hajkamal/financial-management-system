@@ -30,6 +30,7 @@ import { AppUser, UserRole } from '../types';
 import { getPermissionsByRole } from '../utils/permissions';
 import { INITIAL_USERS } from '../data/initialData';
 import { toEnglishDigits, normalizeEmail, normalizePassword } from '../utils/formatters';
+import { hashPassword, verifyPassword } from '../utils/crypto';
 
 interface AuthScreenProps {
   users?: AppUser[];
@@ -153,12 +154,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
         // Check if this is the super admin email, otherwise default to pending
         const isSuper = cleanEmail === 'vahidkamali03@gmail.com';
+        const hashedPassword = await hashPassword(cleanPassword);
         const newUserData: Omit<AppUser, 'id' | 'createdAt'> = {
           email: cleanEmail,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           fullName: `${firstName.trim()} ${lastName.trim()}`,
-          password: cleanPassword,
+          password: hashedPassword,
           role: isSuper ? 'super_admin' : 'viewer',
           roleTitle: isSuper ? 'مدیر ارشد سامانه' : 'کاربر (در انتظار تایید)',
           status: isSuper ? 'active' : 'pending',
@@ -217,9 +219,27 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           return;
         }
 
-        // Verify password with normalized comparison
-        const savedPass = normalizePassword(localMatchedUser.password || '123456');
-        if (savedPass === cleanPassword) {
+        // Verify password using secure SHA-256 verification (with auto-upgrade for legacy plain passwords)
+        const isPasswordValid = await verifyPassword(cleanPassword, localMatchedUser.password || '');
+        if (isPasswordValid) {
+          // Auto-upgrade legacy plain text password to SHA-256 hash in storage
+          if (!localMatchedUser.password?.startsWith('sha256:')) {
+            try {
+              const upgradedHash = await hashPassword(cleanPassword);
+              localMatchedUser.password = upgradedHash;
+              const allSavedUsers = localStorage.getItem('ayandeh_users');
+              if (allSavedUsers) {
+                const parsed = JSON.parse(allSavedUsers);
+                if (Array.isArray(parsed)) {
+                  const updatedUsers = parsed.map((u: AppUser) => 
+                    u.id === localMatchedUser.id ? { ...u, password: upgradedHash } : u
+                  );
+                  localStorage.setItem('ayandeh_users', JSON.stringify(updatedUsers));
+                }
+              }
+            } catch {}
+          }
+
           // Successful local login - persist immediately to localStorage
           try {
             localStorage.setItem('ayandeh_active_user', JSON.stringify({
