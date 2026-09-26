@@ -39,6 +39,7 @@ import { sortTransactionsByDate, getCurrentJalaliDateTime } from '../utils/jalal
 import { hashPassword, isHashedPassword } from '../utils/crypto';
 import { registerUserInSupabase, supabase, isSupabaseConfigured } from '../lib/supabase';
 import { SupabaseDataService } from '../lib/supabaseDataService';
+import { serverApi } from '../lib/serverApi';
 
 /** اطمینان از حذف کامل سال ۱۴۰۴ و وجود سال ۱۴۰۵ */
 export const sanitizeFiscalYearsList = (list: any): FiscalYear[] => {
@@ -177,35 +178,6 @@ interface UseFinancialDataProps {
 }
 
 // =====================================================
-// کلید نسخه بازنشانی کامل داده‌های ورودی به حالت کاملاً خام و خالی
-// =====================================================
-const DATA_EMPTY_PURGE_KEY = 'ayandeh_data_empty_clean_v1';
-
-function ensureCleanEmptyStateOnce() {
-  try {
-    if (typeof window === 'undefined') return;
-    if (localStorage.getItem(DATA_EMPTY_PURGE_KEY) === 'purged_clean') return;
-
-    // پاکسازی تمامی داده‌های ورودی ذخیره‌شده پیشین جهت شروع کاملاً تمیز
-    localStorage.removeItem('ayandeh_transactions');
-    localStorage.removeItem('ayandeh_employees');
-    localStorage.removeItem('ayandeh_salary_matrix');
-    localStorage.removeItem('ayandeh_members');
-    localStorage.removeItem('ayandeh_loans');
-    localStorage.removeItem('ayandeh_bank_accounts');
-    localStorage.removeItem('ayandeh_vat_invoices');
-    localStorage.removeItem('ayandeh_service_tariffs');
-    localStorage.setItem('ayandeh_fiscal_years', JSON.stringify(INITIAL_FISCAL_YEARS));
-    localStorage.setItem('ayandeh_selected_year', '1405');
-    localStorage.setItem('ayandeh_users', JSON.stringify(INITIAL_USERS));
-    
-    localStorage.setItem(DATA_EMPTY_PURGE_KEY, 'purged_clean');
-  } catch {}
-}
-
-ensureCleanEmptyStateOnce();
-
-// =====================================================
 // توابع کمکی خواندن/نوشتن localStorage (فقط fallback)
 // =====================================================
 function readLocal<T>(key: string, fallback: T): T {
@@ -330,124 +302,113 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   );
 
   // =====================================================
-  // ⚡ بارگذاری اولیه از Supabase (جایگزین localStorage)
+  // ⚡ بارگذاری و همگام‌سازی بلادرنگ از دیتابیس متمرکز سرور
   // =====================================================
+  const lastServerSyncTime = useRef<string>('');
+
+  const syncDataFromServer = useCallback(async (isInitial = false) => {
+    try {
+      const serverData = await serverApi.getFinancialData();
+      if (!serverData) {
+        if (isInitial) setIsCloudLoading(false);
+        return;
+      }
+
+      if (serverData.lastUpdated && serverData.lastUpdated === lastServerSyncTime.current && !isInitial) {
+        return;
+      }
+      lastServerSyncTime.current = serverData.lastUpdated;
+
+      if (Array.isArray(serverData.fiscalYears) && serverData.fiscalYears.length > 0) {
+        const valid = sanitizeFiscalYearsList(serverData.fiscalYears);
+        setFiscalYears(valid);
+        writeLocal('ayandeh_fiscal_years', valid);
+      }
+
+      if (Array.isArray(serverData.transactions)) {
+        const sorted = sortTransactionsByDate(serverData.transactions, 'desc');
+        setTransactions(sorted);
+        writeLocal('ayandeh_transactions', sorted);
+      }
+
+      if (Array.isArray(serverData.employees)) {
+        setEmployees(serverData.employees);
+        writeLocal('ayandeh_employees', serverData.employees);
+      }
+
+      if (Array.isArray(serverData.salaryMatrix)) {
+        setSalaryMatrix(serverData.salaryMatrix);
+        writeLocal('ayandeh_salary_matrix', serverData.salaryMatrix);
+      }
+
+      if (Array.isArray(serverData.members)) {
+        setMembers(serverData.members);
+        writeLocal('ayandeh_members', serverData.members);
+      }
+
+      if (Array.isArray(serverData.loans)) {
+        setLoans(serverData.loans);
+        writeLocal('ayandeh_loans', serverData.loans);
+      }
+
+      if (Array.isArray(serverData.users) && serverData.users.length > 0) {
+        setUsers(serverData.users);
+        writeLocal('ayandeh_users', serverData.users);
+      }
+
+      if (Array.isArray(serverData.bankAccounts)) {
+        setBankAccounts(serverData.bankAccounts);
+        writeLocal('ayandeh_bank_accounts', serverData.bankAccounts);
+      }
+
+      if (Array.isArray(serverData.vatInvoices)) {
+        setVatInvoices(serverData.vatInvoices);
+        writeLocal('ayandeh_vat_invoices', serverData.vatInvoices);
+      }
+
+      if (Array.isArray(serverData.serviceTariffs)) {
+        setServiceTariffs(serverData.serviceTariffs);
+        writeLocal('ayandeh_service_tariffs', serverData.serviceTariffs);
+      }
+
+      setIsCloudConnected(true);
+      if (isInitial) {
+        console.info('✅ دیتابیس متمرکز سرور با موفقیت بارگذاری و همگام شد.');
+      }
+    } catch (err) {
+      console.warn('⚠️ Server database sync warning:', err);
+    } finally {
+      if (isInitial) setIsCloudLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (initialLoadDone.current) return;
     initialLoadDone.current = true;
 
-    if (!SupabaseDataService.isAvailable()) {
-      setIsCloudLoading(false);
-      console.info('☁️ Supabase not configured — running in localStorage-only mode');
-      return;
-    }
+    // ۱. بارگذاری اولیه از سرور
+    syncDataFromServer(true);
 
-    (async () => {
-      try {
-        console.info('☁️ Loading data from Supabase...');
-        
-        const [
-          cloudFiscalYears,
-          cloudTransactions,
-          cloudEmployees,
-          cloudSalaryMatrix,
-          cloudMembers,
-          cloudLoans,
-          cloudUsers,
-          cloudBankAccounts,
-          cloudVatInvoices,
-          cloudServiceTariffs,
-        ] = await Promise.all([
-          SupabaseDataService.fetchFiscalYears(),
-          SupabaseDataService.fetchTransactions(),
-          SupabaseDataService.fetchEmployees(),
-          SupabaseDataService.fetchSalaryMatrix(),
-          SupabaseDataService.fetchMembers(),
-          SupabaseDataService.fetchLoans(),
-          SupabaseDataService.fetchAppUsers(),
-          SupabaseDataService.fetchBankAccounts(),
-          SupabaseDataService.fetchVatInvoices(),
-          SupabaseDataService.fetchServiceTariffs(),
-        ]);
+    // ۲. بررسی خودکار تغییرات دیتابیس سرور به صورت دوره‌ای (هر ۳ ثانیه برای همگامی بلادرنگ میان مرورگرها)
+    const interval = setInterval(() => {
+      syncDataFromServer(false);
+    }, 3000);
 
-        let hasCloudData = false;
-
-        if (cloudFiscalYears && cloudFiscalYears.length > 0) {
-          const valid = sanitizeFiscalYearsList(cloudFiscalYears);
-          setFiscalYears(valid);
-          writeLocal('ayandeh_fiscal_years', valid);
-          hasCloudData = true;
-        }
-
-        if (cloudTransactions && cloudTransactions.length > 0) {
-          const sorted = sortTransactionsByDate(cloudTransactions, 'desc');
-          setTransactions(sorted);
-          writeLocal('ayandeh_transactions', sorted);
-          hasCloudData = true;
-        }
-
-        if (cloudEmployees && cloudEmployees.length > 0) {
-          setEmployees(cloudEmployees);
-          writeLocal('ayandeh_employees', cloudEmployees);
-          hasCloudData = true;
-        }
-
-        if (cloudSalaryMatrix && cloudSalaryMatrix.length > 0) {
-          setSalaryMatrix(cloudSalaryMatrix);
-          writeLocal('ayandeh_salary_matrix', cloudSalaryMatrix);
-          hasCloudData = true;
-        }
-
-        if (cloudMembers && cloudMembers.length > 0) {
-          setMembers(cloudMembers);
-          writeLocal('ayandeh_members', cloudMembers);
-          hasCloudData = true;
-        }
-
-        if (cloudLoans && cloudLoans.length > 0) {
-          setLoans(cloudLoans);
-          writeLocal('ayandeh_loans', cloudLoans);
-          hasCloudData = true;
-        }
-
-        if (cloudUsers && cloudUsers.length > 0) {
-          setUsers(cloudUsers);
-          writeLocal('ayandeh_users', cloudUsers);
-          hasCloudData = true;
-        }
-
-        if (cloudBankAccounts && cloudBankAccounts.length > 0) {
-          setBankAccounts(cloudBankAccounts);
-          writeLocal('ayandeh_bank_accounts', cloudBankAccounts);
-          hasCloudData = true;
-        }
-
-        if (cloudVatInvoices && cloudVatInvoices.length > 0) {
-          setVatInvoices(cloudVatInvoices);
-          writeLocal('ayandeh_vat_invoices', cloudVatInvoices);
-          hasCloudData = true;
-        }
-
-        if (cloudServiceTariffs && cloudServiceTariffs.length > 0) {
-          setServiceTariffs(cloudServiceTariffs);
-          writeLocal('ayandeh_service_tariffs', cloudServiceTariffs);
-          hasCloudData = true;
-        }
-
-        setIsCloudConnected(true);
-        if (hasCloudData) {
-          console.info('✅ Data loaded from Supabase cloud database');
-        } else {
-          console.info('☁️ Supabase is connected but no cloud data found — using local data');
-        }
-      } catch (err) {
-        console.warn('⚠️ Failed to load from Supabase, using localStorage:', err);
-        setIsCloudConnected(false);
-      } finally {
-        setIsCloudLoading(false);
+    // ۳. بررسی فوری تغییرات به محض بازگشت یا فوکوس روی مرورگر
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncDataFromServer(false);
       }
-    })();
-  }, []);
+    };
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, [syncDataFromServer]);
 
   // =====================================================
   // 🔄 Realtime subscriptions — همگام‌سازی بلادرنگ بین مرورگرها
@@ -626,14 +587,16 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     }
     const sorted = sortTransactionsByDate(updated, 'desc');
     setTransactions(sorted);
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveTransaction(tx);
     SupabaseDataService.saveTransaction(tx);
   };
 
   const handleDeleteTransaction = (id: string) => {
     setTransactions(prev => prev.filter(t => t.id !== id));
     onShowToast('سند مالی با موفقیت حذف گردید.');
-    // ☁️ حذف از ابر
+    // ☁️ حذف از سرور و ابر
+    serverApi.deleteTransaction(id);
     SupabaseDataService.deleteTransaction(id);
   };
 
@@ -641,7 +604,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     setTransactions([]);
     localStorage.setItem('ayandeh_transactions', JSON.stringify([]));
     onShowToast('کلیه اسناد تستی پاکسازی شدند. سامانه با صفر تراکنش آماده ثبت اطلاعات واقعی شد.');
-    // ☁️ پاکسازی ابر
+    // ☁️ پاکسازی سرور و ابر
+    serverApi.saveTransactions([]);
     SupabaseDataService.clearTransactions();
   };
 
@@ -670,10 +634,12 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       }
       setSalaryMatrix(prev => [...prev, ...newItems]);
       onShowToast(`کارمند جدید «${emp.name}» با موفقیت افزوده شد.`);
-      // ☁️ ذخیره ماتریس حقوق در ابر
+      // ☁️ ذخیره ماتریس حقوق در سرور و ابر
+      serverApi.saveSalaryMatrixBatch(newItems);
       SupabaseDataService.saveSalaryMatrixBatch(newItems);
     }
-    // ☁️ ذخیره کارمند در ابر
+    // ☁️ ذخیره کارمند در سرور و ابر
+    serverApi.saveEmployee(emp);
     SupabaseDataService.saveEmployee(emp);
   };
 
@@ -682,7 +648,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     setEmployees(prev => prev.filter(e => e.id !== id));
     setSalaryMatrix(prev => prev.filter(item => item.employeeId !== id));
     onShowToast(`کارمند «${emp?.name || ''}» حذف شد.`);
-    // ☁️ حذف از ابر (cascade حذف ماتریس را انجام می‌دهد)
+    // ☁️ حذف از سرور و ابر
+    serverApi.deleteEmployee(id);
     SupabaseDataService.deleteEmployee(id);
   };
 
@@ -715,7 +682,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       setSalaryMatrix(prev => [...prev, savedItem]);
     }
     onShowToast('تغییرات حقوق با موفقیت اعمال گردید.');
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveSalaryCell(savedItem);
     SupabaseDataService.saveSalaryMatrixItem(savedItem);
   };
 
@@ -745,7 +713,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
 
     setTransactions(prev => sortTransactionsByDate([tx, ...prev], 'desc'));
     onShowToast(`سند کل حقوق ماه ${monthName} به مبلغ ${formatCurrency(totalAmount, currencyMode)} ثبت شد.`);
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveTransaction(tx);
     SupabaseDataService.saveTransaction(tx);
   };
 
@@ -787,7 +756,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
 
     setTransactions(prev => sortTransactionsByDate([tx, ...prev], 'desc'));
     onShowToast(`سند پرداختی به ${member?.name || 'عضو'} با موفقیت در دفتر کل ثبت شد.`);
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveTransaction(tx);
     SupabaseDataService.saveTransaction(tx);
   };
 
@@ -803,7 +773,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       setMembers(prev => [...prev, member]);
       onShowToast(`سهامدار جدید «${member.name}» افزوده شد.`);
     }
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveMember(member);
     SupabaseDataService.saveMember(member);
   };
 
@@ -811,7 +782,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     const m = members.find(item => item.id === id);
     setMembers(prev => prev.filter(item => item.id !== id));
     onShowToast(`عضو «${m?.name || ''}» حذف شد.`);
-    // ☁️ حذف از ابر
+    // ☁️ حذف از سرور و ابر
+    serverApi.deleteMember(id);
     SupabaseDataService.deleteMember(id);
   };
 
@@ -827,7 +799,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       setLoans(prev => [...prev, loan]);
       onShowToast(`تسهیلات جدید «${loan.title}» ثبت گردید.`);
     }
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveLoan(loan);
     SupabaseDataService.saveLoan(loan);
   };
 
@@ -835,7 +808,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     const loan = loans.find(l => l.id === id);
     setLoans(prev => prev.filter(l => l.id !== id));
     onShowToast(`تسهیلات «${loan?.title || ''}» حذف شد.`);
-    // ☁️ حذف از ابر
+    // ☁️ حذف از سرور و ابر
+    serverApi.deleteLoan(id);
     SupabaseDataService.deleteLoan(id);
   };
 
@@ -881,7 +855,9 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
 
     setTransactions(prev => sortTransactionsByDate([tx, ...prev], 'desc'));
     onShowToast(`پرداخت قسط وام «${loan.title}» ثبت شد.`);
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveLoan(updatedLoan);
+    serverApi.saveTransaction(tx);
     SupabaseDataService.saveLoan(updatedLoan);
     SupabaseDataService.saveTransaction(tx);
   };
@@ -897,21 +873,24 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     };
     setBankAccounts(prev => [newAccount, ...prev]);
     onShowToast(`حساب بانکی «${newAccount.bankName}» با موفقیت افزوده شد.`);
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveBankAccount(newAccount);
     SupabaseDataService.saveBankAccount(newAccount);
   };
 
   const handleUpdateBankAccount = (updatedAccount: BankAccount) => {
     setBankAccounts(prev => prev.map(acc => acc.id === updatedAccount.id ? updatedAccount : acc));
     onShowToast(`اطلاعات حساب بانکی «${updatedAccount.bankName}» به‌روزرسانی شد.`);
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveBankAccount(updatedAccount);
     SupabaseDataService.saveBankAccount(updatedAccount);
   };
 
   const handleDeleteBankAccount = (id: string) => {
     setBankAccounts(prev => prev.filter(acc => acc.id !== id));
     onShowToast('حساب بانکی مورد نظر حذف گردید.');
-    // ☁️ حذف از ابر
+    // ☁️ حذف از سرور و ابر
+    serverApi.deleteBankAccount(id);
     SupabaseDataService.deleteBankAccount(id);
   };
 
@@ -932,7 +911,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     setFiscalYears(updated);
     setSelectedYear(newFy.year);
     onShowToast(`سال مالی ${newFy.year} با موفقیت تعریف گردید.`);
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveFiscalYear(newFy);
     SupabaseDataService.saveFiscalYear(newFy);
   };
 
@@ -946,8 +926,11 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       return fy;
     }));
     onShowToast(`اطلاعات سال مالی ${year} به‌روزرسانی شد.`);
-    // ☁️ ذخیره در ابر
-    if (updatedFy) SupabaseDataService.saveFiscalYear(updatedFy);
+    // ☁️ ذخیره در سرور و ابر
+    if (updatedFy) {
+      serverApi.saveFiscalYear(updatedFy);
+      SupabaseDataService.saveFiscalYear(updatedFy);
+    }
   };
 
   const handleDeleteFiscalYear = (year: number) => {
@@ -962,7 +945,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       if (fallback) setSelectedYear(fallback.year);
     }
     onShowToast(`سال مالی ${year} حذف گردید.`);
-    // ☁️ حذف از ابر
+    // ☁️ حذف از سرور و ابر
+    serverApi.deleteFiscalYear(year);
     SupabaseDataService.deleteFiscalYear(year);
   };
 
@@ -1023,13 +1007,20 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         createdAt: getCurrentJalaliDateTime().fullString,
       };
       setTransactions(prev => sortTransactionsByDate([openingTx, ...prev], 'desc'));
-      // ☁️ ذخیره تراکنش افتتاحیه در ابر
+      // ☁️ ذخیره تراکنش افتتاحیه در سرور و ابر
+      serverApi.saveTransaction(openingTx);
       SupabaseDataService.saveTransaction(openingTx);
     }
 
-    // ☁️ ذخیره سال‌های مالی در ابر
-    if (closedFy) SupabaseDataService.saveFiscalYear(closedFy);
-    if (newTargetFy) SupabaseDataService.saveFiscalYear(newTargetFy);
+    // ☁️ ذخیره سال‌های مالی در سرور و ابر
+    if (closedFy) {
+      serverApi.saveFiscalYear(closedFy);
+      SupabaseDataService.saveFiscalYear(closedFy);
+    }
+    if (newTargetFy) {
+      serverApi.saveFiscalYear(newTargetFy);
+      SupabaseDataService.saveFiscalYear(newTargetFy);
+    }
 
     onShowToast(`دفاتر سال مالی ${sourceYear} با موفقیت بسته شد.`);
   };
@@ -1048,8 +1039,11 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       return fy;
     }));
     onShowToast(`دفاتر سال مالی ${year} مجدداً بازگشایی شد.`);
-    // ☁️ ذخیره در ابر
-    if (reopenedFy) SupabaseDataService.saveFiscalYear(reopenedFy);
+    // ☁️ ذخیره در سرور و ابر
+    if (reopenedFy) {
+      serverApi.saveFiscalYear(reopenedFy);
+      SupabaseDataService.saveFiscalYear(reopenedFy);
+    }
   };
 
   // ==========================
@@ -1084,7 +1078,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       return updated;
     });
 
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveUser(newUser);
     SupabaseDataService.saveAppUser(newUser);
 
     // ثبت در Supabase Auth با پسورد خام (سوپابیس خود هش امن ایجاد می‌کند)
@@ -1128,8 +1123,11 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     });
 
     onShowToast('اطلاعات کاربر با موفقیت به‌روزرسانی شد.');
-    // ☁️ ذخیره در ابر
-    if (updatedUser) SupabaseDataService.saveAppUser(updatedUser);
+    // ☁️ ذخیره در سرور و ابر
+    if (updatedUser) {
+      serverApi.saveUser(updatedUser);
+      SupabaseDataService.saveAppUser(updatedUser);
+    }
   };
 
   const handleDeleteUser = (id: string) => {
@@ -1145,7 +1143,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       return updated;
     });
     onShowToast(`کاربر «${target?.fullName || ''}» با موفقیت حذف گردید.`);
-    // ☁️ حذف از ابر
+    // ☁️ حذف از سرور و ابر
+    serverApi.deleteUser(id);
     SupabaseDataService.deleteAppUser(id);
   };
 
@@ -1174,9 +1173,14 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       });
     }
 
-    onShowToast('کلمه عبور با موفقیت به‌صورت هش امن به‌روزرسانی شد.');
-    // ☁️ ذخیره در ابر
-    if (updatedUser) SupabaseDataService.saveAppUser(updatedUser);
+    // ☁️ ذخیره فوری در دیتابیس متمرکز سرور جهت دسترسی از تمامی مرورگرها
+    await serverApi.changePassword(userId, secureHash);
+    if (updatedUser) {
+      serverApi.saveUser(updatedUser);
+      SupabaseDataService.saveAppUser(updatedUser);
+    }
+
+    onShowToast('کلمه عبور با موفقیت در دیتابیس متمرکز سرور به‌روزرسانی شد.');
   };
 
   // ==========================
@@ -1198,10 +1202,12 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     if (hasChanges) {
       setTransactions(updatedTxs);
       writeLocal('ayandeh_transactions', updatedTxs);
-      // ☁️ ذخیره تراکنش‌های به‌روز شده در ابر
+      // ☁️ ذخیره تراکنش‌های به‌روز شده در سرور و ابر
+      serverApi.saveTransactions(updatedTxs);
       SupabaseDataService.saveTransactions(updatedTxs);
     }
-    // ☁️ ذخیره فاکتور در ابر
+    // ☁️ ذخیره فاکتور در سرور و ابر
+    serverApi.saveVatInvoice(invoice);
     SupabaseDataService.saveVatInvoice(invoice);
   };
 
@@ -1213,7 +1219,9 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     const removedTxIds = transactions.filter(t => t.id.includes(id)).map(t => t.id);
     setTransactions(prev => prev.filter(t => !t.id.includes(id)));
     onShowToast(`صورتحساب رسمی شماره ${inv?.invoiceNumber || ''} حذف شد.`);
-    // ☁️ حذف از ابر
+    // ☁️ حذف از سرور و ابر
+    serverApi.deleteVatInvoice(id);
+    removedTxIds.forEach(txId => serverApi.deleteTransaction(txId));
     SupabaseDataService.deleteVatInvoice(id);
     removedTxIds.forEach(txId => SupabaseDataService.deleteTransaction(txId));
   };
@@ -1224,9 +1232,13 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     const { updatedTxs } = reconcileVatInvoicesWithTransactions(updatedInvoices, transactions, currencyMode);
     setTransactions(updatedTxs);
     onShowToast(`صورتحساب شماره ${invoice.invoiceNumber} با موفقیت در اسناد مالی شرکت منظور شد.`);
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
     const syncedInvoice = updatedInvoices.find(i => i.id === invoice.id);
-    if (syncedInvoice) SupabaseDataService.saveVatInvoice(syncedInvoice);
+    if (syncedInvoice) {
+      serverApi.saveVatInvoice(syncedInvoice);
+      SupabaseDataService.saveVatInvoice(syncedInvoice);
+    }
+    serverApi.saveTransactions(updatedTxs);
     SupabaseDataService.saveTransactions(updatedTxs);
   };
 
@@ -1239,7 +1251,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       setServiceTariffs(prev => [...prev, tariff]);
       onShowToast(`تعرفه جدید «${tariff.title}» با موفقیت افزوده شد.`);
     }
-    // ☁️ ذخیره در ابر
+    // ☁️ ذخیره در سرور و ابر
+    serverApi.saveServiceTariff(tariff);
     SupabaseDataService.saveServiceTariff(tariff);
   };
 
@@ -1270,6 +1283,9 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     if (data.serviceTariffs) setServiceTariffs(data.serviceTariffs);
 
     onShowToast('اطلاعات فایل پشتیبان با موفقیت بازگردانی شد.');
+
+    // ☁️ ذخیره کامل در دیتابیس سرور جهت همگامی همه مرورگرها
+    serverApi.restoreData(data);
 
     // ☁️ مهاجرت به ابر بعد از بازیابی
     SupabaseDataService.migrateAllData({
@@ -1318,6 +1334,9 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     writeLocal('ayandeh_selected_year', '1405');
 
     onShowToast('کلیه اطلاعات و اسناد ورودی سامانه با موفقیت پاکسازی و صفر گردید.');
+
+    // ☁️ پاکسازی کامل در دیتابیس متمرکز سرور
+    serverApi.resetData();
 
     // ☁️ مهاجرت مقادیر پیش‌فرض به ابر
     SupabaseDataService.migrateAllData({

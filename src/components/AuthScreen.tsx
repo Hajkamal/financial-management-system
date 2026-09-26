@@ -31,6 +31,7 @@ import { getPermissionsByRole } from '../utils/permissions';
 import { INITIAL_USERS } from '../data/initialData';
 import { toEnglishDigits, normalizeEmail, normalizePassword } from '../utils/formatters';
 import { hashPassword, verifyPassword } from '../utils/crypto';
+import { serverApi } from '../lib/serverApi';
 
 interface AuthScreenProps {
   users?: AppUser[];
@@ -85,11 +86,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           if (error) throw error;
           setSuccessMessage('لینک بازیابی رمز عبور به ایمیل شما ارسال شد.');
         } else {
-          // Local reset simulation
+          // در حالت سرور داخلی: ثبت درخواست بدون فاش کردن رمز
           const found = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
           if (found) {
-            setSuccessMessage(`رمز عبور پیش‌فرض برای ${found.fullName}: admin1234 است. اکنون می‌توانید وارد شوید.`);
-            setPassword('admin1234');
+            setSuccessMessage(`درخواست بازیابی برای حساب «${found.fullName}» ثبت گردید. جهت دریافت یا بازنشانی رمز عبور، با مدیر کل سامانه هماهنگ نمایید.`);
             setMode('login');
           } else {
             setErrorMessage('کاربری با این نشانی ایمیل در سامانه یافت نشد.');
@@ -203,8 +203,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     // Mode: 'login'
     setIsLoading(true);
     try {
-      // 1. Check registered system users first with normalized credentials
-      const localMatchedUser = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
+      // 1. دریافت تازه‌ترین کاربران از دیتابیس سرور جهت اطمینان از یکپارچگی رمزهای تغییریافته
+      let activeUsers = safeUsers;
+      try {
+        const serverData = await serverApi.getFinancialData();
+        if (serverData && Array.isArray(serverData.users) && serverData.users.length > 0) {
+          activeUsers = serverData.users;
+        }
+      } catch {}
+
+      // Check registered system users first with normalized credentials
+      const localMatchedUser = activeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
       if (localMatchedUser) {
         // Enforce pending check
         if (localMatchedUser.status === 'pending') {
@@ -227,16 +236,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             try {
               const upgradedHash = await hashPassword(cleanPassword);
               localMatchedUser.password = upgradedHash;
-              const allSavedUsers = localStorage.getItem('ayandeh_users');
-              if (allSavedUsers) {
-                const parsed = JSON.parse(allSavedUsers);
-                if (Array.isArray(parsed)) {
-                  const updatedUsers = parsed.map((u: AppUser) => 
-                    u.id === localMatchedUser.id ? { ...u, password: upgradedHash } : u
-                  );
-                  localStorage.setItem('ayandeh_users', JSON.stringify(updatedUsers));
-                }
-              }
+              serverApi.changePassword(localMatchedUser.id, upgradedHash);
             } catch {}
           }
 
@@ -266,8 +266,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           if (onLoginUser) onLoginUser(localMatchedUser);
           if (onAuthSuccess) onAuthSuccess();
           return;
+        } else {
+          // در صورتی که رمز عبور همخوانی ندارد
+          if (!isSupabaseConfigured || !supabase) {
+            setErrorMessage('کلمه عبور وارد شده نادرست است.');
+            setIsLoading(false);
+            return;
+          }
         }
-        // If password did not match local, do not fail immediately if Supabase is available; try Supabase as well
       }
 
       // 2. If not verified locally and Supabase is configured, try Supabase auth
@@ -435,31 +441,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-            
-            {/* Quick Fill Admin Account */}
-            {mode === 'login' && (
-              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs">
-                    و
-                  </div>
-                  <div>
-                    <span className="font-bold text-white block text-[11px]">ورود سریع مدیر ارشد (وحید کمالی)</span>
-                    <span className="text-[10px] text-slate-400 font-mono">vahidkamali03@gmail.com</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('vahidkamali03@gmail.com');
-                    setPassword('admin');
-                  }}
-                  className="px-2.5 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 rounded-lg text-[11px] font-bold transition cursor-pointer"
-                >
-                  تکمیل فرم
-                </button>
-              </div>
-            )}
 
             {/* Signup extra fields: First and Last Name */}
             {mode === 'signup' && (
@@ -509,7 +490,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   type="email"
                   required
                   dir="ltr"
-                  placeholder="vahidkamali03@gmail.com"
+                  placeholder="name@company.com"
                   value={email}
                   onChange={(e) => setEmail(toEnglishDigits(e.target.value))}
                   disabled={isLoading}

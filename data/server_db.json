@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "lastUpdated": "2026-09-26T12:22:05.372Z",
+  "selectedYear": 1405,
+  "users": [
+    {
+      "id": "user-vahid",
+      "email": "vahidkamali03@gmail.com",
+      "firstName": "وحید",
+      "lastName": "کمالی",
+      "fullName": "وحید کمالی",
+      "password": "sha256:8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918",
+      "role": "super_admin",
+      "roleTitle": "مدیر کل سامانه",
+      "status": "active",
+      "permissions": {
+        "canViewDashboard": true,
+        "canViewTransactions": true,
+        "canCreateTransactions": true,
+        "canEditTransactions": true,
+        "canDeleteTransactions": true,
+        "canViewSalary": true,
+        "canEditSalary": true,
+        "canManageEmployees": true,
+        "canManageMembers": true,
+        "canManageLoans": true,
+        "canManageFiscalYears": true,
+        "canManageUsers": true,
+        "canExportExcel": true,
+        "canBackupRestore": true
+      },
+      "avatarColor": "from-amber-500 to-yellow-600",
+      "createdAt": "۱۴۰۵/۰۱/۰۱",
+      "lastLogin": "امروز",
+      "phone": "۰۹۱۲۳۴۵۶۷۸۹",
+      "notes": "مدیر ارشد و مالک سامانه"
+    }
+  ],
+  "fiscalYears": [
+    {
+      "year": 1405,
+      "title": "سال مالی ۱۴۰۵ (جاری)",
+      "startDate": "۱۴۰۵/۰۱/۰۱",
+      "endDate": "۱۴۰۵/۱۲/۲۹",
+      "isClosed": false,
+      "notes": "سال مالی جدید",
+      "openingBalance": 0
+    }
+  ],
+  "transactions": [],
+  "employees": [],
+  "salaryMatrix": [],
+  "members": [],
+  "loans": [],
+  "bankAccounts": [],
+  "vatInvoices": [],
+  "serviceTariffs": []
+}

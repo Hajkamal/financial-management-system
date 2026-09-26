@@ -118,6 +118,385 @@ ${systemContext || 'اطلاعاتی ارائه نشده است.'}
   }
 });
 
+import { loadDatabase, saveDatabase, resetDatabaseToClean } from './serverDb';
+
+// =====================================================
+// API دیتابیس مشترک و همگام سرور (Server Data Endpoints)
+// =====================================================
+
+// دریافت کلیه اطلاعات مالی از دیتابیس سرور
+app.get('/api/financial-data', (_req, res) => {
+  try {
+    const db = loadDatabase();
+    res.json({ success: true, data: db });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'خطا در بارگذاری اطلاعات از سرور' });
+  }
+});
+
+// ذخیره / ویرایش تراکنش
+app.post('/api/financial-data/transaction', (req, res) => {
+  try {
+    const tx = req.body;
+    if (!tx || !tx.id) return res.status(400).json({ error: 'شناسه تراکنش نامعتبر است' });
+
+    const db = loadDatabase();
+    const idx = db.transactions.findIndex((t: any) => t.id === tx.id);
+    if (idx >= 0) {
+      db.transactions[idx] = tx;
+    } else {
+      db.transactions.unshift(tx);
+    }
+    saveDatabase(db);
+    res.json({ success: true, transaction: tx });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ذخیره دسته‌ای تراکنش‌ها
+app.post('/api/financial-data/transactions', (req, res) => {
+  try {
+    const { transactions } = req.body;
+    if (!Array.isArray(transactions)) return res.status(400).json({ error: 'آرایه نامعتبر' });
+
+    const db = loadDatabase();
+    db.transactions = transactions;
+    saveDatabase(db);
+    res.json({ success: true, count: transactions.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// حذف تراکنش
+app.delete('/api/financial-data/transaction/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = loadDatabase();
+    db.transactions = db.transactions.filter((t: any) => t.id !== id);
+    saveDatabase(db);
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// پرسنل و کارمندان
+app.post('/api/financial-data/employee', (req, res) => {
+  try {
+    const emp = req.body;
+    if (!emp || !emp.id) return res.status(400).json({ error: 'شناسه کارمند نامعتبر' });
+    const db = loadDatabase();
+    const idx = db.employees.findIndex((e: any) => e.id === emp.id);
+    if (idx >= 0) db.employees[idx] = emp;
+    else db.employees.push(emp);
+    saveDatabase(db);
+    res.json({ success: true, employee: emp });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/financial-data/employee/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = loadDatabase();
+    db.employees = db.employees.filter((e: any) => e.id !== id);
+    db.salaryMatrix = db.salaryMatrix.filter((s: any) => s.employeeId !== id);
+    saveDatabase(db);
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ماتریس حقوق
+app.post('/api/financial-data/salary-cell', (req, res) => {
+  try {
+    const item = req.body;
+    const db = loadDatabase();
+    const idx = db.salaryMatrix.findIndex(
+      (s: any) => s.employeeId === item.employeeId && s.month === item.month && s.year === item.year
+    );
+    if (idx >= 0) db.salaryMatrix[idx] = item;
+    else db.salaryMatrix.push(item);
+    saveDatabase(db);
+    res.json({ success: true, item });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/financial-data/salary-matrix-batch', (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items)) return res.status(400).json({ error: 'آرایه نامعتبر' });
+    const db = loadDatabase();
+    for (const item of items) {
+      const idx = db.salaryMatrix.findIndex(
+        (s: any) => s.employeeId === item.employeeId && s.month === item.month && s.year === item.year
+      );
+      if (idx >= 0) db.salaryMatrix[idx] = item;
+      else db.salaryMatrix.push(item);
+    }
+    saveDatabase(db);
+    res.json({ success: true, count: items.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// اعضا و سهامداران
+app.post('/api/financial-data/member', (req, res) => {
+  try {
+    const member = req.body;
+    if (!member || !member.id) return res.status(400).json({ error: 'شناسه عضو نامعتبر' });
+    const db = loadDatabase();
+    const idx = db.members.findIndex((m: any) => m.id === member.id);
+    if (idx >= 0) db.members[idx] = member;
+    else db.members.push(member);
+    saveDatabase(db);
+    res.json({ success: true, member });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/financial-data/member/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = loadDatabase();
+    db.members = db.members.filter((m: any) => m.id !== id);
+    saveDatabase(db);
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// وام‌ها
+app.post('/api/financial-data/loan', (req, res) => {
+  try {
+    const loan = req.body;
+    if (!loan || !loan.id) return res.status(400).json({ error: 'شناسه وام نامعتبر' });
+    const db = loadDatabase();
+    const idx = db.loans.findIndex((l: any) => l.id === loan.id);
+    if (idx >= 0) db.loans[idx] = loan;
+    else db.loans.push(loan);
+    saveDatabase(db);
+    res.json({ success: true, loan });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/financial-data/loan/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = loadDatabase();
+    db.loans = db.loans.filter((l: any) => l.id !== id);
+    saveDatabase(db);
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// حساب‌های بانکی
+app.post('/api/financial-data/bank-account', (req, res) => {
+  try {
+    const acc = req.body;
+    if (!acc || !acc.id) return res.status(400).json({ error: 'شناسه حساب نامعتبر' });
+    const db = loadDatabase();
+    const idx = db.bankAccounts.findIndex((a: any) => a.id === acc.id);
+    if (idx >= 0) db.bankAccounts[idx] = acc;
+    else db.bankAccounts.push(acc);
+    saveDatabase(db);
+    res.json({ success: true, account: acc });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/financial-data/bank-account/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = loadDatabase();
+    db.bankAccounts = db.bankAccounts.filter((a: any) => a.id !== id);
+    saveDatabase(db);
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// فاکتورهای ارزش افزوده
+app.post('/api/financial-data/vat-invoice', (req, res) => {
+  try {
+    const inv = req.body;
+    if (!inv || !inv.id) return res.status(400).json({ error: 'شناسه فاکتور نامعتبر' });
+    const db = loadDatabase();
+    const idx = db.vatInvoices.findIndex((i: any) => i.id === inv.id);
+    if (idx >= 0) db.vatInvoices[idx] = inv;
+    else db.vatInvoices.unshift(inv);
+    saveDatabase(db);
+    res.json({ success: true, invoice: inv });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/financial-data/vat-invoice/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = loadDatabase();
+    db.vatInvoices = db.vatInvoices.filter((i: any) => i.id !== id);
+    saveDatabase(db);
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// تعرفه خدمات
+app.post('/api/financial-data/service-tariff', (req, res) => {
+  try {
+    const tariff = req.body;
+    const db = loadDatabase();
+    const idx = db.serviceTariffs.findIndex((t: any) => t.id === tariff.id);
+    if (idx >= 0) db.serviceTariffs[idx] = tariff;
+    else db.serviceTariffs.push(tariff);
+    saveDatabase(db);
+    res.json({ success: true, tariff });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// سال‌های مالی
+app.post('/api/financial-data/fiscal-year', (req, res) => {
+  try {
+    const fy = req.body;
+    const db = loadDatabase();
+    const idx = db.fiscalYears.findIndex((f: any) => f.year === fy.year);
+    if (idx >= 0) db.fiscalYears[idx] = fy;
+    else db.fiscalYears.push(fy);
+    saveDatabase(db);
+    res.json({ success: true, fiscalYear: fy });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/financial-data/fiscal-year/:year', (req, res) => {
+  try {
+    const y = parseInt(req.params.year, 10);
+    const db = loadDatabase();
+    db.fiscalYears = db.fiscalYears.filter((f: any) => f.year !== y);
+    saveDatabase(db);
+    res.json({ success: true, year: y });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// مدیریت کاربران
+app.post('/api/financial-data/user', (req, res) => {
+  try {
+    const user = req.body;
+    if (!user || !user.email) return res.status(400).json({ error: 'اطلاعات کاربر ناقص است' });
+    const db = loadDatabase();
+    const idx = db.users.findIndex((u: any) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
+    if (idx >= 0) {
+      // Retain password if not supplied
+      const existing = db.users[idx];
+      db.users[idx] = {
+        ...existing,
+        ...user,
+        password: user.password || existing.password,
+      };
+    } else {
+      db.users.push(user);
+    }
+    saveDatabase(db);
+    res.json({ success: true, user: db.users[idx >= 0 ? idx : db.users.length - 1] });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/financial-data/user/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = loadDatabase();
+    const target = db.users.find((u: any) => u.id === id);
+    if (target?.email === 'vahidkamali03@gmail.com') {
+      return res.status(403).json({ error: 'امکان حذف مدیر ارشد وجود ندارد' });
+    }
+    db.users = db.users.filter((u: any) => u.id !== id);
+    saveDatabase(db);
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// تغییر رمز عبور در سرور
+app.post('/api/auth/change-password', (req, res) => {
+  try {
+    const { userId, newPasswordHash } = req.body;
+    if (!userId || !newPasswordHash) {
+      return res.status(400).json({ error: 'اطلاعات تغییر رمز عبور ناقص است' });
+    }
+    const db = loadDatabase();
+    const user = db.users.find((u: any) => u.id === userId || u.email?.toLowerCase() === userId.toLowerCase());
+    if (!user) {
+      return res.status(404).json({ error: 'کاربر مورد نظر در سیستم یافت نشد' });
+    }
+    user.password = newPasswordHash;
+    saveDatabase(db);
+    console.info(`Password successfully updated on server for user: ${user.email}`);
+    res.json({ success: true, message: 'کلمه عبور در دیتابیس سرور با موفقیت به‌روزرسانی شد' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// پاکسازی کل داده‌ها به حالت خالی
+app.post('/api/financial-data/reset', (_req, res) => {
+  try {
+    const freshDb = resetDatabaseToClean();
+    res.json({ success: true, data: freshDb });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// بازیابی کامل بکاپ در سرور
+app.post('/api/financial-data/restore', (req, res) => {
+  try {
+    const backup = req.body;
+    const db = loadDatabase();
+    if (backup.transactions) db.transactions = backup.transactions;
+    if (backup.employees) db.employees = backup.employees;
+    if (backup.salaryMatrix) db.salaryMatrix = backup.salaryMatrix;
+    if (backup.members) db.members = backup.members;
+    if (backup.loans) db.loans = backup.loans;
+    if (backup.bankAccounts) db.bankAccounts = backup.bankAccounts;
+    if (backup.vatInvoices) db.vatInvoices = backup.vatInvoices;
+    if (backup.serviceTariffs) db.serviceTariffs = backup.serviceTariffs;
+    if (backup.fiscalYears) db.fiscalYears = backup.fiscalYears;
+    if (backup.users && Array.isArray(backup.users) && backup.users.length > 0) {
+      db.users = backup.users;
+    }
+    saveDatabase(db);
+    res.json({ success: true, data: db });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Vite middleware or static serving
 async function startServer() {
   const isDev = process.env.NODE_ENV !== 'production';

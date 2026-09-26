@@ -374,17 +374,17 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   <div className="flex items-center justify-between text-slate-600 pt-1 border-t border-slate-200/60">
                     <span className="text-slate-400 flex items-center gap-1">
                       <KeyRound className="w-3.5 h-3.5 text-amber-600" />
-                      <span>رمز عبور:</span>
+                      <span>امنیت کلمه عبور:</span>
                     </span>
                     <div className="flex items-center gap-1.5 font-mono text-[11px]" dir="ltr">
-                      <span className="font-bold text-slate-800 select-all bg-slate-200/70 px-2 py-0.5 rounded border border-slate-300">
-                        {visiblePasswordUserId === user.id ? (user.password || '123456') : '••••••••'}
+                      <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[10px]">
+                        {visiblePasswordUserId === user.id ? 'SHA-256 Encrypted' : '••••••••'}
                       </span>
                       <button
                         type="button"
                         onClick={() => setVisiblePasswordUserId(prev => prev === user.id ? null : user.id)}
                         className="text-slate-400 hover:text-slate-700 p-0.5 rounded transition-colors cursor-pointer"
-                        title={visiblePasswordUserId === user.id ? 'مخفی‌سازی رمز' : 'مشاهده رمز عبور تعریف شده'}
+                        title={visiblePasswordUserId === user.id ? 'مخفی‌سازی' : 'بررسی وضعیت رمز عبور'}
                       >
                         {visiblePasswordUserId === user.id ? <EyeOff className="w-3.5 h-3.5 text-amber-600" /> : <Eye className="w-3.5 h-3.5" />}
                       </button>
@@ -593,11 +593,11 @@ export const UsersView: React.FC<UsersViewProps> = ({
               کاربر: <strong className="text-slate-800">{passwordModalUser.fullName}</strong> ({passwordModalUser.email})
             </p>
 
-            {/* Current Password Display */}
+            {/* Current Password Security Notice */}
             <div className="mb-4 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs flex items-center justify-between">
-              <span className="text-slate-500">رمز عبور فعلی:</span>
-              <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 select-all" dir="ltr">
-                {passwordModalUser.password || 'تعریف نشده'}
+              <span className="text-slate-500">وضعیت امنیت رمز:</span>
+              <span className="font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px]" dir="ltr">
+                {passwordModalUser.password ? 'هش‌شده (SHA-256)' : 'تعریف نشده'}
               </span>
             </div>
 
@@ -696,7 +696,7 @@ const UserModal: React.FC<UserModalProps> = ({
   const [firstName, setFirstName] = useState(userToEdit?.firstName || '');
   const [lastName, setLastName] = useState(userToEdit?.lastName || '');
   const [email, setEmail] = useState(userToEdit?.email || '');
-  const [password, setPassword] = useState(userToEdit?.password || '123456');
+  const [password, setPassword] = useState('');
   const [showModalPassword, setShowModalPassword] = useState(false);
   const [roleTitle, setRoleTitle] = useState(userToEdit?.roleTitle || 'کارشناس حسابداری');
   const [role, setRole] = useState<UserRole>(userToEdit?.role || 'accountant');
@@ -744,7 +744,7 @@ const UserModal: React.FC<UserModalProps> = ({
     const cleanFirst = firstName.trim();
     const cleanLast = lastName.trim();
     const cleanEmail = normalizeEmail(email);
-    const cleanPassword = normalizePassword(password) || '123456';
+    const cleanPassword = normalizePassword(password);
     const cleanPhone = toEnglishDigits(phone).trim() || undefined;
 
     if (!cleanFirst || !cleanLast) {
@@ -755,6 +755,10 @@ const UserModal: React.FC<UserModalProps> = ({
       alert('لطفاً نشانی ایمیل را وارد نمایید.');
       return;
     }
+    if (!userToEdit && (!cleanPassword || cleanPassword.length < 4)) {
+      alert('لطفاً برای کاربر جدید یک کلمه عبور با حداقل ۴ کاراکتر وارد نمایید.');
+      return;
+    }
 
     const fullName = `${cleanFirst} ${cleanLast}`.trim();
 
@@ -763,7 +767,7 @@ const UserModal: React.FC<UserModalProps> = ({
       lastName: cleanLast,
       fullName,
       email: cleanEmail,
-      password: cleanPassword,
+      ...(cleanPassword ? { password: cleanPassword } : {}),
       role,
       roleTitle: roleTitle.trim() || 'کاربر سامانه',
       status,
@@ -844,7 +848,7 @@ const UserModal: React.FC<UserModalProps> = ({
                   required
                   dir="ltr"
                   disabled={isSuperAdminEmail}
-                  placeholder="vahidkamali03@gmail.com"
+                  placeholder="name@company.com"
                   value={email}
                   onChange={(e) => setEmail(toEnglishDigits(e.target.value))}
                   className="w-full pr-10 pl-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 font-mono text-left disabled:bg-slate-100"
