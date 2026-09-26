@@ -177,14 +177,44 @@ interface UseFinancialDataProps {
 }
 
 // =====================================================
+// کلید نسخه بازنشانی کامل داده‌های ورودی به حالت کاملاً خام و خالی
+// =====================================================
+const DATA_EMPTY_PURGE_KEY = 'ayandeh_data_empty_clean_v1';
+
+function ensureCleanEmptyStateOnce() {
+  try {
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(DATA_EMPTY_PURGE_KEY) === 'purged_clean') return;
+
+    // پاکسازی تمامی داده‌های ورودی ذخیره‌شده پیشین جهت شروع کاملاً تمیز
+    localStorage.removeItem('ayandeh_transactions');
+    localStorage.removeItem('ayandeh_employees');
+    localStorage.removeItem('ayandeh_salary_matrix');
+    localStorage.removeItem('ayandeh_members');
+    localStorage.removeItem('ayandeh_loans');
+    localStorage.removeItem('ayandeh_bank_accounts');
+    localStorage.removeItem('ayandeh_vat_invoices');
+    localStorage.removeItem('ayandeh_service_tariffs');
+    localStorage.setItem('ayandeh_fiscal_years', JSON.stringify(INITIAL_FISCAL_YEARS));
+    localStorage.setItem('ayandeh_selected_year', '1405');
+    localStorage.setItem('ayandeh_users', JSON.stringify(INITIAL_USERS));
+    
+    localStorage.setItem(DATA_EMPTY_PURGE_KEY, 'purged_clean');
+  } catch {}
+}
+
+ensureCleanEmptyStateOnce();
+
+// =====================================================
 // توابع کمکی خواندن/نوشتن localStorage (فقط fallback)
 // =====================================================
 function readLocal<T>(key: string, fallback: T): T {
   try {
     const saved = localStorage.getItem(key);
-    const parsed = saved ? JSON.parse(saved) : null;
+    if (!saved) return fallback;
+    const parsed = JSON.parse(saved);
     if (Array.isArray(fallback)) {
-      return (Array.isArray(parsed) && parsed.length > 0 ? parsed : fallback) as T;
+      return (Array.isArray(parsed) ? parsed : fallback) as T;
     }
     return parsed ?? fallback;
   } catch {
@@ -249,11 +279,11 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         !tx.dateString?.startsWith('1404') && 
         !tx.dateString?.startsWith('۱۴۰۴')
       );
-      const baseList = cleaned.length > 0 ? cleaned : INITIAL_TRANSACTIONS;
+      const baseList = cleaned;
 
       const savedVat = localStorage.getItem('ayandeh_vat_invoices');
       const parsedVat = savedVat ? JSON.parse(savedVat) : INITIAL_VAT_INVOICES;
-      const invoices = Array.isArray(parsedVat) && parsedVat.length > 0 ? parsedVat : INITIAL_VAT_INVOICES;
+      const invoices = Array.isArray(parsedVat) ? parsedVat : INITIAL_VAT_INVOICES;
 
       const { updatedTxs } = reconcileVatInvoicesWithTransactions(invoices, baseList);
       return updatedTxs;
@@ -271,7 +301,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   const [salaryMatrix, setSalaryMatrix] = useState<SalaryMatrixItem[]>(() => {
     const raw = readLocal<SalaryMatrixItem[]>('ayandeh_salary_matrix', INITIAL_SALARY_MATRIX);
     const cleaned = raw.filter(sm => sm.year !== 1404);
-    return cleaned.length > 0 ? cleaned : INITIAL_SALARY_MATRIX;
+    return cleaned;
   });
 
   // ۶. اعضای شرکت و سهامداران
@@ -942,7 +972,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     createOpeningTx: boolean, 
     openingAmount: number
   ) => {
-    const today = getCurrentJalaliDateTime().dateFormatted;
+    const today = getCurrentJalaliDateTime().dateString;
     let closedFy: FiscalYear | null = null;
     setFiscalYears(prev => prev.map(fy => {
       if (fy.year === sourceYear) {
@@ -1274,7 +1304,20 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     setVatInvoices(INITIAL_VAT_INVOICES);
     setServiceTariffs(INITIAL_SERVICE_TARIFFS);
     setSelectedYear(1405);
-    onShowToast('کلیه اطلاعات سامانه به مقادیر پیش‌فرض سال ۱۴۰۵ بازگردانی شد.');
+
+    writeLocal('ayandeh_transactions', INITIAL_TRANSACTIONS);
+    writeLocal('ayandeh_employees', INITIAL_EMPLOYEES);
+    writeLocal('ayandeh_salary_matrix', INITIAL_SALARY_MATRIX);
+    writeLocal('ayandeh_members', INITIAL_MEMBERS);
+    writeLocal('ayandeh_loans', INITIAL_LOANS);
+    writeLocal('ayandeh_fiscal_years', INITIAL_FISCAL_YEARS);
+    writeLocal('ayandeh_users', INITIAL_USERS);
+    writeLocal('ayandeh_bank_accounts', INITIAL_BANK_ACCOUNTS);
+    writeLocal('ayandeh_vat_invoices', INITIAL_VAT_INVOICES);
+    writeLocal('ayandeh_service_tariffs', INITIAL_SERVICE_TARIFFS);
+    writeLocal('ayandeh_selected_year', '1405');
+
+    onShowToast('کلیه اطلاعات و اسناد ورودی سامانه با موفقیت پاکسازی و صفر گردید.');
 
     // ☁️ مهاجرت مقادیر پیش‌فرض به ابر
     SupabaseDataService.migrateAllData({

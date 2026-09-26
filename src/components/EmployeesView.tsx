@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { 
   Users2, 
   UserPlus, 
+  Plus,
   Edit2, 
   Trash2, 
   ShieldCheck, 
@@ -199,9 +200,31 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         </span>
       </div>
 
-      {/* Employees Grid Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-5">
-        {filtered.map(emp => {
+      {/* Employees Grid Cards or Empty State */}
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
+          <Users2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="font-bold text-slate-800 text-base mb-1">
+            {employees.length === 0 ? 'هیچ کارمندی در سامانه تعریف نشده است' : 'کارمندی با مشخصات جستجو شده یافت نشد'}
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto mb-4 leading-relaxed">
+            {employees.length === 0 
+              ? 'برای شروع ثبت احکام کارگزینی، وضعیت بیمه تامین اجتماعی و ماتریس حقوق، اولین کارمند را تعریف کنید.'
+              : 'عبارت جستجو را پاک کنید تا لیست کلیه کارمندان مشاهده شود.'}
+          </p>
+          {employees.length === 0 && canEdit && (
+            <button
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>تعریف اولین کارمند</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-5">
+          {filtered.map(emp => {
           // Calculate received salaries in the selected year
           const empMatrix = salaryMatrix.filter(s => s.employeeId === emp.id && s.year === selectedYear);
           const totalPaidYear = empMatrix.reduce((s, i) => s + i.amount + (i.bonus || 0), 0);
@@ -341,6 +364,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           );
         })}
       </div>
+      )}
 
       {/* Add / Edit Employee Modal */}
       {isNewModalOpen && (

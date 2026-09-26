@@ -336,7 +336,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
             <Landmark className="w-4 h-4 text-blue-500" />
           </div>
           <div className="text-sm font-bold text-slate-900 truncate mb-1">
-            {bankAccounts[0]?.bankName || 'بانک سامان'}
+            {bankAccounts[0]?.bankName || 'بدون حساب تعریف‌شده'}
           </div>
           <div className="text-[11px] text-slate-500 truncate" dir="ltr">
             {bankAccounts[0]?.shabaNumber ? formatShabaDisplay(bankAccounts[0].shabaNumber) : '---'}

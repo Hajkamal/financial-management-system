@@ -962,9 +962,28 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       {/* Transactions Table / Mobile Cards */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         {filtered.length === 0 ? (
-          <div className="py-12 text-center text-slate-400">
-            <ReceiptText className="w-12 h-12 mx-auto mb-2 text-slate-300" />
-            <p className="text-sm">هیچ سندی با معیارهای فیلتر شده یافت نشد.</p>
+          <div className="py-16 px-4 text-center text-slate-400 flex flex-col items-center justify-center">
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3 shadow-inner">
+              <ReceiptText className="w-8 h-8 text-slate-400" />
+            </div>
+            <h3 className="text-base font-bold text-slate-700 mb-1">
+              {transactions.length === 0 ? 'دفتر اسناد مالی کاملاً خالی است' : 'هیچ سندی با معیارهای فیلتر شده یافت نشد'}
+            </h3>
+            <p className="text-xs text-slate-500 max-w-sm mb-4 leading-relaxed">
+              {transactions.length === 0 
+                ? 'سامانه آماده ثبت اسناد مالی جدید شما (درآمد، هزینه، پیش‌پرداخت‌ها و سپرده‌ها) می‌باشد.'
+                : 'می‌توانید فیلترهای جستجو را پاک کنید تا تمامی اسناد نمایش داده شوند.'}
+            </p>
+            {transactions.length === 0 && canCreate && (
+              <button
+                type="button"
+                onClick={onOpenNewTransaction}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>ثبت اولین سند مالی</span>
+              </button>
+            )}
           </div>
         ) : (
           <>

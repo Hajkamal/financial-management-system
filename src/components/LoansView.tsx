@@ -226,9 +226,29 @@ export const LoansView: React.FC<LoansViewProps> = ({
         </div>
       </div>
 
-      {/* Loans List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {loans.map(loan => {
+      {/* Loans List or Empty Notice */}
+      {loans.length === 0 ? (
+        <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
+          <Landmark className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="font-bold text-slate-800 text-base mb-1">
+            هیچ وام یا تسهیلاتی ثبت نشده است
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto mb-4 leading-relaxed">
+            جهت مدیریت و پیگیری بدهی‌ها و اقساط تسهیلات بانکی، پارک علم و فناوری یا صندوق‌ها، اولین وام را تعریف فرمایید.
+          </p>
+          {canEdit && (
+            <button
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>ثبت اولین تسهیلات / وام</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {loans.map(loan => {
           const remainingInstallments = Math.max(0, loan.totalInstallments - loan.paidInstallments);
           const percent = loan.totalInstallments > 0 
             ? Math.round((loan.paidInstallments / loan.totalInstallments) * 100) 
@@ -347,6 +367,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
           );
         })}
       </div>
+      )}
 
       {/* Add / Edit Loan Modal */}
       {isModalOpen && (

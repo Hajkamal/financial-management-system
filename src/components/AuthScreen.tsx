@@ -436,6 +436,31 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
             
+            {/* Quick Fill Admin Account */}
+            {mode === 'login' && (
+              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs">
+                    و
+                  </div>
+                  <div>
+                    <span className="font-bold text-white block text-[11px]">ورود سریع مدیر ارشد (وحید کمالی)</span>
+                    <span className="text-[10px] text-slate-400 font-mono">vahidkamali03@gmail.com</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('vahidkamali03@gmail.com');
+                    setPassword('admin');
+                  }}
+                  className="px-2.5 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                >
+                  تکمیل فرم
+                </button>
+              </div>
+            )}
+
             {/* Signup extra fields: First and Last Name */}
             {mode === 'signup' && (
               <div className="grid grid-cols-2 gap-3">

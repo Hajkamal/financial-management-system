@@ -264,10 +264,28 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
         </div>
       </div>
 
-      {/* Spreadsheet Table Container */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-right border-collapse" id="salary-table">
+      {/* Spreadsheet Table Container or Empty Notice */}
+      {employees.length === 0 ? (
+        <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300 shadow-xs">
+          <Table2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="font-bold text-slate-800 text-base mb-1">
+            هیچ کارمندی برای محاسبه ماتریس حقوق وجود ندارد
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto mb-4 leading-relaxed">
+            ماتریس حقوق بر پایه ستون‌های پرسنل شرکت تشکیل می‌شود. ابتدا کارمندان شرکت را تعریف کنید تا جدول ۱۲ ماهه حقوق، بیمه و پاداش برای آن‌ها فعال گردد.
+          </p>
+          <button
+            onClick={onNavigateToEmployees}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>انتقال به بخش کارمندان و تعریف اولین کارمند</span>
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-right border-collapse" id="salary-table">
             <thead>
               <tr className="bg-slate-900 text-white font-bold border-b border-slate-800">
                 <th className="p-3.5 w-28 text-center border-l border-slate-800">ماه / کارمندان</th>
@@ -408,6 +426,7 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
           </table>
         </div>
       </div>
+      )}
 
       {/* Edit Cell Modal */}
       {editingCell && (

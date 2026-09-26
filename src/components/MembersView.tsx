@@ -224,9 +224,29 @@ export const MembersView: React.FC<MembersViewProps> = ({
         </div>
       </div>
 
-      {/* Members Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {members.map(member => {
+      {/* Members Cards Grid or Empty Notice */}
+      {members.length === 0 ? (
+        <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
+          <UserCheck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="font-bold text-slate-800 text-base mb-1">
+            هیچ عضو یا سهامداری در سامانه تعریف نشده است
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto mb-4 leading-relaxed">
+            جهت مشخص نمودن درصد سهام اعضا، تفکیک نیروی اجرایی از صرفاً سهامدار، و ثبت مجزای حقوق و سود سهام، اولین عضو را اضافه نمایید.
+          </p>
+          {canEdit && (
+            <button
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>تعریف اولین عضو یا سهامدار</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {members.map(member => {
           // Calculate payouts for this member in the selected year
           const memberTxs = transactions.filter(t => t.relatedMemberId === member.id && t.year === selectedYear);
           const salaryPaid = memberTxs
@@ -362,6 +382,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
           );
         })}
       </div>
+      )}
 
       {/* Add / Edit Member Modal */}
       {isMemberModalOpen && (
