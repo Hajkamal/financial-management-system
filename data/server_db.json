@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "lastUpdated": "2026-09-26T12:39:30.853Z",
+  "lastUpdated": "2026-09-26T12:53:28.866Z",
   "selectedYear": 1405,
   "users": [
     {
@@ -39,15 +39,28 @@
   "fiscalYears": [
     {
       "year": 1405,
-      "title": "سال مالی ۱۴۰۵ (جاری)",
+      "title": "سال مالی ۱۴۰۵",
       "startDate": "۱۴۰۵/۰۱/۰۱",
       "endDate": "۱۴۰۵/۱۲/۲۹",
       "isClosed": false,
-      "notes": "سال مالی جدید",
       "openingBalance": 0
     }
   ],
-  "transactions": [],
+  "transactions": [
+    {
+      "id": "tx-1",
+      "date": "2026-03-21",
+      "dateString": "۱۴۰۵/۰۱/۰۱",
+      "description": "تست",
+      "type": "income",
+      "amount": 1000000,
+      "category": "فروش",
+      "subCategory": "خدمات",
+      "year": 1405,
+      "month": 1,
+      "registeredBy": "وحید کمالی"
+    }
+  ],
   "employees": [],
   "salaryMatrix": [],
   "members": [],

@@ -1354,10 +1354,14 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     onShowToast('اطلاعات فایل پشتیبان با موفقیت بازگردانی شد.');
 
     // ۳. ☁️ ذخیره کامل در دیتابیس متمرکز سرور جهت همگامی همه مرورگرها
-    const serverOk = await serverApi.restoreData(data);
-    if (serverOk) {
-      setIsCloudConnected(true);
-      onShowToast('✅ اطلاعات فایل پشتیبان با موفقیت در دیتابیس ابری سرور ذخیره شد.');
+    try {
+      const serverRes = await serverApi.restoreData(data);
+      if (serverRes.ok) {
+        setIsCloudConnected(true);
+        onShowToast('✅ اطلاعات فایل پشتیبان با موفقیت در دیتابیس ابری سرور ذخیره شد.');
+      }
+    } catch (e) {
+      console.warn('Could not auto-sync restored backup to server:', e);
     }
 
     // ۴. ☁️ تلاش برای ارسال نسخه کپی به Supabase
@@ -1375,6 +1379,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         serviceTariffs: data.serviceTariffs || serviceTariffs,
       }).then(result => {
         if (result.success) {
+          setIsCloudConnected(true);
           console.info('✅ Backup data synced to Supabase');
         } else {
           console.warn('⚠️ Supabase replication notice (server DB is primary):', result.errors);
@@ -1456,10 +1461,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       serviceTariffs,
     };
 
-    // ۱. ذخیره قطعی در دیتابیس ابری سرور (مستقر در کلاد با همگامی کامل بین تمام مرورگرها)
-    const serverSuccess = await serverApi.restoreData(payload);
-
-    // ۲. به‌روزرسانی لوکال‌استوریج
+    // ۱. به‌روزرسانی لوکال‌استوریج
     writeLocal('ayandeh_fiscal_years', fiscalYears);
     writeLocal('ayandeh_transactions', transactions);
     writeLocal('ayandeh_employees', employees);
@@ -1471,36 +1473,45 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     writeLocal('ayandeh_vat_invoices', vatInvoices);
     writeLocal('ayandeh_service_tariffs', serviceTariffs);
 
-    let supabaseErrors: string[] = [];
-    let isSupabaseOk = false;
-    let isPermissionDenied = false;
-
-    // ۳. تلاش برای همگام‌سازی با Supabase در صورت فعال بودن
-    if (SupabaseDataService.isAvailable()) {
-      const result = await SupabaseDataService.migrateAllData(payload);
-      supabaseErrors = result.errors;
-      isSupabaseOk = result.success;
-      isPermissionDenied = !!result.isPermissionDenied;
+    // ۲. ذخیره در دیتابیس ابری سرور (مستقر در کلاد با همگامی کامل بین تمام مرورگرها)
+    let serverOk = false;
+    let serverError = '';
+    try {
+      const sRes = await serverApi.restoreData(payload);
+      serverOk = sRes.ok;
+      if (!sRes.ok && sRes.error) serverError = sRes.error;
+    } catch (err: any) {
+      serverError = err?.message || 'خطای اتصال به سرور';
     }
 
-    if (serverSuccess) {
+    // ۳. ذخیره و همگام‌سازی در Supabase (در صورت تنظیم بودن)
+    let isSupabaseOk = false;
+    let supabaseErrors: string[] = [];
+    if (SupabaseDataService.isAvailable()) {
+      try {
+        const result = await SupabaseDataService.migrateAllData(payload);
+        supabaseErrors = result.errors;
+        isSupabaseOk = result.success;
+      } catch (err: any) {
+        supabaseErrors.push(err?.message || 'خطای اتصال به Supabase');
+      }
+    }
+
+    if (serverOk || isSupabaseOk) {
       setIsCloudConnected(true);
-      if (isSupabaseOk) {
-        onShowToast('✅ تمامی داده‌ها با موفقیت در دیتابیس ابری سرور و Supabase ذخیره شدند!');
-      } else if (isPermissionDenied) {
-        onShowToast('✅ داده‌ها با موفقیت در دیتابیس ابری سرور ثبت شدند و بین همه دستگاه‌ها و مرورگرها همگام هستند.');
+      if (serverOk && isSupabaseOk) {
+        onShowToast('✅ تمامی داده‌ها با موفقیت در هر دو پایگاه ابری (سرور متمرکز و Supabase) ذخیره و همگام شدند!');
+      } else if (isSupabaseOk) {
+        onShowToast('✅ تمامی داده‌ها با موفقیت در دیتابیس ابری Supabase ذخیره شدند!');
       } else {
-        onShowToast('✅ تمامی اطلاعات با موفقیت در دیتابیس ابری متمرکز ثبت و همگام گردید.');
+        onShowToast('✅ داده‌ها با موفقیت در دیتابیس ابری سرور ثبت و بین همه دستگاه‌ها همگام شد.');
       }
       return { success: true, errors: [] };
     } else {
-      if (isSupabaseOk) {
-        setIsCloudConnected(true);
-        onShowToast('✅ تمامی داده‌ها با موفقیت در دیتابیس ابری Supabase ذخیره شدند!');
-        return { success: true, errors: [] };
-      }
-      onShowToast('❌ خطا در ارتباط با سرور ابری. لطفاً اتصال اینترنت خود را بررسی نمایید.');
-      return { success: false, errors: ['خطا در اتصال به سرور ابری'] };
+      const reason = serverError || (supabaseErrors.length > 0 ? supabaseErrors.join('، ') : 'خطا در ارتباط با سرور ابری');
+      console.error('Migration failed:', { serverError, supabaseErrors });
+      onShowToast(`❌ خطا در ارتباط با سرور ابری: ${reason}. لطفاً اتصال اینترنت خود را بررسی نمایید.`);
+      return { success: false, errors: [reason] };
     }
   }, [fiscalYears, transactions, employees, salaryMatrix, members, loans, users, bankAccounts, vatInvoices, serviceTariffs, onShowToast]);
 

@@ -597,17 +597,22 @@ export const SupabaseDataService = {
 
     const errors: string[] = [];
     let permissionDeniedCount = 0;
+
+    // Filter salary matrix rows to only include existing employees (prevents foreign key constraint violations)
+    const validEmpIds = new Set((data.employees || []).map(e => e.id));
+    const safeSalaryMatrix = (data.salaryMatrix || []).filter(s => validEmpIds.has(s.employeeId));
+
     const tables = [
-      { name: 'fiscal_years', data: data.fiscalYears.map(fiscalYearToDb) },
-      { name: 'employees', data: data.employees.map(employeeToDb) },
-      { name: 'salary_matrix', data: data.salaryMatrix.map(salaryMatrixToDb) },
-      { name: 'members', data: data.members.map(memberToDb) },
-      { name: 'loans', data: data.loans.map(loanToDb) },
-      { name: 'app_users', data: data.users.map(appUserToDb) },
-      { name: 'bank_accounts', data: data.bankAccounts.map(bankAccountToDb) },
-      { name: 'vat_invoices', data: data.vatInvoices.map(vatInvoiceToDb) },
-      { name: 'service_tariffs', data: data.serviceTariffs.map(serviceTariffToDb) },
-      { name: 'transactions', data: data.transactions.map(transactionToDb) },
+      { name: 'fiscal_years', data: (data.fiscalYears || []).map(fiscalYearToDb) },
+      { name: 'employees', data: (data.employees || []).map(employeeToDb) },
+      { name: 'salary_matrix', data: safeSalaryMatrix.map(salaryMatrixToDb) },
+      { name: 'members', data: (data.members || []).map(memberToDb) },
+      { name: 'loans', data: (data.loans || []).map(loanToDb) },
+      { name: 'app_users', data: (data.users || []).map(appUserToDb) },
+      { name: 'bank_accounts', data: (data.bankAccounts || []).map(bankAccountToDb) },
+      { name: 'vat_invoices', data: (data.vatInvoices || []).map(vatInvoiceToDb) },
+      { name: 'service_tariffs', data: (data.serviceTariffs || []).map(serviceTariffToDb) },
+      { name: 'transactions', data: (data.transactions || []).map(transactionToDb) },
     ];
 
     for (const table of tables) {

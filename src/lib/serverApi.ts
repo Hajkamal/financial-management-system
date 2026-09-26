@@ -325,16 +325,26 @@ export const serverApi = {
   },
 
   // بازیابی کامل بکاپ در سرور
-  async restoreData(backup: any): Promise<boolean> {
+  async restoreData(backup: any): Promise<{ ok: boolean; error?: string }> {
     try {
       const res = await fetch('/api/financial-data/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(backup),
       });
-      return res.ok;
-    } catch {
-      return false;
+      if (!res.ok) {
+        let errMsg = `خطای سرور (${res.status})`;
+        try {
+          const json = await res.json();
+          if (json.error) errMsg = json.error;
+        } catch {}
+        console.warn('serverApi.restoreData HTTP status:', res.status, errMsg);
+        return { ok: false, error: errMsg };
+      }
+      return { ok: true };
+    } catch (err: any) {
+      console.warn('serverApi.restoreData fetch exception:', err);
+      return { ok: false, error: err?.message || 'خطای اتصال به سرور' };
     }
   }
 };

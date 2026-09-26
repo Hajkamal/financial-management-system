@@ -13,7 +13,32 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = parseInt(process.env.PORT || '3000', 10);
 
-app.use(express.json({ limit: '10mb' }));
+// CORS headers for all requests (important for iframe/preview contexts)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Graceful JSON error handling middleware
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && 'status' in err && err.status === 400) {
+    console.error('JSON parsing error in request:', err.message);
+    return res.status(400).json({ error: 'فرمت داده‌های ارسالی نامعتبر است' });
+  }
+  if (err && err.status === 413) {
+    console.error('Payload too large error:', err.message);
+    return res.status(413).json({ error: 'حجم داده‌های نسخه پشتیبان بیش از حد مجاز است' });
+  }
+  next(err);
+});
 
 // Initialize Gemini helper with resilient multi-model fallback
 const getAIClient = () => {
@@ -477,23 +502,28 @@ app.post('/api/financial-data/reset', (_req, res) => {
 app.post('/api/financial-data/restore', (req, res) => {
   try {
     const backup = req.body;
+    if (!backup || typeof backup !== 'object') {
+      return res.status(400).json({ error: 'محتوای بکاپ نامعتبر است' });
+    }
     const db = loadDatabase();
-    if (backup.transactions) db.transactions = backup.transactions;
-    if (backup.employees) db.employees = backup.employees;
-    if (backup.salaryMatrix) db.salaryMatrix = backup.salaryMatrix;
-    if (backup.members) db.members = backup.members;
-    if (backup.loans) db.loans = backup.loans;
-    if (backup.bankAccounts) db.bankAccounts = backup.bankAccounts;
-    if (backup.vatInvoices) db.vatInvoices = backup.vatInvoices;
-    if (backup.serviceTariffs) db.serviceTariffs = backup.serviceTariffs;
-    if (backup.fiscalYears) db.fiscalYears = backup.fiscalYears;
-    if (backup.users && Array.isArray(backup.users) && backup.users.length > 0) {
+    if (Array.isArray(backup.transactions)) db.transactions = backup.transactions;
+    if (Array.isArray(backup.employees)) db.employees = backup.employees;
+    if (Array.isArray(backup.salaryMatrix)) db.salaryMatrix = backup.salaryMatrix;
+    if (Array.isArray(backup.members)) db.members = backup.members;
+    if (Array.isArray(backup.loans)) db.loans = backup.loans;
+    if (Array.isArray(backup.bankAccounts)) db.bankAccounts = backup.bankAccounts;
+    if (Array.isArray(backup.vatInvoices)) db.vatInvoices = backup.vatInvoices;
+    if (Array.isArray(backup.serviceTariffs)) db.serviceTariffs = backup.serviceTariffs;
+    if (Array.isArray(backup.fiscalYears)) db.fiscalYears = backup.fiscalYears;
+    if (Array.isArray(backup.users) && backup.users.length > 0) {
       db.users = backup.users;
     }
     saveDatabase(db);
+    console.info(`[RESTORE] Successfully saved to server DB: ${db.transactions.length} txs, ${db.employees.length} emps, ${db.fiscalYears.length} years`);
     res.json({ success: true, data: db });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[RESTORE ERROR] in /api/financial-data/restore:', err);
+    res.status(500).json({ error: err.message || 'خطا در ثبت اطلاعات در دیتابیس سرور' });
   }
 });
 
