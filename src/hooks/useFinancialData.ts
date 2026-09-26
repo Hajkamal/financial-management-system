@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   FinancialTransaction, 
   FiscalYear, 
@@ -38,6 +38,7 @@ import {
 import { sortTransactionsByDate, getCurrentJalaliDateTime } from '../utils/jalali';
 import { hashPassword, isHashedPassword } from '../utils/crypto';
 import { registerUserInSupabase, supabase, isSupabaseConfigured } from '../lib/supabase';
+import { SupabaseDataService } from '../lib/supabaseDataService';
 
 /** اطمینان از حذف کامل سال ۱۴۰۴ و وجود سال ۱۴۰۵ */
 export const sanitizeFiscalYearsList = (list: any): FiscalYear[] => {
@@ -175,18 +176,38 @@ interface UseFinancialDataProps {
   currentUser?: AppUser | null;
 }
 
+// =====================================================
+// توابع کمکی خواندن/نوشتن localStorage (فقط fallback)
+// =====================================================
+function readLocal<T>(key: string, fallback: T): T {
+  try {
+    const saved = localStorage.getItem(key);
+    const parsed = saved ? JSON.parse(saved) : null;
+    if (Array.isArray(fallback)) {
+      return (Array.isArray(parsed) && parsed.length > 0 ? parsed : fallback) as T;
+    }
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLocal(key: string, value: any) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
 export function useFinancialData({ currencyMode, onShowToast, currentUser }: UseFinancialDataProps) {
+  // پرچم بارگذاری از Supabase
+  const [isCloudLoading, setIsCloudLoading] = useState(true);
+  const [isCloudConnected, setIsCloudConnected] = useState(false);
+  const initialLoadDone = useRef(false);
+
   // ۱. سال‌های مالی
   const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_fiscal_years');
-      const parsed = saved ? JSON.parse(saved) : null;
-      const valid = sanitizeFiscalYearsList(parsed);
-      localStorage.setItem('ayandeh_fiscal_years', JSON.stringify(valid));
-      return valid;
-    } catch {
-      return INITIAL_FISCAL_YEARS;
-    }
+    const local = readLocal<FiscalYear[]>('ayandeh_fiscal_years', INITIAL_FISCAL_YEARS);
+    const valid = sanitizeFiscalYearsList(local);
+    writeLocal('ayandeh_fiscal_years', valid);
+    return valid;
   });
 
   const [selectedYear, setSelectedYear] = useState<number>(() => {
@@ -211,32 +232,10 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     }
   });
 
-  // اعتبارسنجی سال انتخابی
-  useEffect(() => {
-    if (selectedYear === 1404 || (fiscalYears.length > 0 && !fiscalYears.some(fy => fy.year === selectedYear))) {
-      const openYear = fiscalYears.find(fy => !fy.isClosed && fy.year !== 1404) || fiscalYears[fiscalYears.length - 1];
-      setSelectedYear(openYear ? openYear.year : 1405);
-    }
-  }, [fiscalYears, selectedYear]);
-
-  useEffect(() => {
-    if (selectedYear !== 1404) {
-      localStorage.setItem('ayandeh_selected_year', selectedYear.toString());
-    } else {
-      localStorage.setItem('ayandeh_selected_year', '1405');
-    }
-  }, [selectedYear]);
-
   // ۲. صورتحساب‌های ارزش افزوده و مودیان
-  const [vatInvoices, setVatInvoices] = useState<VatInvoice[]>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_vat_invoices');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_VAT_INVOICES;
-    } catch {
-      return INITIAL_VAT_INVOICES;
-    }
-  });
+  const [vatInvoices, setVatInvoices] = useState<VatInvoice[]>(() => 
+    readLocal('ayandeh_vat_invoices', INITIAL_VAT_INVOICES)
+  );
 
   // ۳. تراکنش‌ها و دفتر کل
   const [transactions, setTransactions] = useState<FinancialTransaction[]>(() => {
@@ -264,133 +263,277 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   });
 
   // ۴. کارمندان
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_employees');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) ? parsed : INITIAL_EMPLOYEES;
-    } catch {
-      return INITIAL_EMPLOYEES;
-    }
-  });
+  const [employees, setEmployees] = useState<Employee[]>(() => 
+    readLocal('ayandeh_employees', INITIAL_EMPLOYEES)
+  );
 
   // ۵. ماتریس حقوق
   const [salaryMatrix, setSalaryMatrix] = useState<SalaryMatrixItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_salary_matrix');
-      const parsed = saved ? JSON.parse(saved) : null;
-      const rawSm = Array.isArray(parsed) ? parsed : INITIAL_SALARY_MATRIX;
-      const cleaned = rawSm.filter(sm => sm.year !== 1404);
-      return cleaned.length > 0 ? cleaned : INITIAL_SALARY_MATRIX;
-    } catch {
-      return INITIAL_SALARY_MATRIX;
-    }
+    const raw = readLocal<SalaryMatrixItem[]>('ayandeh_salary_matrix', INITIAL_SALARY_MATRIX);
+    const cleaned = raw.filter(sm => sm.year !== 1404);
+    return cleaned.length > 0 ? cleaned : INITIAL_SALARY_MATRIX;
   });
 
   // ۶. اعضای شرکت و سهامداران
-  const [members, setMembers] = useState<CompanyMember[]>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_members');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) ? parsed : INITIAL_MEMBERS;
-    } catch {
-      return INITIAL_MEMBERS;
-    }
-  });
+  const [members, setMembers] = useState<CompanyMember[]>(() => 
+    readLocal('ayandeh_members', INITIAL_MEMBERS)
+  );
 
   // ۷. وام‌ها و تسهیلات
-  const [loans, setLoans] = useState<Loan[]>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_loans');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) ? parsed : INITIAL_LOANS;
-    } catch {
-      return INITIAL_LOANS;
-    }
-  });
+  const [loans, setLoans] = useState<Loan[]>(() => 
+    readLocal('ayandeh_loans', INITIAL_LOANS)
+  );
 
   // ۸. کاربران سامانه (همراه با ارتقای امنیتی خودکار رمزها به هش SHA-256)
-  const [users, setUsers] = useState<AppUser[]>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_users');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_USERS;
-    } catch {
-      return INITIAL_USERS;
-    }
-  });
+  const [users, setUsers] = useState<AppUser[]>(() => 
+    readLocal('ayandeh_users', INITIAL_USERS)
+  );
 
   // ۹. حساب‌های بانکی
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_bank_accounts');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_BANK_ACCOUNTS;
-    } catch {
-      return INITIAL_BANK_ACCOUNTS;
-    }
-  });
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => 
+    readLocal('ayandeh_bank_accounts', INITIAL_BANK_ACCOUNTS)
+  );
 
   // ۱۰. تعرفه خدمات باسینا
-  const [serviceTariffs, setServiceTariffs] = useState<ServiceTariff[]>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_service_tariffs');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_SERVICE_TARIFFS;
-    } catch {
-      return INITIAL_SERVICE_TARIFFS;
+  const [serviceTariffs, setServiceTariffs] = useState<ServiceTariff[]>(() => 
+    readLocal('ayandeh_service_tariffs', INITIAL_SERVICE_TARIFFS)
+  );
+
+  // =====================================================
+  // ⚡ بارگذاری اولیه از Supabase (جایگزین localStorage)
+  // =====================================================
+  useEffect(() => {
+    if (initialLoadDone.current) return;
+    initialLoadDone.current = true;
+
+    if (!SupabaseDataService.isAvailable()) {
+      setIsCloudLoading(false);
+      console.info('☁️ Supabase not configured — running in localStorage-only mode');
+      return;
     }
-  });
 
-  // ذخیره‌سازی همگام در LocalStorage
+    (async () => {
+      try {
+        console.info('☁️ Loading data from Supabase...');
+        
+        const [
+          cloudFiscalYears,
+          cloudTransactions,
+          cloudEmployees,
+          cloudSalaryMatrix,
+          cloudMembers,
+          cloudLoans,
+          cloudUsers,
+          cloudBankAccounts,
+          cloudVatInvoices,
+          cloudServiceTariffs,
+        ] = await Promise.all([
+          SupabaseDataService.fetchFiscalYears(),
+          SupabaseDataService.fetchTransactions(),
+          SupabaseDataService.fetchEmployees(),
+          SupabaseDataService.fetchSalaryMatrix(),
+          SupabaseDataService.fetchMembers(),
+          SupabaseDataService.fetchLoans(),
+          SupabaseDataService.fetchAppUsers(),
+          SupabaseDataService.fetchBankAccounts(),
+          SupabaseDataService.fetchVatInvoices(),
+          SupabaseDataService.fetchServiceTariffs(),
+        ]);
+
+        let hasCloudData = false;
+
+        if (cloudFiscalYears && cloudFiscalYears.length > 0) {
+          const valid = sanitizeFiscalYearsList(cloudFiscalYears);
+          setFiscalYears(valid);
+          writeLocal('ayandeh_fiscal_years', valid);
+          hasCloudData = true;
+        }
+
+        if (cloudTransactions && cloudTransactions.length > 0) {
+          const sorted = sortTransactionsByDate(cloudTransactions, 'desc');
+          setTransactions(sorted);
+          writeLocal('ayandeh_transactions', sorted);
+          hasCloudData = true;
+        }
+
+        if (cloudEmployees && cloudEmployees.length > 0) {
+          setEmployees(cloudEmployees);
+          writeLocal('ayandeh_employees', cloudEmployees);
+          hasCloudData = true;
+        }
+
+        if (cloudSalaryMatrix && cloudSalaryMatrix.length > 0) {
+          setSalaryMatrix(cloudSalaryMatrix);
+          writeLocal('ayandeh_salary_matrix', cloudSalaryMatrix);
+          hasCloudData = true;
+        }
+
+        if (cloudMembers && cloudMembers.length > 0) {
+          setMembers(cloudMembers);
+          writeLocal('ayandeh_members', cloudMembers);
+          hasCloudData = true;
+        }
+
+        if (cloudLoans && cloudLoans.length > 0) {
+          setLoans(cloudLoans);
+          writeLocal('ayandeh_loans', cloudLoans);
+          hasCloudData = true;
+        }
+
+        if (cloudUsers && cloudUsers.length > 0) {
+          setUsers(cloudUsers);
+          writeLocal('ayandeh_users', cloudUsers);
+          hasCloudData = true;
+        }
+
+        if (cloudBankAccounts && cloudBankAccounts.length > 0) {
+          setBankAccounts(cloudBankAccounts);
+          writeLocal('ayandeh_bank_accounts', cloudBankAccounts);
+          hasCloudData = true;
+        }
+
+        if (cloudVatInvoices && cloudVatInvoices.length > 0) {
+          setVatInvoices(cloudVatInvoices);
+          writeLocal('ayandeh_vat_invoices', cloudVatInvoices);
+          hasCloudData = true;
+        }
+
+        if (cloudServiceTariffs && cloudServiceTariffs.length > 0) {
+          setServiceTariffs(cloudServiceTariffs);
+          writeLocal('ayandeh_service_tariffs', cloudServiceTariffs);
+          hasCloudData = true;
+        }
+
+        setIsCloudConnected(true);
+        if (hasCloudData) {
+          console.info('✅ Data loaded from Supabase cloud database');
+        } else {
+          console.info('☁️ Supabase is connected but no cloud data found — using local data');
+        }
+      } catch (err) {
+        console.warn('⚠️ Failed to load from Supabase, using localStorage:', err);
+        setIsCloudConnected(false);
+      } finally {
+        setIsCloudLoading(false);
+      }
+    })();
+  }, []);
+
+  // =====================================================
+  // 🔄 Realtime subscriptions — همگام‌سازی بلادرنگ بین مرورگرها
+  // =====================================================
   useEffect(() => {
-    try { localStorage.setItem('ayandeh_vat_invoices', JSON.stringify(vatInvoices)); } catch {}
-  }, [vatInvoices]);
+    if (!supabase || !isSupabaseConfigured || !isCloudConnected) return;
+
+    const channel = supabase.channel('financial-data-sync');
+
+    // هر تغییر در هر جدول → بارگذاری مجدد آن جدول
+    const tableRefreshers: Record<string, () => void> = {
+      fiscal_years: async () => {
+        const data = await SupabaseDataService.fetchFiscalYears();
+        if (data && data.length > 0) {
+          const valid = sanitizeFiscalYearsList(data);
+          setFiscalYears(valid);
+          writeLocal('ayandeh_fiscal_years', valid);
+        }
+      },
+      transactions: async () => {
+        const data = await SupabaseDataService.fetchTransactions();
+        if (data && data.length > 0) {
+          setTransactions(sortTransactionsByDate(data, 'desc'));
+          writeLocal('ayandeh_transactions', data);
+        }
+      },
+      employees: async () => {
+        const data = await SupabaseDataService.fetchEmployees();
+        if (data) { setEmployees(data); writeLocal('ayandeh_employees', data); }
+      },
+      salary_matrix: async () => {
+        const data = await SupabaseDataService.fetchSalaryMatrix();
+        if (data) { setSalaryMatrix(data); writeLocal('ayandeh_salary_matrix', data); }
+      },
+      members: async () => {
+        const data = await SupabaseDataService.fetchMembers();
+        if (data) { setMembers(data); writeLocal('ayandeh_members', data); }
+      },
+      loans: async () => {
+        const data = await SupabaseDataService.fetchLoans();
+        if (data) { setLoans(data); writeLocal('ayandeh_loans', data); }
+      },
+      app_users: async () => {
+        const data = await SupabaseDataService.fetchAppUsers();
+        if (data && data.length > 0) { setUsers(data); writeLocal('ayandeh_users', data); }
+      },
+      bank_accounts: async () => {
+        const data = await SupabaseDataService.fetchBankAccounts();
+        if (data) { setBankAccounts(data); writeLocal('ayandeh_bank_accounts', data); }
+      },
+      vat_invoices: async () => {
+        const data = await SupabaseDataService.fetchVatInvoices();
+        if (data) { setVatInvoices(data); writeLocal('ayandeh_vat_invoices', data); }
+      },
+      service_tariffs: async () => {
+        const data = await SupabaseDataService.fetchServiceTariffs();
+        if (data) { setServiceTariffs(data); writeLocal('ayandeh_service_tariffs', data); }
+      },
+    };
+
+    // ثبت شنونده‌ها برای تغییرات Realtime
+    const tables = Object.keys(tableRefreshers);
+    tables.forEach(table => {
+      channel.on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table },
+        () => {
+          console.info(`🔄 Realtime update on ${table}`);
+          tableRefreshers[table]();
+        }
+      );
+    });
+
+    channel.subscribe((status) => {
+      console.info('📡 Realtime subscription status:', status);
+    });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isCloudConnected]);
+
+  // اعتبارسنجی سال انتخابی
+  useEffect(() => {
+    if (selectedYear === 1404 || (fiscalYears.length > 0 && !fiscalYears.some(fy => fy.year === selectedYear))) {
+      const openYear = fiscalYears.find(fy => !fy.isClosed && fy.year !== 1404) || fiscalYears[fiscalYears.length - 1];
+      setSelectedYear(openYear ? openYear.year : 1405);
+    }
+  }, [fiscalYears, selectedYear]);
 
   useEffect(() => {
-    try { localStorage.setItem('ayandeh_service_tariffs', JSON.stringify(serviceTariffs)); } catch {}
-  }, [serviceTariffs]);
+    if (selectedYear !== 1404) {
+      localStorage.setItem('ayandeh_selected_year', selectedYear.toString());
+    } else {
+      localStorage.setItem('ayandeh_selected_year', '1405');
+    }
+  }, [selectedYear]);
 
-  useEffect(() => {
-    try { localStorage.setItem('ayandeh_transactions', JSON.stringify(transactions)); } catch {}
-  }, [transactions]);
-
-  useEffect(() => {
-    try { localStorage.setItem('ayandeh_employees', JSON.stringify(employees)); } catch {}
-  }, [employees]);
-
-  useEffect(() => {
-    try { localStorage.setItem('ayandeh_salary_matrix', JSON.stringify(salaryMatrix)); } catch {}
-  }, [salaryMatrix]);
-
-  useEffect(() => {
-    try { localStorage.setItem('ayandeh_members', JSON.stringify(members)); } catch {}
-  }, [members]);
-
-  useEffect(() => {
-    try { localStorage.setItem('ayandeh_loans', JSON.stringify(loans)); } catch {}
-  }, [loans]);
-
-  useEffect(() => {
-    try { localStorage.setItem('ayandeh_fiscal_years', JSON.stringify(fiscalYears)); } catch {}
-  }, [fiscalYears]);
-
-  useEffect(() => {
-    try { localStorage.setItem('ayandeh_users', JSON.stringify(users)); } catch {}
-  }, [users]);
-
-  useEffect(() => {
-    try { localStorage.setItem('ayandeh_bank_accounts', JSON.stringify(bankAccounts)); } catch {}
-  }, [bankAccounts]);
+  // ذخیره‌سازی همگام در LocalStorage (فقط به عنوان کش محلی)
+  useEffect(() => { writeLocal('ayandeh_vat_invoices', vatInvoices); }, [vatInvoices]);
+  useEffect(() => { writeLocal('ayandeh_service_tariffs', serviceTariffs); }, [serviceTariffs]);
+  useEffect(() => { writeLocal('ayandeh_transactions', transactions); }, [transactions]);
+  useEffect(() => { writeLocal('ayandeh_employees', employees); }, [employees]);
+  useEffect(() => { writeLocal('ayandeh_salary_matrix', salaryMatrix); }, [salaryMatrix]);
+  useEffect(() => { writeLocal('ayandeh_members', members); }, [members]);
+  useEffect(() => { writeLocal('ayandeh_loans', loans); }, [loans]);
+  useEffect(() => { writeLocal('ayandeh_fiscal_years', fiscalYears); }, [fiscalYears]);
+  useEffect(() => { writeLocal('ayandeh_users', users); }, [users]);
+  useEffect(() => { writeLocal('ayandeh_bank_accounts', bankAccounts); }, [bankAccounts]);
 
   // همگام‌سازی بلادرنگ فاکتورهای مودیان با تراکنش‌ها
   useEffect(() => {
     const { updatedTxs, hasChanges } = reconcileVatInvoicesWithTransactions(vatInvoices, transactions, currencyMode);
     if (hasChanges) {
       setTransactions(updatedTxs);
-      try {
-        localStorage.setItem('ayandeh_transactions', JSON.stringify(updatedTxs));
-      } catch {}
+      writeLocal('ayandeh_transactions', updatedTxs);
     }
   }, [vatInvoices, currencyMode]);
 
@@ -453,17 +596,23 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     }
     const sorted = sortTransactionsByDate(updated, 'desc');
     setTransactions(sorted);
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveTransaction(tx);
   };
 
   const handleDeleteTransaction = (id: string) => {
     setTransactions(prev => prev.filter(t => t.id !== id));
     onShowToast('سند مالی با موفقیت حذف گردید.');
+    // ☁️ حذف از ابر
+    SupabaseDataService.deleteTransaction(id);
   };
 
   const handleClearDemoTransactions = () => {
     setTransactions([]);
     localStorage.setItem('ayandeh_transactions', JSON.stringify([]));
     onShowToast('کلیه اسناد تستی پاکسازی شدند. سامانه با صفر تراکنش آماده ثبت اطلاعات واقعی شد.');
+    // ☁️ پاکسازی ابر
+    SupabaseDataService.clearTransactions();
   };
 
   // ==========================
@@ -479,18 +628,23 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       // مقداردهی ماتریس سال جاری
       const newItems: SalaryMatrixItem[] = [];
       for (let m = 1; m <= 12; m++) {
-        newItems.push({
+        const newItem: SalaryMatrixItem = {
           id: `sm-${emp.id}-${selectedYear}-${m}`,
           employeeId: emp.id,
           year: selectedYear,
           month: m as PersianMonthNumber,
           amount: emp.baseSalary,
           status: 'paid',
-        });
+        };
+        newItems.push(newItem);
       }
       setSalaryMatrix(prev => [...prev, ...newItems]);
       onShowToast(`کارمند جدید «${emp.name}» با موفقیت افزوده شد.`);
+      // ☁️ ذخیره ماتریس حقوق در ابر
+      SupabaseDataService.saveSalaryMatrixBatch(newItems);
     }
+    // ☁️ ذخیره کارمند در ابر
+    SupabaseDataService.saveEmployee(emp);
   };
 
   const handleDeleteEmployee = (id: string) => {
@@ -498,6 +652,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     setEmployees(prev => prev.filter(e => e.id !== id));
     setSalaryMatrix(prev => prev.filter(item => item.employeeId !== id));
     onShowToast(`کارمند «${emp?.name || ''}» حذف شد.`);
+    // ☁️ حذف از ابر (cascade حذف ماتریس را انجام می‌دهد)
+    SupabaseDataService.deleteEmployee(id);
   };
 
   const handleUpdateSalaryCell = (item: Partial<SalaryMatrixItem> & { employeeId: string; month: PersianMonthNumber; year: number }) => {
@@ -505,14 +661,18 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       i => i.employeeId === item.employeeId && i.month === item.month && i.year === item.year
     );
 
+    let savedItem: SalaryMatrixItem;
+
     if (existingIndex >= 0) {
       setSalaryMatrix(prev => {
         const updated = [...prev];
         updated[existingIndex] = { ...updated[existingIndex], ...item };
+        savedItem = updated[existingIndex];
         return updated;
       });
+      savedItem = { ...salaryMatrix[existingIndex], ...item } as SalaryMatrixItem;
     } else {
-      const newItem: SalaryMatrixItem = {
+      savedItem = {
         id: `sm-${item.employeeId}-${item.year}-${item.month}`,
         employeeId: item.employeeId,
         year: item.year,
@@ -522,9 +682,11 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         status: item.status || 'paid',
         colorTag: item.colorTag,
       };
-      setSalaryMatrix(prev => [...prev, newItem]);
+      setSalaryMatrix(prev => [...prev, savedItem]);
     }
     onShowToast('تغییرات حقوق با موفقیت اعمال گردید.');
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveSalaryMatrixItem(savedItem);
   };
 
   const handleAddSalaryExpenseTransaction = (month: PersianMonthNumber, totalAmount: number, details: string) => {
@@ -553,6 +715,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
 
     setTransactions(prev => sortTransactionsByDate([tx, ...prev], 'desc'));
     onShowToast(`سند کل حقوق ماه ${monthName} به مبلغ ${formatCurrency(totalAmount, currencyMode)} ثبت شد.`);
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveTransaction(tx);
   };
 
   const handleAddMemberPayoutTransaction = (params: {
@@ -593,6 +757,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
 
     setTransactions(prev => sortTransactionsByDate([tx, ...prev], 'desc'));
     onShowToast(`سند پرداختی به ${member?.name || 'عضو'} با موفقیت در دفتر کل ثبت شد.`);
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveTransaction(tx);
   };
 
   // ==========================
@@ -607,12 +773,16 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       setMembers(prev => [...prev, member]);
       onShowToast(`سهامدار جدید «${member.name}» افزوده شد.`);
     }
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveMember(member);
   };
 
   const handleDeleteMember = (id: string) => {
     const m = members.find(item => item.id === id);
     setMembers(prev => prev.filter(item => item.id !== id));
     onShowToast(`عضو «${m?.name || ''}» حذف شد.`);
+    // ☁️ حذف از ابر
+    SupabaseDataService.deleteMember(id);
   };
 
   // ==========================
@@ -627,12 +797,16 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       setLoans(prev => [...prev, loan]);
       onShowToast(`تسهیلات جدید «${loan.title}» ثبت گردید.`);
     }
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveLoan(loan);
   };
 
   const handleDeleteLoan = (id: string) => {
     const loan = loans.find(l => l.id === id);
     setLoans(prev => prev.filter(l => l.id !== id));
     onShowToast(`تسهیلات «${loan?.title || ''}» حذف شد.`);
+    // ☁️ حذف از ابر
+    SupabaseDataService.deleteLoan(id);
   };
 
   const handlePayLoanInstallment = (params: {
@@ -645,15 +819,12 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     const loan = loans.find(l => l.id === params.loanId);
     if (!loan) return;
 
-    setLoans(prev => prev.map(l => {
-      if (l.id === params.loanId) {
-        return {
-          ...l,
-          paidInstallments: Math.min(l.totalInstallments, l.paidInstallments + 1),
-        };
-      }
-      return l;
-    }));
+    const updatedLoan = {
+      ...loan,
+      paidInstallments: Math.min(loan.totalInstallments, loan.paidInstallments + 1),
+    };
+
+    setLoans(prev => prev.map(l => l.id === params.loanId ? updatedLoan : l));
 
     const day = params.month <= 6 ? 31 : (params.month <= 11 ? 30 : 29);
     const dateString = `${selectedYear}/${String(params.month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
@@ -680,6 +851,9 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
 
     setTransactions(prev => sortTransactionsByDate([tx, ...prev], 'desc'));
     onShowToast(`پرداخت قسط وام «${loan.title}» ثبت شد.`);
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveLoan(updatedLoan);
+    SupabaseDataService.saveTransaction(tx);
   };
 
   // ==========================
@@ -693,16 +867,22 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     };
     setBankAccounts(prev => [newAccount, ...prev]);
     onShowToast(`حساب بانکی «${newAccount.bankName}» با موفقیت افزوده شد.`);
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveBankAccount(newAccount);
   };
 
   const handleUpdateBankAccount = (updatedAccount: BankAccount) => {
     setBankAccounts(prev => prev.map(acc => acc.id === updatedAccount.id ? updatedAccount : acc));
     onShowToast(`اطلاعات حساب بانکی «${updatedAccount.bankName}» به‌روزرسانی شد.`);
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveBankAccount(updatedAccount);
   };
 
   const handleDeleteBankAccount = (id: string) => {
     setBankAccounts(prev => prev.filter(acc => acc.id !== id));
     onShowToast('حساب بانکی مورد نظر حذف گردید.');
+    // ☁️ حذف از ابر
+    SupabaseDataService.deleteBankAccount(id);
   };
 
   // ==========================
@@ -722,11 +902,22 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     setFiscalYears(updated);
     setSelectedYear(newFy.year);
     onShowToast(`سال مالی ${newFy.year} با موفقیت تعریف گردید.`);
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveFiscalYear(newFy);
   };
 
   const handleUpdateFiscalYear = (year: number, updatedData: Partial<FiscalYear>) => {
-    setFiscalYears(prev => prev.map(fy => fy.year === year ? { ...fy, ...updatedData } : fy));
+    let updatedFy: FiscalYear | null = null;
+    setFiscalYears(prev => prev.map(fy => {
+      if (fy.year === year) {
+        updatedFy = { ...fy, ...updatedData };
+        return updatedFy;
+      }
+      return fy;
+    }));
     onShowToast(`اطلاعات سال مالی ${year} به‌روزرسانی شد.`);
+    // ☁️ ذخیره در ابر
+    if (updatedFy) SupabaseDataService.saveFiscalYear(updatedFy);
   };
 
   const handleDeleteFiscalYear = (year: number) => {
@@ -741,6 +932,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       if (fallback) setSelectedYear(fallback.year);
     }
     onShowToast(`سال مالی ${year} حذف گردید.`);
+    // ☁️ حذف از ابر
+    SupabaseDataService.deleteFiscalYear(year);
   };
 
   const handleCloseFiscalYear = (
@@ -750,20 +943,23 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     openingAmount: number
   ) => {
     const today = getCurrentJalaliDateTime().dateFormatted;
+    let closedFy: FiscalYear | null = null;
     setFiscalYears(prev => prev.map(fy => {
       if (fy.year === sourceYear) {
-        return {
+        closedFy = {
           ...fy,
           isClosed: true,
           closedAt: today,
           closingBalance: openingAmount,
         };
+        return closedFy;
       }
       return fy;
     }));
 
+    let newTargetFy: FiscalYear | null = null;
     if (targetYear && !fiscalYears.some(fy => fy.year === targetYear)) {
-      const newTargetFy: FiscalYear = {
+      newTargetFy = {
         year: targetYear,
         title: `سال مالی ${targetYear}`,
         startDate: `${targetYear}/01/01`,
@@ -772,7 +968,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         openingBalance: openingAmount,
         notes: `افتتاح شده پس از بستن دفاتر سال مالی ${sourceYear}`,
       };
-      setFiscalYears(prev => sanitizeFiscalYearsList([...prev, newTargetFy]));
+      setFiscalYears(prev => sanitizeFiscalYearsList([...prev, newTargetFy!]));
       setSelectedYear(targetYear);
     } else if (targetYear) {
       setSelectedYear(targetYear);
@@ -797,23 +993,33 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         createdAt: getCurrentJalaliDateTime().fullString,
       };
       setTransactions(prev => sortTransactionsByDate([openingTx, ...prev], 'desc'));
+      // ☁️ ذخیره تراکنش افتتاحیه در ابر
+      SupabaseDataService.saveTransaction(openingTx);
     }
+
+    // ☁️ ذخیره سال‌های مالی در ابر
+    if (closedFy) SupabaseDataService.saveFiscalYear(closedFy);
+    if (newTargetFy) SupabaseDataService.saveFiscalYear(newTargetFy);
 
     onShowToast(`دفاتر سال مالی ${sourceYear} با موفقیت بسته شد.`);
   };
 
   const handleReopenFiscalYear = (year: number) => {
+    let reopenedFy: FiscalYear | null = null;
     setFiscalYears(prev => prev.map(fy => {
       if (fy.year === year) {
-        return {
+        reopenedFy = {
           ...fy,
           isClosed: false,
           closedAt: undefined,
         };
+        return reopenedFy;
       }
       return fy;
     }));
     onShowToast(`دفاتر سال مالی ${year} مجدداً بازگشایی شد.`);
+    // ☁️ ذخیره در ابر
+    if (reopenedFy) SupabaseDataService.saveFiscalYear(reopenedFy);
   };
 
   // ==========================
@@ -844,11 +1050,14 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
 
     setUsers(prev => {
       const updated = [...prev, newUser];
-      try { localStorage.setItem('ayandeh_users', JSON.stringify(updated)); } catch {}
+      writeLocal('ayandeh_users', updated);
       return updated;
     });
 
-    // ثبت در Supabase با پسورد خام (سوپابیس خود هش امن ایجاد می‌کند)
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveAppUser(newUser);
+
+    // ثبت در Supabase Auth با پسورد خام (سوپابیس خود هش امن ایجاد می‌کند)
     registerUserInSupabase(cleanEmail, plainPwd, {
       fullName: newUser.fullName,
       firstName: newUser.firstName,
@@ -875,13 +1084,22 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       cleanUpdates.password = await hashPassword(normalizePassword(cleanUpdates.password));
     }
 
+    let updatedUser: AppUser | null = null;
     setUsers(prev => {
-      const updated = prev.map(u => u.id === id ? { ...u, ...cleanUpdates } : u);
-      try { localStorage.setItem('ayandeh_users', JSON.stringify(updated)); } catch {}
+      const updated = prev.map(u => {
+        if (u.id === id) {
+          updatedUser = { ...u, ...cleanUpdates };
+          return updatedUser;
+        }
+        return u;
+      });
+      writeLocal('ayandeh_users', updated);
       return updated;
     });
 
     onShowToast('اطلاعات کاربر با موفقیت به‌روزرسانی شد.');
+    // ☁️ ذخیره در ابر
+    if (updatedUser) SupabaseDataService.saveAppUser(updatedUser);
   };
 
   const handleDeleteUser = (id: string) => {
@@ -893,10 +1111,12 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
 
     setUsers(prev => {
       const updated = prev.filter(u => u.id !== id);
-      try { localStorage.setItem('ayandeh_users', JSON.stringify(updated)); } catch {}
+      writeLocal('ayandeh_users', updated);
       return updated;
     });
     onShowToast(`کاربر «${target?.fullName || ''}» با موفقیت حذف گردید.`);
+    // ☁️ حذف از ابر
+    SupabaseDataService.deleteAppUser(id);
   };
 
   const handleChangePassword = async (userId: string, newPlainPassword: string) => {
@@ -905,9 +1125,16 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
 
     const secureHash = await hashPassword(clean);
 
+    let updatedUser: AppUser | null = null;
     setUsers(prev => {
-      const updated = prev.map(u => u.id === userId ? { ...u, password: secureHash } : u);
-      try { localStorage.setItem('ayandeh_users', JSON.stringify(updated)); } catch {}
+      const updated = prev.map(u => {
+        if (u.id === userId) {
+          updatedUser = { ...u, password: secureHash };
+          return updatedUser;
+        }
+        return u;
+      });
+      writeLocal('ayandeh_users', updated);
       return updated;
     });
 
@@ -918,6 +1145,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     }
 
     onShowToast('کلمه عبور با موفقیت به‌صورت هش امن به‌روزرسانی شد.');
+    // ☁️ ذخیره در ابر
+    if (updatedUser) SupabaseDataService.saveAppUser(updatedUser);
   };
 
   // ==========================
@@ -938,16 +1167,25 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     const { updatedTxs, hasChanges } = reconcileVatInvoicesWithTransactions(updatedInvoices, transactions, currencyMode);
     if (hasChanges) {
       setTransactions(updatedTxs);
-      try { localStorage.setItem('ayandeh_transactions', JSON.stringify(updatedTxs)); } catch {}
+      writeLocal('ayandeh_transactions', updatedTxs);
+      // ☁️ ذخیره تراکنش‌های به‌روز شده در ابر
+      SupabaseDataService.saveTransactions(updatedTxs);
     }
+    // ☁️ ذخیره فاکتور در ابر
+    SupabaseDataService.saveVatInvoice(invoice);
   };
 
   const handleDeleteVatInvoice = (id: string) => {
     const inv = vatInvoices.find(i => i.id === id);
     const updated = vatInvoices.filter(i => i.id !== id);
     setVatInvoices(updated);
+    // حذف تراکنش‌های مرتبط
+    const removedTxIds = transactions.filter(t => t.id.includes(id)).map(t => t.id);
     setTransactions(prev => prev.filter(t => !t.id.includes(id)));
     onShowToast(`صورتحساب رسمی شماره ${inv?.invoiceNumber || ''} حذف شد.`);
+    // ☁️ حذف از ابر
+    SupabaseDataService.deleteVatInvoice(id);
+    removedTxIds.forEach(txId => SupabaseDataService.deleteTransaction(txId));
   };
 
   const handleSyncVatInvoiceToTransactions = (invoice: VatInvoice) => {
@@ -956,6 +1194,10 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     const { updatedTxs } = reconcileVatInvoicesWithTransactions(updatedInvoices, transactions, currencyMode);
     setTransactions(updatedTxs);
     onShowToast(`صورتحساب شماره ${invoice.invoiceNumber} با موفقیت در اسناد مالی شرکت منظور شد.`);
+    // ☁️ ذخیره در ابر
+    const syncedInvoice = updatedInvoices.find(i => i.id === invoice.id);
+    if (syncedInvoice) SupabaseDataService.saveVatInvoice(syncedInvoice);
+    SupabaseDataService.saveTransactions(updatedTxs);
   };
 
   const handleSaveServiceTariff = (tariff: ServiceTariff) => {
@@ -967,6 +1209,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       setServiceTariffs(prev => [...prev, tariff]);
       onShowToast(`تعرفه جدید «${tariff.title}» با موفقیت افزوده شد.`);
     }
+    // ☁️ ذخیره در ابر
+    SupabaseDataService.saveServiceTariff(tariff);
   };
 
   // ==========================
@@ -996,6 +1240,26 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     if (data.serviceTariffs) setServiceTariffs(data.serviceTariffs);
 
     onShowToast('اطلاعات فایل پشتیبان با موفقیت بازگردانی شد.');
+
+    // ☁️ مهاجرت به ابر بعد از بازیابی
+    SupabaseDataService.migrateAllData({
+      fiscalYears: data.fiscalYears ? sanitizeFiscalYearsList(data.fiscalYears) : fiscalYears,
+      transactions: data.transactions || transactions,
+      employees: data.employees || employees,
+      salaryMatrix: data.salaryMatrix || salaryMatrix,
+      members: data.members || members,
+      loans: data.loans || loans,
+      users: data.users || users,
+      bankAccounts: data.bankAccounts || bankAccounts,
+      vatInvoices: data.vatInvoices || vatInvoices,
+      serviceTariffs: data.serviceTariffs || serviceTariffs,
+    }).then(result => {
+      if (result.success) {
+        console.info('✅ Backup data synced to cloud');
+      } else {
+        console.warn('⚠️ Cloud sync after restore had errors:', result.errors);
+      }
+    });
   };
 
   const handleResetToDefaults = () => {
@@ -1011,6 +1275,20 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     setServiceTariffs(INITIAL_SERVICE_TARIFFS);
     setSelectedYear(1405);
     onShowToast('کلیه اطلاعات سامانه به مقادیر پیش‌فرض سال ۱۴۰۵ بازگردانی شد.');
+
+    // ☁️ مهاجرت مقادیر پیش‌فرض به ابر
+    SupabaseDataService.migrateAllData({
+      fiscalYears: INITIAL_FISCAL_YEARS,
+      transactions: INITIAL_TRANSACTIONS,
+      employees: INITIAL_EMPLOYEES,
+      salaryMatrix: INITIAL_SALARY_MATRIX,
+      members: INITIAL_MEMBERS,
+      loans: INITIAL_LOANS,
+      users: INITIAL_USERS,
+      bankAccounts: INITIAL_BANK_ACCOUNTS,
+      vatInvoices: INITIAL_VAT_INVOICES,
+      serviceTariffs: INITIAL_SERVICE_TARIFFS,
+    });
   };
 
   const handlePurge1404 = () => {
@@ -1021,6 +1299,39 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     localStorage.removeItem('ayandeh_selected_year');
     onShowToast('کلیه داده‌ها و کش‌های سال ۱۴۰۴ با موفقیت پاکسازی شدند.');
   };
+
+  // ==========================
+  // ☁️ مهاجرت یک‌باره از localStorage به Supabase
+  // ==========================
+  const handleMigrateToCloud = useCallback(async (): Promise<{ success: boolean; errors: string[] }> => {
+    if (!SupabaseDataService.isAvailable()) {
+      return { success: false, errors: ['Supabase is not configured'] };
+    }
+
+    onShowToast('⏳ در حال انتقال داده‌ها به دیتابیس ابری...');
+
+    const result = await SupabaseDataService.migrateAllData({
+      fiscalYears,
+      transactions,
+      employees,
+      salaryMatrix,
+      members,
+      loans,
+      users,
+      bankAccounts,
+      vatInvoices,
+      serviceTariffs,
+    });
+
+    if (result.success) {
+      setIsCloudConnected(true);
+      onShowToast('✅ همه داده‌ها با موفقیت به دیتابیس ابری Supabase منتقل شدند!');
+    } else {
+      onShowToast(`⚠️ انتقال با خطا مواجه شد: ${result.errors.join(', ')}`);
+    }
+
+    return result;
+  }, [fiscalYears, transactions, employees, salaryMatrix, members, loans, users, bankAccounts, vatInvoices, serviceTariffs]);
 
   return {
     // داده‌ها
@@ -1036,6 +1347,10 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     bankAccounts,
     vatInvoices,
     serviceTariffs,
+    
+    // وضعیت ابری
+    isCloudLoading,
+    isCloudConnected,
     
     // متدها
     handleSaveTransaction,
@@ -1070,5 +1385,6 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     handleRestoreData,
     handleResetToDefaults,
     handlePurge1404,
+    handleMigrateToCloud,
   };
 }
