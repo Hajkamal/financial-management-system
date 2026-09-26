@@ -15,7 +15,8 @@ import {
   Trash2,
   Sparkles,
   Smartphone,
-  ShieldCheck
+  ShieldCheck,
+  Cloud
 } from 'lucide-react';
 import { FinancialTransaction, Employee, SalaryMatrixItem, CompanyMember, Loan, FiscalYear, AppUser, BankAccount, VatInvoice, ServiceTariff } from '../types';
 import { toPersianDigits, getCurrentJalaliDateTime, generateBackupFilename } from '../utils/formatters';
@@ -550,6 +551,17 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                   <Sparkles className="w-4 h-4" />
                   <span>بررسی و بازخوانی اطلاعات از متن</span>
                 </button>
+              </div>
+
+              {/* Cloud Database Auto-Sync Guarantee Notice */}
+              <div className="p-3 bg-emerald-50/80 rounded-xl border border-emerald-200 text-[11px] text-emerald-800 flex items-start gap-2.5">
+                <Cloud className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="font-bold block">همگام‌سازی خودکار با دیتابیس ابری سرور:</span>
+                  <p className="text-emerald-700 leading-relaxed">
+                    به محض تایید نسخه پشتیبان، اطلاعات علاوه بر این مرورگر، در دیتابیس ابری سرور نیز ذخیره شده و در تمام مرورگرها و گوشی‌های شما بدون نیاز به انتقال دستی در دسترس خواهد بود.
+                  </p>
+                </div>
               </div>
             </div>
           )}

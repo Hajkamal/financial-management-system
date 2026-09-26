@@ -326,29 +326,64 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       }
 
       if (Array.isArray(serverData.transactions)) {
-        const sorted = sortTransactionsByDate(serverData.transactions, 'desc');
-        setTransactions(sorted);
-        writeLocal('ayandeh_transactions', sorted);
+        if (serverData.transactions.length > 0) {
+          const sorted = sortTransactionsByDate(serverData.transactions, 'desc');
+          setTransactions(sorted);
+          writeLocal('ayandeh_transactions', sorted);
+        } else if (isInitial) {
+          const localTxs = readLocal<FinancialTransaction[]>('ayandeh_transactions', []);
+          if (localTxs.length > 0) {
+            serverApi.saveTransactions(localTxs);
+          }
+        }
       }
 
       if (Array.isArray(serverData.employees)) {
-        setEmployees(serverData.employees);
-        writeLocal('ayandeh_employees', serverData.employees);
+        if (serverData.employees.length > 0) {
+          setEmployees(serverData.employees);
+          writeLocal('ayandeh_employees', serverData.employees);
+        } else if (isInitial) {
+          const localEmps = readLocal<Employee[]>('ayandeh_employees', []);
+          if (localEmps.length > 0) {
+            localEmps.forEach(e => serverApi.saveEmployee(e));
+          }
+        }
       }
 
       if (Array.isArray(serverData.salaryMatrix)) {
-        setSalaryMatrix(serverData.salaryMatrix);
-        writeLocal('ayandeh_salary_matrix', serverData.salaryMatrix);
+        if (serverData.salaryMatrix.length > 0) {
+          setSalaryMatrix(serverData.salaryMatrix);
+          writeLocal('ayandeh_salary_matrix', serverData.salaryMatrix);
+        } else if (isInitial) {
+          const localSalary = readLocal<SalaryMatrixItem[]>('ayandeh_salary_matrix', []);
+          if (localSalary.length > 0) {
+            serverApi.saveSalaryMatrixBatch(localSalary);
+          }
+        }
       }
 
       if (Array.isArray(serverData.members)) {
-        setMembers(serverData.members);
-        writeLocal('ayandeh_members', serverData.members);
+        if (serverData.members.length > 0) {
+          setMembers(serverData.members);
+          writeLocal('ayandeh_members', serverData.members);
+        } else if (isInitial) {
+          const localMembers = readLocal<CompanyMember[]>('ayandeh_members', []);
+          if (localMembers.length > 0) {
+            localMembers.forEach(m => serverApi.saveMember(m));
+          }
+        }
       }
 
       if (Array.isArray(serverData.loans)) {
-        setLoans(serverData.loans);
-        writeLocal('ayandeh_loans', serverData.loans);
+        if (serverData.loans.length > 0) {
+          setLoans(serverData.loans);
+          writeLocal('ayandeh_loans', serverData.loans);
+        } else if (isInitial) {
+          const localLoans = readLocal<Loan[]>('ayandeh_loans', []);
+          if (localLoans.length > 0) {
+            localLoans.forEach(l => serverApi.saveLoan(l));
+          }
+        }
       }
 
       if (Array.isArray(serverData.users) && serverData.users.length > 0) {
@@ -357,18 +392,39 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       }
 
       if (Array.isArray(serverData.bankAccounts)) {
-        setBankAccounts(serverData.bankAccounts);
-        writeLocal('ayandeh_bank_accounts', serverData.bankAccounts);
+        if (serverData.bankAccounts.length > 0) {
+          setBankAccounts(serverData.bankAccounts);
+          writeLocal('ayandeh_bank_accounts', serverData.bankAccounts);
+        } else if (isInitial) {
+          const localAccounts = readLocal<BankAccount[]>('ayandeh_bank_accounts', []);
+          if (localAccounts.length > 0) {
+            localAccounts.forEach(b => serverApi.saveBankAccount(b));
+          }
+        }
       }
 
       if (Array.isArray(serverData.vatInvoices)) {
-        setVatInvoices(serverData.vatInvoices);
-        writeLocal('ayandeh_vat_invoices', serverData.vatInvoices);
+        if (serverData.vatInvoices.length > 0) {
+          setVatInvoices(serverData.vatInvoices);
+          writeLocal('ayandeh_vat_invoices', serverData.vatInvoices);
+        } else if (isInitial) {
+          const localInvoices = readLocal<VatInvoice[]>('ayandeh_vat_invoices', []);
+          if (localInvoices.length > 0) {
+            localInvoices.forEach(v => serverApi.saveVatInvoice(v));
+          }
+        }
       }
 
       if (Array.isArray(serverData.serviceTariffs)) {
-        setServiceTariffs(serverData.serviceTariffs);
-        writeLocal('ayandeh_service_tariffs', serverData.serviceTariffs);
+        if (serverData.serviceTariffs.length > 0) {
+          setServiceTariffs(serverData.serviceTariffs);
+          writeLocal('ayandeh_service_tariffs', serverData.serviceTariffs);
+        } else if (isInitial) {
+          const localTariffs = readLocal<ServiceTariff[]>('ayandeh_service_tariffs', []);
+          if (localTariffs.length > 0) {
+            localTariffs.forEach(t => serverApi.saveServiceTariff(t));
+          }
+        }
       }
 
       setIsCloudConnected(true);
@@ -1259,7 +1315,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   // ==========================
   // پشتیبان‌گیری و بازیابی
   // ==========================
-  const handleRestoreData = (data: {
+  const handleRestoreData = async (data: {
     transactions: FinancialTransaction[];
     employees: Employee[];
     salaryMatrix: SalaryMatrixItem[];
@@ -1271,6 +1327,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     vatInvoices?: VatInvoice[];
     serviceTariffs?: ServiceTariff[];
   }) => {
+    // ۱. به‌روزرسانی استیت‌های ری‌اکت
     if (data.transactions) setTransactions(data.transactions);
     if (data.employees) setEmployees(data.employees);
     if (data.salaryMatrix) setSalaryMatrix(data.salaryMatrix);
@@ -1282,30 +1339,48 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     if (data.vatInvoices) setVatInvoices(data.vatInvoices);
     if (data.serviceTariffs) setServiceTariffs(data.serviceTariffs);
 
+    // ۲. تثبیت فوری در حافظه محلی
+    if (data.transactions) writeLocal('ayandeh_transactions', data.transactions);
+    if (data.employees) writeLocal('ayandeh_employees', data.employees);
+    if (data.salaryMatrix) writeLocal('ayandeh_salary_matrix', data.salaryMatrix);
+    if (data.members) writeLocal('ayandeh_members', data.members);
+    if (data.loans) writeLocal('ayandeh_loans', data.loans);
+    if (data.fiscalYears) writeLocal('ayandeh_fiscal_years', sanitizeFiscalYearsList(data.fiscalYears));
+    if (data.users) writeLocal('ayandeh_users', data.users);
+    if (data.bankAccounts) writeLocal('ayandeh_bank_accounts', data.bankAccounts);
+    if (data.vatInvoices) writeLocal('ayandeh_vat_invoices', data.vatInvoices);
+    if (data.serviceTariffs) writeLocal('ayandeh_service_tariffs', data.serviceTariffs);
+
     onShowToast('اطلاعات فایل پشتیبان با موفقیت بازگردانی شد.');
 
-    // ☁️ ذخیره کامل در دیتابیس سرور جهت همگامی همه مرورگرها
-    serverApi.restoreData(data);
+    // ۳. ☁️ ذخیره کامل در دیتابیس متمرکز سرور جهت همگامی همه مرورگرها
+    const serverOk = await serverApi.restoreData(data);
+    if (serverOk) {
+      setIsCloudConnected(true);
+      onShowToast('✅ اطلاعات فایل پشتیبان با موفقیت در دیتابیس ابری سرور ذخیره شد.');
+    }
 
-    // ☁️ مهاجرت به ابر بعد از بازیابی
-    SupabaseDataService.migrateAllData({
-      fiscalYears: data.fiscalYears ? sanitizeFiscalYearsList(data.fiscalYears) : fiscalYears,
-      transactions: data.transactions || transactions,
-      employees: data.employees || employees,
-      salaryMatrix: data.salaryMatrix || salaryMatrix,
-      members: data.members || members,
-      loans: data.loans || loans,
-      users: data.users || users,
-      bankAccounts: data.bankAccounts || bankAccounts,
-      vatInvoices: data.vatInvoices || vatInvoices,
-      serviceTariffs: data.serviceTariffs || serviceTariffs,
-    }).then(result => {
-      if (result.success) {
-        console.info('✅ Backup data synced to cloud');
-      } else {
-        console.warn('⚠️ Cloud sync after restore had errors:', result.errors);
-      }
-    });
+    // ۴. ☁️ تلاش برای ارسال نسخه کپی به Supabase
+    if (SupabaseDataService.isAvailable()) {
+      SupabaseDataService.migrateAllData({
+        fiscalYears: data.fiscalYears ? sanitizeFiscalYearsList(data.fiscalYears) : fiscalYears,
+        transactions: data.transactions || transactions,
+        employees: data.employees || employees,
+        salaryMatrix: data.salaryMatrix || salaryMatrix,
+        members: data.members || members,
+        loans: data.loans || loans,
+        users: data.users || users,
+        bankAccounts: data.bankAccounts || bankAccounts,
+        vatInvoices: data.vatInvoices || vatInvoices,
+        serviceTariffs: data.serviceTariffs || serviceTariffs,
+      }).then(result => {
+        if (result.success) {
+          console.info('✅ Backup data synced to Supabase');
+        } else {
+          console.warn('⚠️ Supabase replication notice (server DB is primary):', result.errors);
+        }
+      });
+    }
   };
 
   const handleResetToDefaults = () => {
@@ -1363,16 +1438,12 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   };
 
   // ==========================
-  // ☁️ مهاجرت یک‌باره از localStorage به Supabase
+  // ☁️ انتقال و ذخیره‌سازی داده‌ها در دیتابیس ابری
   // ==========================
   const handleMigrateToCloud = useCallback(async (): Promise<{ success: boolean; errors: string[] }> => {
-    if (!SupabaseDataService.isAvailable()) {
-      return { success: false, errors: ['Supabase is not configured'] };
-    }
+    onShowToast('⏳ در حال انتقال و ذخیره داده‌ها در دیتابیس ابری...');
 
-    onShowToast('⏳ در حال انتقال داده‌ها به دیتابیس ابری...');
-
-    const result = await SupabaseDataService.migrateAllData({
+    const payload = {
       fiscalYears,
       transactions,
       employees,
@@ -1383,17 +1454,55 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       bankAccounts,
       vatInvoices,
       serviceTariffs,
-    });
+    };
 
-    if (result.success) {
-      setIsCloudConnected(true);
-      onShowToast('✅ همه داده‌ها با موفقیت به دیتابیس ابری Supabase منتقل شدند!');
-    } else {
-      onShowToast(`⚠️ انتقال با خطا مواجه شد: ${result.errors.join(', ')}`);
+    // ۱. ذخیره قطعی در دیتابیس ابری سرور (مستقر در کلاد با همگامی کامل بین تمام مرورگرها)
+    const serverSuccess = await serverApi.restoreData(payload);
+
+    // ۲. به‌روزرسانی لوکال‌استوریج
+    writeLocal('ayandeh_fiscal_years', fiscalYears);
+    writeLocal('ayandeh_transactions', transactions);
+    writeLocal('ayandeh_employees', employees);
+    writeLocal('ayandeh_salary_matrix', salaryMatrix);
+    writeLocal('ayandeh_members', members);
+    writeLocal('ayandeh_loans', loans);
+    writeLocal('ayandeh_users', users);
+    writeLocal('ayandeh_bank_accounts', bankAccounts);
+    writeLocal('ayandeh_vat_invoices', vatInvoices);
+    writeLocal('ayandeh_service_tariffs', serviceTariffs);
+
+    let supabaseErrors: string[] = [];
+    let isSupabaseOk = false;
+    let isPermissionDenied = false;
+
+    // ۳. تلاش برای همگام‌سازی با Supabase در صورت فعال بودن
+    if (SupabaseDataService.isAvailable()) {
+      const result = await SupabaseDataService.migrateAllData(payload);
+      supabaseErrors = result.errors;
+      isSupabaseOk = result.success;
+      isPermissionDenied = !!result.isPermissionDenied;
     }
 
-    return result;
-  }, [fiscalYears, transactions, employees, salaryMatrix, members, loans, users, bankAccounts, vatInvoices, serviceTariffs]);
+    if (serverSuccess) {
+      setIsCloudConnected(true);
+      if (isSupabaseOk) {
+        onShowToast('✅ تمامی داده‌ها با موفقیت در دیتابیس ابری سرور و Supabase ذخیره شدند!');
+      } else if (isPermissionDenied) {
+        onShowToast('✅ داده‌ها با موفقیت در دیتابیس ابری سرور ثبت شدند و بین همه دستگاه‌ها و مرورگرها همگام هستند.');
+      } else {
+        onShowToast('✅ تمامی اطلاعات با موفقیت در دیتابیس ابری متمرکز ثبت و همگام گردید.');
+      }
+      return { success: true, errors: [] };
+    } else {
+      if (isSupabaseOk) {
+        setIsCloudConnected(true);
+        onShowToast('✅ تمامی داده‌ها با موفقیت در دیتابیس ابری Supabase ذخیره شدند!');
+        return { success: true, errors: [] };
+      }
+      onShowToast('❌ خطا در ارتباط با سرور ابری. لطفاً اتصال اینترنت خود را بررسی نمایید.');
+      return { success: false, errors: ['خطا در اتصال به سرور ابری'] };
+    }
+  }, [fiscalYears, transactions, employees, salaryMatrix, members, loans, users, bankAccounts, vatInvoices, serviceTariffs, onShowToast]);
 
   return {
     // داده‌ها

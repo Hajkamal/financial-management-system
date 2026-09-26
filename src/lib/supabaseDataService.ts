@@ -443,7 +443,12 @@ async function upsertRow(table: string, row: any): Promise<boolean> {
 }
 
 async function upsertMany(table: string, rows: any[]): Promise<boolean> {
-  if (!supabase || !isSupabaseConfigured || rows.length === 0) return false;
+  const result = await upsertManyDetailed(table, rows);
+  return result.ok;
+}
+
+async function upsertManyDetailed(table: string, rows: any[]): Promise<{ ok: boolean; error?: string; code?: string }> {
+  if (!supabase || !isSupabaseConfigured || rows.length === 0) return { ok: false, error: 'Not configured or empty' };
   try {
     // Supabase upsert with batch — chunk into 500 rows at a time
     const chunkSize = 500;
@@ -453,14 +458,14 @@ async function upsertMany(table: string, rows: any[]): Promise<boolean> {
         onConflict: table === 'fiscal_years' ? 'year' : 'id' 
       });
       if (error) {
-        console.warn(`Supabase upsertMany(${table}) chunk error:`, error.message);
-        return false;
+        console.warn(`Supabase upsertMany(${table}) chunk error:`, error.message, error.code);
+        return { ok: false, error: error.message, code: error.code };
       }
     }
-    return true;
-  } catch (err) {
+    return { ok: true };
+  } catch (err: any) {
     console.warn(`Supabase upsertMany(${table}) exception:`, err);
-    return false;
+    return { ok: false, error: err?.message || String(err) };
   }
 }
 
@@ -585,12 +590,13 @@ export const SupabaseDataService = {
     bankAccounts: BankAccount[];
     vatInvoices: VatInvoice[];
     serviceTariffs: ServiceTariff[];
-  }): Promise<{ success: boolean; errors: string[] }> {
+  }): Promise<{ success: boolean; errors: string[]; isPermissionDenied?: boolean; details?: string }> {
     if (!supabase || !isSupabaseConfigured) {
       return { success: false, errors: ['Supabase is not configured'] };
     }
 
     const errors: string[] = [];
+    let permissionDeniedCount = 0;
     const tables = [
       { name: 'fiscal_years', data: data.fiscalYears.map(fiscalYearToDb) },
       { name: 'employees', data: data.employees.map(employeeToDb) },
@@ -606,13 +612,22 @@ export const SupabaseDataService = {
 
     for (const table of tables) {
       if (table.data.length === 0) continue;
-      const ok = await upsertMany(table.name, table.data);
-      if (!ok) {
+      const res = await upsertManyDetailed(table.name, table.data);
+      if (!res.ok) {
         errors.push(`خطا در انتقال جدول ${table.name}`);
+        if (res.code === '42501' || res.error?.includes('permission denied')) {
+          permissionDeniedCount++;
+        }
       }
     }
 
-    return { success: errors.length === 0, errors };
+    const isPermissionDenied = permissionDeniedCount > 0;
+    return {
+      success: errors.length === 0,
+      errors,
+      isPermissionDenied,
+      details: isPermissionDenied ? 'مجوز دسترسی (GRANT) در دیتابیس Supabase تنظیم نشده است.' : undefined,
+    };
   },
 };
 
