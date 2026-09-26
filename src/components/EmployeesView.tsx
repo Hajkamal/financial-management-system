@@ -127,8 +127,8 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
     return (
-      e.name.toLowerCase().includes(q) ||
-      e.role.toLowerCase().includes(q) ||
+      (e.name || '').toLowerCase().includes(q) ||
+      (e.role || '').toLowerCase().includes(q) ||
       (e.nationalId && e.nationalId.includes(q)) ||
       (e.phone && e.phone.includes(q))
     );

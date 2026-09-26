@@ -83,7 +83,7 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
         return t.category === 'loan_installment';
       }
       if (catFilter === 'guarantee') {
-        return t.category === 'guarantee_deposit' || t.category === 'guarantee_refund' || t.title.includes('حسن انجام تعهدات') || t.title.includes('پیش‌پرداخت');
+        return t.category === 'guarantee_deposit' || t.category === 'guarantee_refund' || (t.title && (t.title.includes('حسن انجام تعهدات') || t.title.includes('پیش‌پرداخت')));
       }
 
       return true;

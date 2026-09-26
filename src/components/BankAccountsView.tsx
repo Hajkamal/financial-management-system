@@ -110,11 +110,11 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
   const filteredAccounts = useMemo(() => {
     return bankAccounts.filter((acc) => {
       const matchSearch =
-        acc.bankName.includes(searchTerm) ||
-        acc.accountNumber.includes(searchTerm) ||
+        (acc.bankName || '').includes(searchTerm) ||
+        (acc.accountNumber || '').includes(searchTerm) ||
         (acc.cardNumber && acc.cardNumber.includes(searchTerm)) ||
-        acc.shabaNumber.includes(searchTerm) ||
-        acc.accountHolder.includes(searchTerm) ||
+        (acc.shabaNumber || '').includes(searchTerm) ||
+        (acc.accountHolder || '').includes(searchTerm) ||
         (acc.branchName && acc.branchName.includes(searchTerm));
 
       const matchType =

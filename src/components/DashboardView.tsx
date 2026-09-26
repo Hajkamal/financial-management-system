@@ -150,11 +150,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
     // Prepayments & Guarantee Deposits (سپرده‌های حسن انجام تعهدات و پیش‌پرداخت‌ها در تراز مالی)
     const guaranteeDepositsPaid = filteredTxs
-      .filter(t => t.type === 'expense' && (t.category === 'guarantee_deposit' || t.title.includes('حسن انجام تعهدات') || t.title.includes('سپرده قرارداد') || t.title.includes('پیش‌پرداخت')))
+      .filter(t => t.type === 'expense' && (t.category === 'guarantee_deposit' || t.title?.includes('حسن انجام تعهدات') || t.title?.includes('سپرده قرارداد') || t.title?.includes('پیش‌پرداخت')))
       .reduce((sum, t) => sum + t.amount, 0);
 
     const guaranteeDepositsRefunded = filteredTxs
-      .filter(t => t.type === 'income' && (t.category === 'guarantee_refund' || t.title.includes('استرداد سپرده') || t.title.includes('برگشت سپرده') || t.title.includes('برگشت پیش‌پرداخت')))
+      .filter(t => t.type === 'income' && (t.category === 'guarantee_refund' || t.title?.includes('استرداد سپرده') || t.title?.includes('برگشت سپرده') || t.title?.includes('برگشت پیش‌پرداخت')))
       .reduce((sum, t) => sum + t.amount, 0);
 
     // مانده خالص پیش‌پرداخت‌ها و سپرده‌ها در تراز مالی شرکت
@@ -164,9 +164,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const guaranteeTransactions = filteredTxs.filter(t => 
       t.category === 'guarantee_deposit' || 
       t.category === 'guarantee_refund' || 
-      t.title.includes('حسن انجام تعهدات') || 
-      t.title.includes('سپرده قرارداد') || 
-      t.title.includes('پیش‌پرداخت')
+      t.title?.includes('حسن انجام تعهدات') || 
+      t.title?.includes('سپرده قرارداد') || 
+      t.title?.includes('پیش‌پرداخت')
     );
 
     return {

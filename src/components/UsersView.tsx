@@ -77,9 +77,9 @@ export const UsersView: React.FC<UsersViewProps> = ({
 
       const term = searchTerm.toLowerCase().trim();
       return (
-        u.fullName.toLowerCase().includes(term) ||
-        u.email.toLowerCase().includes(term) ||
-        u.roleTitle.toLowerCase().includes(term) ||
+        (u.fullName || '').toLowerCase().includes(term) ||
+        (u.email || '').toLowerCase().includes(term) ||
+        (u.roleTitle || '').toLowerCase().includes(term) ||
         (u.phone && u.phone.includes(term))
       );
     });

@@ -183,7 +183,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         const mem = members.find(m => m.id === t.relatedMemberId);
-        const matchTitle = t.title.toLowerCase().includes(q);
+        const matchTitle = (t.title || '').toLowerCase().includes(q);
         const matchDesc = (t.description || '').toLowerCase().includes(q);
         const matchCode = (t.trackingCode || '').toLowerCase().includes(q);
         const matchMem = mem ? mem.name.toLowerCase().includes(q) : false;

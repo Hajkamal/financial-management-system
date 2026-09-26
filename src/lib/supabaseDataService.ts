@@ -77,28 +77,28 @@ const transactionToDb = (tx: FinancialTransaction) => ({
 
 const dbToTransaction = (row: any): FinancialTransaction => ({
   id: row.id,
-  type: row.type,
-  category: row.category,
-  subCategory: row.sub_category,
-  amount: row.amount,
-  year: row.year,
-  month: row.month as PersianMonthNumber,
-  day: row.day,
-  dateString: row.date_string,
-  title: row.title,
-  description: row.description,
-  recipientOrPayer: row.recipient_or_payer,
-  trackingCode: row.tracking_code,
-  relatedMemberId: row.related_member_id,
-  memberPayoutType: row.member_payout_type,
-  relatedEmployeeId: row.related_employee_id,
-  relatedLoanId: row.related_loan_id,
-  createdBy: row.created_by,
-  createdByName: row.created_by_name,
-  createdAt: row.created_at,
-  updatedBy: row.updated_by,
-  updatedByName: row.updated_by_name,
-  updatedAt: row.updated_at,
+  type: row.type || 'expense',
+  category: row.category || 'other',
+  subCategory: row.sub_category || null,
+  amount: Number(row.amount) || 0,
+  year: Number(row.year) || 1405,
+  month: (Number(row.month) || 1) as PersianMonthNumber,
+  day: Number(row.day) || 1,
+  dateString: row.date_string || '',
+  title: row.title || row.description || '',
+  description: row.description || '',
+  recipientOrPayer: row.recipient_or_payer || '',
+  trackingCode: row.tracking_code || '',
+  relatedMemberId: row.related_member_id || null,
+  memberPayoutType: row.member_payout_type || null,
+  relatedEmployeeId: row.related_employee_id || null,
+  relatedLoanId: row.related_loan_id || null,
+  createdBy: row.created_by || null,
+  createdByName: row.created_by_name || null,
+  createdAt: row.created_at || null,
+  updatedBy: row.updated_by || null,
+  updatedByName: row.updated_by_name || null,
+  updatedAt: row.updated_at || null,
 });
 
 // --- Employee ---
@@ -577,6 +577,63 @@ export const SupabaseDataService = {
   // --- تعرفه خدمات ---
   fetchServiceTariffs: () => fetchAll('service_tariffs', dbToServiceTariff),
   saveServiceTariff: (t: ServiceTariff) => upsertRow('service_tariffs', serviceTariffToDb(t)),
+
+  // --- بارگذاری یکپارچه کلیه داده‌ها از Supabase ---
+  async fetchAllData(): Promise<{
+    fiscalYears: FiscalYear[];
+    transactions: FinancialTransaction[];
+    employees: Employee[];
+    salaryMatrix: SalaryMatrixItem[];
+    members: CompanyMember[];
+    loans: Loan[];
+    users: AppUser[];
+    bankAccounts: BankAccount[];
+    vatInvoices: VatInvoice[];
+    serviceTariffs: ServiceTariff[];
+  } | null> {
+    if (!supabase || !isSupabaseConfigured) return null;
+    try {
+      const [
+        fiscalYears,
+        transactions,
+        employees,
+        salaryMatrix,
+        members,
+        loans,
+        users,
+        bankAccounts,
+        vatInvoices,
+        serviceTariffs,
+      ] = await Promise.all([
+        fetchAll('fiscal_years', dbToFiscalYear),
+        fetchAll('transactions', dbToTransaction),
+        fetchAll('employees', dbToEmployee),
+        fetchAll('salary_matrix', dbToSalaryMatrix),
+        fetchAll('members', dbToMember),
+        fetchAll('loans', dbToLoan),
+        fetchAll('app_users', dbToAppUser),
+        fetchAll('bank_accounts', dbToBankAccount),
+        fetchAll('vat_invoices', dbToVatInvoice),
+        fetchAll('service_tariffs', dbToServiceTariff),
+      ]);
+
+      return {
+        fiscalYears: fiscalYears || [],
+        transactions: transactions || [],
+        employees: employees || [],
+        salaryMatrix: salaryMatrix || [],
+        members: members || [],
+        loans: loans || [],
+        users: users || [],
+        bankAccounts: bankAccounts || [],
+        vatInvoices: vatInvoices || [],
+        serviceTariffs: serviceTariffs || [],
+      };
+    } catch (err) {
+      console.warn('Supabase fetchAllData failed:', err);
+      return null;
+    }
+  },
 
   // --- مهاجرت جامع: انتقال همه داده‌ها از localStorage به Supabase ---
   async migrateAllData(data: {

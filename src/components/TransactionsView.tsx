@@ -158,7 +158,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       // Text search in title, description, recipient/payer, tracking code, creator
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
-        const matchTitle = t.title.toLowerCase().includes(query);
+        const matchTitle = (t.title || '').toLowerCase().includes(query);
         const matchDesc = t.description?.toLowerCase().includes(query) || false;
         const matchRecipient = t.recipientOrPayer?.toLowerCase().includes(query) || false;
         const matchCode = t.trackingCode?.toLowerCase().includes(query) || false;
