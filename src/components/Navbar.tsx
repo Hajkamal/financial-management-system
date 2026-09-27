@@ -20,7 +20,9 @@ import {
   Lock,
   Settings2,
   ShieldCheck,
-  FileCheck2
+  FileCheck2,
+  BookOpen,
+  BookOpenCheck
 } from 'lucide-react';
 import { ActiveTab, CurrencyMode, FiscalYear, AppUser } from '../types';
 
@@ -45,6 +47,8 @@ interface NavigationProps {
 export const NAV_TABS = [
   { id: 'dashboard' as ActiveTab, label: 'داشبورد اصلی', icon: BarChart3 },
   { id: 'transactions' as ActiveTab, label: 'ثبت درآمد و هزینه', icon: ReceiptText },
+  { id: 'journal' as ActiveTab, label: 'دفتر روزنامه', icon: BookOpen },
+  { id: 'general-ledger' as ActiveTab, label: 'دفتر کل', icon: BookOpenCheck },
   { id: 'vat-reports' as ActiveTab, label: 'ارزش افزوده و مودیان', icon: FileCheck2 },
   { id: 'salary-matrix' as ActiveTab, label: 'حقوق و دستمزد', icon: Table2 },
   { id: 'bank-accounts' as ActiveTab, label: 'حساب‌های بانکی', icon: Landmark },
@@ -100,6 +104,14 @@ export const TAB_META: Record<ActiveTab, { title: string; subtitle: string }> = 
   'users': {
     title: 'مدیریت کاربران و سطوح دسترسی',
     subtitle: 'تعریف کاربر جدید، تنظیم رمز عبور، کنترل دسترسی ثبت/ویرایش/خروجی'
+  },
+  'journal': {
+    title: 'دفتر روزنامه (Journal)',
+    subtitle: 'ثبت اسناد حسابداری دوطرفه — بدهکار و بستانکار تمام رویدادهای مالی شرکت'
+  },
+  'general-ledger': {
+    title: 'دفتر کل (General Ledger)',
+    subtitle: 'مانده و گردش حساب‌ها، تراز آزمایشی و ساختار سرفصل حساب‌ها'
   }
 };
 

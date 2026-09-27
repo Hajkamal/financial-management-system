@@ -20,6 +20,8 @@ import { TransactionModal } from './components/TransactionModal';
 import { BackupModal } from './components/BackupModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { AuthScreen } from './components/AuthScreen';
+import { JournalView } from './components/JournalView';
+import { GeneralLedgerView } from './components/GeneralLedgerView';
 
 import { 
   ActiveTab, 
@@ -566,6 +568,25 @@ export default function App() {
               onDeleteUser={handleDeleteUser}
               onSwitchUser={handleSwitchUser}
               onShowToast={showToast}
+            />
+          )}
+
+          {activeTab === 'journal' && (
+            <JournalView
+              transactions={transactions}
+              selectedYear={selectedYear}
+              currencyMode={currencyMode}
+              onShowToast={showToast}
+            />
+          )}
+
+          {activeTab === 'general-ledger' && (
+            <GeneralLedgerView
+              transactions={transactions}
+              selectedYear={selectedYear}
+              currencyMode={currencyMode}
+              onShowToast={showToast}
+              onNavigateToJournal={() => setActiveTab('journal')}
             />
           )}
         </main>
