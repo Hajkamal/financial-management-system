@@ -46,7 +46,16 @@ export interface PersianMonthInfo {
   season: 'بهار' | 'تابستان' | 'پاییز' | 'زمستان';
 }
 
-export type BankAccountType = 'current' | 'savings' | 'short_term' | 'gharzo_al_hasane' | 'foreign' | 'other';
+export type BankAccountType = 
+  | 'current'            // حساب جاری
+  | 'petty_cash'         // کارت تنخواه گردان
+  | 'savings'            // پس‌انداز
+  | 'short_term'         // سپرده کوتاه‌مدت
+  | 'gharzo_al_hasane'   // قرض‌الحسنه
+  | 'foreign'            // حساب ارزی
+  | 'other';             // سایر حساب‌ها
+
+export type AccountCategory = 'bank_account' | 'petty_cash';
 
 export interface BankAccount {
   id: string;
@@ -56,8 +65,12 @@ export interface BankAccount {
   shabaNumber: string;         // شماره شبا با پیشوند IR
   branchName?: string;         // شعبه / کد شعبه
   accountHolder: string;       // صاحب حساب / صاحبان امضا
-  accountType: BankAccountType; // نوع حساب (جاری، قرض‌الحسنه، پس‌انداز، کوتاه‌مدت)
-  balance: number;             // موجودی دفتری به ریال
+  accountType: BankAccountType; // نوع حساب (جاری، کارت تنخواه گردان، قرض‌الحسنه، پس‌انداز، کوتاه‌مدت)
+  accountCategory?: AccountCategory; // دسته‌بندی: حساب بانکی شرکت یا کارت تنخواه گردان
+  pettyCashHolder?: string;    // نام تنخواه‌دار / مسئول کارت تنخواه
+  balance: number;             // موجودی دفتری/جاری به ریال
+  openingBalance?: number;     // موجودی اول دوره به ریال
+  closingBalance?: number;     // موجودی پایان دوره به ریال
   currency?: 'rial' | 'toman' | 'usd' | 'eur';
   isActive: boolean;           // فعال / غیرفعال
   posTerminalId?: string;      // شماره پایانه کارتخوان POS در صورت وجود
@@ -66,6 +79,21 @@ export interface BankAccount {
   notes?: string;              // توضیحات و یادداشت
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface SalaryHistoryItem {
+  id: string;
+  date: string;              // تاریخ تغییر حقوق (مثلاً ۱۴۰۵/۰۱/۰۱)
+  amount: number;            // مبلغ حقوق مصوب به ریال
+  note?: string;             // علت یا شرح تغییر حقوق
+  effectiveDate?: string;    // تاریخ اعمال حکم حقوق
+  previousSalary?: number;   // حقوق قبلی به ریال
+  newSalary?: number;        // حقوق جدید مصوب به ریال
+  changePercent?: number;    // درصد تغییر
+  reason?: string;           // علت تغییر حکم (افزایش سالانه شورای عالی کار، ارتقای رتبه، توافق طرفین، ارزیابی عملکرد)
+  registeredAt?: string;     // زمان ثبت در سیستم
+  registeredBy?: string;     // ثبت‌کننده تغییر
+  notes?: string;            // توضیحات تکمیلی
 }
 
 export interface Employee {
@@ -82,6 +110,7 @@ export interface Employee {
   nationalId?: string;
   phone?: string;
   notes?: string;
+  salaryHistory?: SalaryHistoryItem[]; // سابقه و روند تغییرات حقوق پرسنل
 }
 
 export interface SalaryMatrixItem {

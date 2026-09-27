@@ -20,10 +20,15 @@ import {
   CheckCircle2, 
   X,
   Layers,
-  Sparkles
+  Sparkles,
+  Receipt,
+  User,
+  Banknote,
+  ArrowRightLeft
 } from 'lucide-react';
-import { BankAccount, BankAccountType, CurrencyMode, AppUser } from '../types';
+import { BankAccount, BankAccountType, AccountCategory, CurrencyMode, AppUser } from '../types';
 import { formatCurrency, toPersianDigits, toEnglishDigits } from '../utils/formatters';
+import { AmountInput } from './AmountInput';
 
 interface BankAccountsViewProps {
   bankAccounts: BankAccount[];
@@ -55,6 +60,7 @@ const BANK_NAMES_SUGGESTIONS = [
 
 const ACCOUNT_TYPE_LABELS: Record<BankAccountType, string> = {
   current: 'حساب جاری',
+  petty_cash: 'کارت تنخواه گردان',
   savings: 'پس‌انداز',
   short_term: 'سپرده کوتاه‌مدت',
   gharzo_al_hasane: 'قرض‌الحسنه',
@@ -64,7 +70,7 @@ const ACCOUNT_TYPE_LABELS: Record<BankAccountType, string> = {
 
 const COLOR_THEMES = [
   { id: 'blue', label: 'آبی اقیانوسی', class: 'from-blue-700 via-indigo-800 to-slate-900', border: 'border-blue-500/30' },
-  { id: 'teal', label: 'سبز کله‌غازی', class: 'from-teal-700 via-emerald-800 to-slate-900', border: 'border-teal-500/30' },
+  { id: 'emerald', label: 'سبز زمردی تنخواه', class: 'from-emerald-700 via-teal-800 to-slate-950', border: 'border-emerald-500/30' },
   { id: 'gold', label: 'طلایی پاسارگادی', class: 'from-amber-600 via-yellow-700 to-slate-900', border: 'border-amber-500/30' },
   { id: 'purple', label: 'بنفش لوکس', class: 'from-purple-800 via-indigo-900 to-slate-950', border: 'border-purple-500/30' },
   { id: 'ruby', label: 'زرشکی و قرمز', class: 'from-rose-800 via-red-900 to-slate-950', border: 'border-rose-500/30' },
@@ -72,7 +78,7 @@ const COLOR_THEMES = [
 ];
 
 export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
-  bankAccounts,
+  bankAccounts = [],
   onAddAccount,
   onUpdateAccount,
   onDeleteAccount,
@@ -90,14 +96,18 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Form State
+  const [accountCategory, setAccountCategory] = useState<AccountCategory>('bank_account');
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [shabaNumber, setShabaNumber] = useState('IR');
   const [branchName, setBranchName] = useState('');
   const [accountHolder, setAccountHolder] = useState('شرکت آینده نگاران خلاق');
+  const [pettyCashHolder, setPettyCashHolder] = useState('');
   const [accountType, setAccountType] = useState<BankAccountType>('current');
-  const [balance, setBalance] = useState('');
+  const [balance, setBalance] = useState('0');
+  const [openingBalance, setOpeningBalance] = useState('0');
+  const [closingBalance, setClosingBalance] = useState('0');
   const [isActive, setIsActive] = useState(true);
   const [posTerminalId, setPosTerminalId] = useState('');
   const [internetBankingId, setInternetBankingId] = useState('');
@@ -115,12 +125,17 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
         (acc.cardNumber && acc.cardNumber.includes(searchTerm)) ||
         (acc.shabaNumber || '').includes(searchTerm) ||
         (acc.accountHolder || '').includes(searchTerm) ||
+        (acc.pettyCashHolder && acc.pettyCashHolder.includes(searchTerm)) ||
         (acc.branchName && acc.branchName.includes(searchTerm));
+
+      const isPettyCash = acc.accountType === 'petty_cash' || acc.accountCategory === 'petty_cash';
 
       const matchType =
         filterType === 'all' ||
         (filterType === 'active' && acc.isActive) ||
         (filterType === 'inactive' && !acc.isActive) ||
+        (filterType === 'bank_accounts' && !isPettyCash) ||
+        (filterType === 'petty_cash' && isPettyCash) ||
         acc.accountType === filterType;
 
       return matchSearch && matchType;
@@ -128,14 +143,22 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
   }, [bankAccounts, searchTerm, filterType]);
 
   // Statistics
-  const totalBalance = useMemo(() => {
-    return bankAccounts
-      .filter((acc) => acc.isActive)
-      .reduce((sum, acc) => sum + (acc.balance || 0), 0);
-  }, [bankAccounts]);
+  const stats = useMemo(() => {
+    const activeAccs = bankAccounts.filter((acc) => acc.isActive);
+    const totalCurrent = activeAccs.reduce((sum, acc) => sum + (acc.balance || 0), 0);
+    const totalOpening = activeAccs.reduce((sum, acc) => sum + (acc.openingBalance || 0), 0);
+    const totalClosing = activeAccs.reduce((sum, acc) => sum + (acc.closingBalance || 0), 0);
+    const pettyCashCount = bankAccounts.filter(a => a.accountType === 'petty_cash' || a.accountCategory === 'petty_cash').length;
+    const bankCount = bankAccounts.length - pettyCashCount;
 
-  const activeAccountsCount = useMemo(() => {
-    return bankAccounts.filter((acc) => acc.isActive).length;
+    return {
+      totalCurrent,
+      totalOpening,
+      totalClosing,
+      activeCount: activeAccs.length,
+      pettyCashCount,
+      bankCount,
+    };
   }, [bankAccounts]);
 
   // Copy helper
@@ -165,17 +188,21 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
     return `IR ${parts ? parts.join(' ') : rest}`;
   };
 
-  // Open Add Modal
-  const handleOpenAdd = () => {
+  // Open Add Modal for Bank Account
+  const handleOpenAddBankAccount = () => {
     setEditingAccount(null);
+    setAccountCategory('bank_account');
     setBankName('بانک سامان');
     setAccountNumber('');
     setCardNumber('');
     setShabaNumber('IR');
     setBranchName('');
     setAccountHolder('شرکت آینده نگاران خلاق');
+    setPettyCashHolder('');
     setAccountType('current');
     setBalance('0');
+    setOpeningBalance('0');
+    setClosingBalance('0');
     setIsActive(true);
     setPosTerminalId('');
     setInternetBankingId('');
@@ -184,21 +211,49 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
     setIsModalOpen(true);
   };
 
+  // Open Add Modal for Petty Cash Card
+  const handleOpenAddPettyCash = () => {
+    setEditingAccount(null);
+    setAccountCategory('petty_cash');
+    setBankName('بانک سامان');
+    setAccountNumber('');
+    setCardNumber('');
+    setShabaNumber('IR');
+    setBranchName('');
+    setAccountHolder('شرکت آینده نگاران خلاق (تنخواه)');
+    setPettyCashHolder('');
+    setAccountType('petty_cash');
+    setBalance('0');
+    setOpeningBalance('0');
+    setClosingBalance('0');
+    setIsActive(true);
+    setPosTerminalId('');
+    setInternetBankingId('');
+    setColorTheme('from-emerald-700 via-teal-800 to-slate-950');
+    setNotes('کارت تنخواه گردان جهت خریدهای جاری و هزینه‌های روزمره');
+    setIsModalOpen(true);
+  };
+
   // Open Edit Modal
   const handleOpenEdit = (acc: BankAccount) => {
     setEditingAccount(acc);
+    const isPetty = acc.accountType === 'petty_cash' || acc.accountCategory === 'petty_cash';
+    setAccountCategory(isPetty ? 'petty_cash' : 'bank_account');
     setBankName(acc.bankName);
     setAccountNumber(acc.accountNumber);
     setCardNumber(acc.cardNumber || '');
     setShabaNumber(acc.shabaNumber);
     setBranchName(acc.branchName || '');
     setAccountHolder(acc.accountHolder);
+    setPettyCashHolder(acc.pettyCashHolder || '');
     setAccountType(acc.accountType);
-    setBalance(acc.balance.toString());
+    setBalance((acc.balance || 0).toString());
+    setOpeningBalance((acc.openingBalance || 0).toString());
+    setClosingBalance((acc.closingBalance || 0).toString());
     setIsActive(acc.isActive);
     setPosTerminalId(acc.posTerminalId || '');
     setInternetBankingId(acc.internetBankingId || '');
-    setColorTheme(acc.colorTheme || 'from-blue-700 via-indigo-800 to-slate-900');
+    setColorTheme(acc.colorTheme || (isPetty ? 'from-emerald-700 via-teal-800 to-slate-950' : 'from-blue-700 via-indigo-800 to-slate-900'));
     setNotes(acc.notes || '');
     setIsModalOpen(true);
   };
@@ -216,11 +271,15 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
     }
 
     const cleanBalance = parseInt(toEnglishDigits(balance || '0').replace(/,/g, ''), 10) || 0;
+    const cleanOpeningBalance = parseInt(toEnglishDigits(openingBalance || '0').replace(/,/g, ''), 10) || 0;
+    const cleanClosingBalance = parseInt(toEnglishDigits(closingBalance || '0').replace(/,/g, ''), 10) || 0;
     const cleanCard = cardNumber ? toEnglishDigits(cardNumber).replace(/\D/g, '') : undefined;
     let cleanShaba = toEnglishDigits(shabaNumber).toUpperCase().replace(/\s+/g, '');
     if (!cleanShaba.startsWith('IR')) {
       cleanShaba = `IR${cleanShaba}`;
     }
+
+    const finalAccountType: BankAccountType = accountCategory === 'petty_cash' ? 'petty_cash' : accountType;
 
     if (editingAccount) {
       onUpdateAccount({
@@ -230,9 +289,13 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
         cardNumber: cleanCard,
         shabaNumber: cleanShaba,
         branchName: branchName.trim() || undefined,
-        accountHolder: accountHolder.trim() || 'شرکت آینده نگاران خلاق',
-        accountType,
+        accountHolder: accountHolder.trim() || (accountCategory === 'petty_cash' ? 'کارت تنخواه شرکت' : 'شرکت آینده نگاران خلاق'),
+        accountCategory,
+        pettyCashHolder: accountCategory === 'petty_cash' ? pettyCashHolder.trim() || undefined : undefined,
+        accountType: finalAccountType,
         balance: cleanBalance,
+        openingBalance: cleanOpeningBalance,
+        closingBalance: cleanClosingBalance,
         isActive,
         posTerminalId: posTerminalId.trim() || undefined,
         internetBankingId: internetBankingId.trim() || undefined,
@@ -240,7 +303,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
         notes: notes.trim() || undefined,
         updatedAt: 'امروز',
       });
-      onShowToast(`اطلاعات حساب ${bankName} با موفقیت ویرایش شد.`);
+      onShowToast(`اطلاعات ${accountCategory === 'petty_cash' ? 'کارت تنخواه' : 'حساب'} ${bankName} با موفقیت ویرایش شد.`);
     } else {
       onAddAccount({
         bankName: bankName.trim(),
@@ -248,9 +311,13 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
         cardNumber: cleanCard,
         shabaNumber: cleanShaba,
         branchName: branchName.trim() || undefined,
-        accountHolder: accountHolder.trim() || 'شرکت آینده نگاران خلاق',
-        accountType,
+        accountHolder: accountHolder.trim() || (accountCategory === 'petty_cash' ? 'کارت تنخواه شرکت' : 'شرکت آینده نگاران خلاق'),
+        accountCategory,
+        pettyCashHolder: accountCategory === 'petty_cash' ? pettyCashHolder.trim() || undefined : undefined,
+        accountType: finalAccountType,
         balance: cleanBalance,
+        openingBalance: cleanOpeningBalance,
+        closingBalance: cleanClosingBalance,
         currency: 'rial',
         isActive,
         posTerminalId: posTerminalId.trim() || undefined,
@@ -258,7 +325,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
         colorTheme,
         notes: notes.trim() || undefined,
       });
-      onShowToast(`حساب بانکی جدید (${bankName}) با موفقیت ایجاد گردید.`);
+      onShowToast(`${accountCategory === 'petty_cash' ? 'کارت تنخواه گردان' : 'حساب بانکی'} جدید (${bankName}) با موفقیت ایجاد گردید.`);
     }
 
     setIsModalOpen(false);
@@ -274,85 +341,106 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
               <Landmark className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                <span>حساب‌های بانکی و نقدینگی شرکت</span>
+              <h1 className="text-xl font-black text-slate-900 flex items-center gap-2 flex-wrap">
+                <span>حساب‌های بانکی و کارت‌های تنخواه شرکت</span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
-                  {toPersianDigits(bankAccounts.length)} حساب ثبت‌شده
+                  {toPersianDigits(stats.bankCount)} حساب اصلی
+                </span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+                  {toPersianDigits(stats.pettyCashCount)} کارت تنخواه
                 </span>
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                مدیریت حساب‌های فعال، شماره شبا، شماره کارت و پایش موجودی دفتری شرکت آینده نگاران خلاق
+                مدیریت موجودی اول دوره، گردش جاری و پایان دوره حساب‌ها و کارت‌های تنخواه گردان پرسنل
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
           {canManage && (
-            <button
-              onClick={handleOpenAdd}
-              className="flex-1 md:flex-none px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>افزودن حساب بانکی جدید</span>
-            </button>
+            <>
+              {/* Add Petty Cash Button */}
+              <button
+                onClick={handleOpenAddPettyCash}
+                className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                title="تعریف کارت تنخواه گردان جدید برای خریدها و هزینه‌های روزمره"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ تعریف کارت تنخواه</span>
+              </button>
+
+              {/* Add Bank Account Button */}
+              <button
+                onClick={handleOpenAddBankAccount}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>افزودن حساب بانکی</span>
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      {/* Overview Stat Cards */}
+      {/* Overview Stat Cards with Opening & Closing Balances */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Current Balance */}
         <div className="bg-gradient-to-br from-blue-900 to-indigo-950 text-white p-5 rounded-2xl shadow-sm border border-blue-800/40 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
           <div className="flex items-center justify-between text-blue-200 text-xs font-medium mb-2">
-            <span>مجموع موجودی حساب‌های فعال</span>
+            <span>مجموع موجودی جاری حساب‌ها</span>
             <Wallet className="w-4 h-4 text-blue-400" />
           </div>
           <div className="text-2xl font-black tracking-tight text-white mb-1">
-            {formatCurrency(totalBalance, currencyMode)}
+            {formatCurrency(stats.totalCurrent, currencyMode)}
           </div>
           <div className="text-[11px] text-blue-300">
-            پایش ریالی کلیه حساب‌های عملیاتی و پشتیبان شرکت
+            موجودی نقدینگی حاضر در کلیه حساب‌ها و تنخواه‌ها
           </div>
         </div>
 
+        {/* Total Opening Balance */}
         <div className="bg-white p-5 rounded-2xl shadow-xs border border-slate-200/80 flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium mb-2">
-            <span>حساب‌های عملیاتی فعال</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            <span>جمع موجودی اول دوره</span>
+            <Banknote className="w-4 h-4 text-amber-500" />
           </div>
-          <div className="text-2xl font-black text-slate-900 mb-1">
-            {toPersianDigits(activeAccountsCount)} <span className="text-xs font-normal text-slate-500">حساب فعال</span>
-          </div>
-          <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span>آماده دریافت و پرداخت وجوه</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl shadow-xs border border-slate-200/80 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium mb-2">
-            <span>حساب اصلی درآمد (زرین‌پال/باسینا)</span>
-            <Landmark className="w-4 h-4 text-blue-500" />
-          </div>
-          <div className="text-sm font-bold text-slate-900 truncate mb-1">
-            {bankAccounts[0]?.bankName || 'بدون حساب تعریف‌شده'}
-          </div>
-          <div className="text-[11px] text-slate-500 truncate" dir="ltr">
-            {bankAccounts[0]?.shabaNumber ? formatShabaDisplay(bankAccounts[0].shabaNumber) : '---'}
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl shadow-xs border border-slate-200/80 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium mb-2">
-            <span>واحدهای متصل به پایانه POS</span>
-            <CreditCard className="w-4 h-4 text-purple-500" />
-          </div>
-          <div className="text-2xl font-black text-slate-900 mb-1">
-            {toPersianDigits(bankAccounts.filter(a => !!a.posTerminalId).length)} <span className="text-xs font-normal text-slate-500">دستگاه کارتخوان</span>
+          <div className="text-xl font-extrabold text-slate-900 mb-1">
+            {formatCurrency(stats.totalOpening, currencyMode)}
           </div>
           <div className="text-[11px] text-slate-500">
-            تسهیل دریافت نقدینگی حضوری
+            مانده افتتاحیه ثبت‌شده در ابتدای دوره مالی
+          </div>
+        </div>
+
+        {/* Total Closing Balance */}
+        <div className="bg-white p-5 rounded-2xl shadow-xs border border-slate-200/80 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-medium mb-2">
+            <span>جمع موجودی پایان دوره</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div className="text-xl font-extrabold text-slate-900 mb-1">
+            {formatCurrency(stats.totalClosing, currencyMode)}
+          </div>
+          <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+            <span>مانده تسویه‌شده پایانی</span>
+          </div>
+        </div>
+
+        {/* Active Accounts and Petty Cash Count */}
+        <div className="bg-white p-5 rounded-2xl shadow-xs border border-slate-200/80 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-medium mb-2">
+            <span>واحدهای فعال بانکی و تنخواه</span>
+            <Layers className="w-4 h-4 text-purple-500" />
+          </div>
+          <div className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2">
+            <span>{toPersianDigits(stats.activeCount)} واحد فعال</span>
+          </div>
+          <div className="text-[11px] text-slate-500 flex items-center gap-2">
+            <span>بانکی: {toPersianDigits(stats.bankCount)}</span>
+            <span>•</span>
+            <span className="text-emerald-700 font-bold">تنخواه: {toPersianDigits(stats.pettyCashCount)}</span>
           </div>
         </div>
       </div>
@@ -365,7 +453,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="جستجوی نام بانک، شماره شبا، کارت یا صاحب حساب..."
+            placeholder="جستجوی نام بانک، تنخواه‌دار، شماره شبا یا کارت..."
             className="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:border-blue-500 transition-colors"
           />
         </div>
@@ -375,9 +463,9 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
           <span className="text-xs text-slate-500 shrink-0">فیلتر:</span>
           {[
             { id: 'all', label: 'همه' },
-            { id: 'active', label: 'حساب‌های فعال' },
-            { id: 'current', label: 'جاری' },
-            { id: 'gharzo_al_hasane', label: 'قرض‌الحسنه' },
+            { id: 'bank_accounts', label: 'حساب‌های بانکی' },
+            { id: 'petty_cash', label: 'کارت‌های تنخواه' },
+            { id: 'active', label: 'فعال' },
             { id: 'inactive', label: 'غیرفعال' },
           ].map((btn) => (
             <button
@@ -395,10 +483,42 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
         </div>
       </div>
 
-      {/* Bank Cards Grid */}
+      {/* Empty State */}
+      {filteredAccounts.length === 0 && (
+        <div className="bg-white rounded-3xl p-12 text-center border border-dashed border-slate-300">
+          <Landmark className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="font-bold text-slate-800 text-base mb-1">
+            {bankAccounts.length === 0 ? 'هیچ حساب یا کارت تنخواهی تعریف نشده است' : 'حسابی با مشخصات جستجو شده یافت نشد'}
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto mb-4 leading-relaxed">
+            {bankAccounts.length === 0 
+              ? 'برای ثبت حساب‌های جاری، قرض‌الحسنه و کارت‌های تنخواه گردان پرسنل روی دکمه‌های بالا کلیک کنید.'
+              : 'فیلتر یا عبارت جستجو را تغییر دهید.'}
+          </p>
+          {bankAccounts.length === 0 && canManage && (
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={handleOpenAddPettyCash}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                + تعریف کارت تنخواه گردان
+              </button>
+              <button
+                onClick={handleOpenAddBankAccount}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                + افزودن حساب بانکی
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bank & Petty Cash Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredAccounts.map((account) => {
-          const cardTheme = account.colorTheme || 'from-blue-700 via-indigo-800 to-slate-900';
+          const isPettyCash = account.accountType === 'petty_cash' || account.accountCategory === 'petty_cash';
+          const cardTheme = account.colorTheme || (isPettyCash ? 'from-emerald-700 via-teal-800 to-slate-950' : 'from-blue-700 via-indigo-800 to-slate-900');
           const isCopiedCard = copiedField === `card-${account.id}`;
           const isCopiedShaba = copiedField === `shaba-${account.id}`;
           const isCopiedAcc = copiedField === `acc-${account.id}`;
@@ -414,22 +534,32 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                 <div className="absolute top-0 right-0 w-44 h-44 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
                 <div className="absolute -bottom-8 -left-8 w-36 h-36 bg-amber-400/10 rounded-full blur-2xl pointer-events-none"></div>
 
-                {/* Top Row: Bank Name & Status */}
+                {/* Top Row: Bank Name, Petty Cash Badge & Status */}
                 <div className="flex items-start justify-between relative z-10">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-lg bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center">
-                      <Landmark className="w-4 h-4 text-amber-300" />
+                      {isPettyCash ? (
+                        <Receipt className="w-4 h-4 text-emerald-300" />
+                      ) : (
+                        <Landmark className="w-4 h-4 text-amber-300" />
+                      )}
                     </div>
                     <div>
                       <h3 className="font-black text-sm text-white">{account.bankName}</h3>
                       <p className="text-[10px] text-white/70">
-                        {account.branchName || 'شعبه مرکزی'}
+                        {isPettyCash 
+                          ? `کارت تنخواه ${account.pettyCashHolder ? `(${account.pettyCashHolder})` : ''}`
+                          : (account.branchName || 'شعبه مرکزی')}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-white font-medium">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full backdrop-blur-md border font-bold ${
+                      isPettyCash 
+                        ? 'bg-emerald-400/30 text-emerald-100 border-emerald-300/40' 
+                        : 'bg-white/15 text-white border-white/20'
+                    }`}>
                       {ACCOUNT_TYPE_LABELS[account.accountType] || 'جاری'}
                     </span>
                     {account.isActive ? (
@@ -440,7 +570,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Middle: Smart Chip & Contactless */}
+                {/* Middle: Smart Chip & Card Number */}
                 <div className="my-3 flex items-center justify-between relative z-10">
                   <div className="w-10 h-7 rounded-md bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 border border-amber-300/60 shadow-xs flex items-center justify-center overflow-hidden">
                     <div className="w-full h-full border-t border-b border-amber-700/30 flex flex-col justify-around py-0.5">
@@ -449,190 +579,229 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                     </div>
                   </div>
 
-                  {/* 16-Digit Card Number Display */}
-                  <div className="text-left font-mono tracking-widest text-sm sm:text-base font-bold text-white drop-shadow-sm" dir="ltr">
-                    {formatCardDisplay(account.cardNumber)}
+                  {/* Card Number display */}
+                  <div className="text-right">
+                    <span className="text-xs sm:text-sm font-mono tracking-widest text-white/95 font-bold shadow-xs">
+                      {formatCardDisplay(account.cardNumber)}
+                    </span>
                   </div>
                 </div>
 
-                {/* Bottom Row: Holder Name and Balance */}
-                <div className="flex items-end justify-between relative z-10 pt-2 border-t border-white/10">
+                {/* Bottom Row: Account Holder & Balances */}
+                <div className="relative z-10 flex items-end justify-between pt-2 border-t border-white/10">
                   <div>
-                    <span className="text-[9px] uppercase tracking-wider text-white/60 block font-sans">
-                      صاحب حساب / شرکت
+                    <span className="text-[9px] text-white/60 block">
+                      {isPettyCash ? 'تنخواه‌دار / صاحب کارت:' : 'صاحب حساب:'}
                     </span>
-                    <span className="text-xs font-bold text-white drop-shadow-xs">
-                      {account.accountHolder}
-                    </span>
+                    <strong className="text-xs font-bold text-white truncate max-w-[150px] block">
+                      {isPettyCash && account.pettyCashHolder ? account.pettyCashHolder : account.accountHolder}
+                    </strong>
                   </div>
 
                   <div className="text-left">
-                    <span className="text-[9px] text-white/60 block font-sans text-right">
-                      موجودی دفتری
-                    </span>
-                    <span className="text-sm font-black text-amber-300">
+                    <span className="text-[9px] text-white/70 block font-medium">موجودی جاری:</span>
+                    <strong className="text-sm font-black text-amber-300">
                       {formatCurrency(account.balance, currencyMode)}
-                    </span>
+                    </strong>
                   </div>
                 </div>
               </div>
 
-              {/* Account Details & Quick Copy Actions */}
-              <div className="p-4 flex flex-col gap-3 bg-white flex-1 justify-between">
-                <div className="flex flex-col gap-2">
-                  {/* Shaba Row */}
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100/80 transition-colors">
-                    <div className="flex flex-col text-right">
-                      <span className="text-[10px] text-slate-400 font-medium">شماره شبا (IBAN)</span>
-                      <span className="font-mono text-xs font-bold text-slate-800" dir="ltr">
-                        {formatShabaDisplay(account.shabaNumber)}
-                      </span>
-                    </div>
+              {/* Three-Balance Breakdown Panel (Opening, Current, Closing) */}
+              <div className="bg-slate-50 border-b border-slate-200/80 p-3 grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="bg-white p-2 rounded-xl border border-slate-200/60 shadow-2xs">
+                  <span className="text-[10px] text-slate-400 block font-medium">موجودی اول دوره</span>
+                  <strong className="text-[11px] font-extrabold text-slate-700 block mt-0.5 truncate">
+                    {formatCurrency(account.openingBalance || 0, currencyMode)}
+                  </strong>
+                </div>
+
+                <div className="bg-blue-50/70 p-2 rounded-xl border border-blue-200/60 shadow-2xs">
+                  <span className="text-[10px] text-blue-600 block font-bold">موجودی جاری</span>
+                  <strong className="text-[11px] font-black text-blue-950 block mt-0.5 truncate">
+                    {formatCurrency(account.balance || 0, currencyMode)}
+                  </strong>
+                </div>
+
+                <div className="bg-white p-2 rounded-xl border border-slate-200/60 shadow-2xs">
+                  <span className="text-[10px] text-slate-400 block font-medium">موجودی پایان دوره</span>
+                  <strong className="text-[11px] font-extrabold text-emerald-800 block mt-0.5 truncate">
+                    {formatCurrency(account.closingBalance || 0, currencyMode)}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Account Details & Quick Copy Rows */}
+              <div className="p-4 space-y-2.5 text-xs flex-1">
+                {/* Shaba Number */}
+                <div className="flex items-center justify-between bg-slate-50/60 p-2 rounded-xl border border-slate-100">
+                  <span className="text-slate-400 text-[11px]">شماره شبا:</span>
+                  <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-slate-800" dir="ltr">
+                    <span>{formatShabaDisplay(account.shabaNumber)}</span>
                     <button
+                      type="button"
                       onClick={() => handleCopy(account.shabaNumber, 'شماره شبا', `shaba-${account.id}`)}
-                      className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                        isCopiedShaba ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:text-blue-600 hover:bg-white'
-                      }`}
+                      className="p-1 hover:bg-slate-200 rounded-md transition-colors cursor-pointer text-slate-500 hover:text-blue-600"
                       title="کپی شماره شبا"
                     >
-                      {isCopiedShaba ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {isCopiedShaba ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </div>
-
-                  {/* Account & Card Copy Row */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
-                      <div className="flex flex-col text-right truncate">
-                        <span className="text-[10px] text-slate-400 font-medium">شماره حساب</span>
-                        <span className="font-mono text-xs font-bold text-slate-700 truncate" dir="ltr">
-                          {account.accountNumber}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleCopy(account.accountNumber, 'شماره حساب', `acc-${account.id}`)}
-                        className={`p-1 rounded-md transition-all cursor-pointer ${
-                          isCopiedAcc ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:text-blue-600'
-                        }`}
-                        title="کپی شماره حساب"
-                      >
-                        {isCopiedAcc ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
-                      <div className="flex flex-col text-right truncate">
-                        <span className="text-[10px] text-slate-400 font-medium">شماره کارت</span>
-                        <span className="font-mono text-xs font-bold text-slate-700 truncate" dir="ltr">
-                          {account.cardNumber ? toPersianDigits(account.cardNumber) : 'بدون کارت'}
-                        </span>
-                      </div>
-                      {account.cardNumber && (
-                        <button
-                          onClick={() => handleCopy(account.cardNumber!, 'شماره کارت', `card-${account.id}`)}
-                          className={`p-1 rounded-md transition-all cursor-pointer ${
-                            isCopiedCard ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:text-blue-600'
-                          }`}
-                          title="کپی شماره کارت"
-                        >
-                          {isCopiedCard ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Notes / POS details if any */}
-                  {account.notes && (
-                    <p className="text-[11px] text-slate-500 bg-blue-50/50 p-2 rounded-lg border border-blue-100/60 leading-relaxed">
-                      {account.notes}
-                    </p>
-                  )}
                 </div>
 
-                {/* Footer Controls */}
-                {canManage && (
-                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                {/* Account Number */}
+                <div className="flex items-center justify-between bg-slate-50/60 p-2 rounded-xl border border-slate-100">
+                  <span className="text-slate-400 text-[11px]">شماره حساب:</span>
+                  <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-slate-800" dir="ltr">
+                    <span>{account.accountNumber}</span>
                     <button
-                      onClick={() => handleOpenEdit(account)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-blue-600 transition-colors flex items-center gap-1.5 cursor-pointer"
+                      type="button"
+                      onClick={() => handleCopy(account.accountNumber, 'شماره حساب', `acc-${account.id}`)}
+                      className="p-1 hover:bg-slate-200 rounded-md transition-colors cursor-pointer text-slate-500 hover:text-blue-600"
+                      title="کپی شماره حساب"
                     >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      <span>ویرایش</span>
-                    </button>
-                    <button
-                      onClick={() => setDeletingId(account.id)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>حذف</span>
+                      {isCopiedAcc ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </div>
+                </div>
+
+                {/* Card Number (if present) */}
+                {account.cardNumber && (
+                  <div className="flex items-center justify-between bg-slate-50/60 p-2 rounded-xl border border-slate-100">
+                    <span className="text-slate-400 text-[11px]">شماره کارت:</span>
+                    <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-slate-800" dir="ltr">
+                      <span>{formatCardDisplay(account.cardNumber)}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(account.cardNumber!, 'شماره کارت', `card-${account.id}`)}
+                        className="p-1 hover:bg-slate-200 rounded-md transition-colors cursor-pointer text-slate-500 hover:text-blue-600"
+                        title="کپی شماره کارت"
+                      >
+                        {isCopiedCard ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes */}
+                {account.notes && (
+                  <p className="text-[10px] text-slate-500 italic bg-amber-50/40 p-2 rounded-lg border border-amber-100/60">
+                    یادداشت: {account.notes}
+                  </p>
                 )}
               </div>
+
+              {/* Action Buttons */}
+              {canManage && (
+                <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-2 text-xs">
+                  <button
+                    onClick={() => handleOpenEdit(account)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-blue-600 hover:bg-blue-50 rounded-lg font-bold transition-colors cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>ویرایش حساب / موجودی</span>
+                  </button>
+
+                  <button
+                    onClick={() => setDeletingId(account.id)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                    title="حذف حساب"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {filteredAccounts.length === 0 && (
-        <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center flex flex-col items-center justify-center">
-          <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-            <Landmark className="w-7 h-7" />
-          </div>
-          <h3 className="text-base font-bold text-slate-800 mb-1">هیچ حساب بانکی یافت نشد</h3>
-          <p className="text-xs text-slate-500 max-w-sm mb-4">
-            با معیارهای جستجوی فعلی حسابی پیدا نشد یا هنوز حسابی در سامانه ثبت نکرده‌اید.
-          </p>
-          {canManage && (
-            <button
-              onClick={handleOpenAdd}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>افزودن حساب جدید</span>
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Add / Edit Bank Account Modal */}
+      {/* Add / Edit Account Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-8">
-            <div className="p-5 bg-slate-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className={`p-5 text-white flex items-center justify-between ${
+              accountCategory === 'petty_cash' 
+                ? 'bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-950' 
+                : 'bg-gradient-to-r from-blue-900 via-slate-900 to-black'
+            }`}>
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
-                  <Landmark className="w-4 h-4 text-white" />
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                  accountCategory === 'petty_cash' ? 'bg-emerald-600' : 'bg-blue-600'
+                }`}>
+                  {accountCategory === 'petty_cash' ? <Receipt className="w-4 h-4 text-white" /> : <Landmark className="w-4 h-4 text-white" />}
                 </div>
                 <div>
                   <h3 className="font-black text-sm">
-                    {editingAccount ? 'ویرایش حساب بانکی' : 'افزودن حساب بانکی جدید'}
+                    {editingAccount 
+                      ? `ویرایش ${accountCategory === 'petty_cash' ? 'کارت تنخواه گردان' : 'حساب بانکی'}`
+                      : `تعریف ${accountCategory === 'petty_cash' ? 'کارت تنخواه گردان جدید' : 'حساب بانکی جدید'}`}
                   </h3>
                   <p className="text-[11px] text-slate-300">
-                    اطلاعات کارت، شبا و موجودی شرکت را با دقت وارد فرمایید
+                    ثبت مشخصات بانکی، موجودی اول دوره، جاری و پایان دوره
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer text-xl"
               >
-                <X className="w-5 h-5" />
+                ×
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+            <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4 text-xs">
+              {/* Account Category Switcher (Bank Account vs Petty Cash) */}
+              <div className="p-1 bg-slate-100 rounded-2xl grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountCategory('bank_account');
+                    if (accountType === 'petty_cash') setAccountType('current');
+                  }}
+                  className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    accountCategory === 'bank_account' 
+                      ? 'bg-white text-blue-900 shadow-xs' 
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Landmark className="w-4 h-4 text-blue-600" />
+                  <span>حساب بانکی اصلی شرکت</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountCategory('petty_cash');
+                    setAccountType('petty_cash');
+                    if (!colorTheme.includes('emerald')) {
+                      setColorTheme('from-emerald-700 via-teal-800 to-slate-950');
+                    }
+                  }}
+                  className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    accountCategory === 'petty_cash' 
+                      ? 'bg-emerald-600 text-white shadow-xs' 
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Receipt className="w-4 h-4" />
+                  <span>کارت تنخواه گردان پرسنل</span>
+                </button>
+              </div>
+
+              {/* Bank Name & Type */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Bank Name */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    نام بانک <span className="text-rose-500">*</span>
+                    نام بانک صادرکننده <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     list="bank-suggestions"
                     value={bankName}
                     onChange={(e) => setBankName(e.target.value)}
-                    placeholder="مثلاً بانک سامان، ملت..."
+                    placeholder="مثلاً بانک سامان، رسالت، ملت..."
                     required
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:border-blue-500 font-bold"
                   />
@@ -643,46 +812,58 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                   </datalist>
                 </div>
 
-                {/* Account Type */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    نوع حساب
-                  </label>
-                  <select
-                    value={accountType}
-                    onChange={(e) => setAccountType(e.target.value as BankAccountType)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:border-blue-500"
-                  >
-                    <option value="current">حساب جاری</option>
-                    <option value="gharzo_al_hasane">قرض‌الحسنه</option>
-                    <option value="savings">پس‌انداز</option>
-                    <option value="short_term">سپرده کوتاه‌مدت</option>
-                    <option value="foreign">حساب ارزی</option>
-                    <option value="other">سایر حساب‌ها</option>
-                  </select>
-                </div>
+                {accountCategory === 'petty_cash' ? (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      نام تنخواه‌دار (مسئول کارت) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={pettyCashHolder}
+                      onChange={(e) => setPettyCashHolder(e.target.value)}
+                      placeholder="مثال: کاظم مسلمی / تنخواه دفتر"
+                      required
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:border-emerald-500 font-bold"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      نوع حساب بانکی
+                    </label>
+                    <select
+                      value={accountType}
+                      onChange={(e) => setAccountType(e.target.value as BankAccountType)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:border-blue-500"
+                    >
+                      <option value="current">حساب جاری</option>
+                      <option value="gharzo_al_hasane">قرض‌الحسنه</option>
+                      <option value="savings">پس‌انداز</option>
+                      <option value="short_term">سپرده کوتاه‌مدت</option>
+                      <option value="foreign">حساب ارزی</option>
+                      <option value="other">سایر حساب‌ها</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
-              {/* Shaba Number */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  شماره شبا (با پیشوند IR) <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
+              {/* Shaba & Account Number */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    شماره شبا (با پیشوند IR) <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
                     value={shabaNumber}
                     onChange={(e) => setShabaNumber(e.target.value)}
                     placeholder="IR890560..."
                     required
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:bg-white focus:outline-hidden focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:bg-white focus:outline-hidden focus:border-blue-500 text-left"
                     dir="ltr"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Account Number */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     شماره حساب <span className="text-rose-500">*</span>
@@ -693,15 +874,17 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                     onChange={(e) => setAccountNumber(e.target.value)}
                     placeholder="شماره حساب دفتری"
                     required
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:outline-hidden focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:outline-hidden focus:border-blue-500 text-left"
                     dir="ltr"
                   />
                 </div>
+              </div>
 
-                {/* Card Number */}
+              {/* Card Number & Account Holder */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    شماره کارت ۱۶ رقمی (اختیاری)
+                    شماره کارت ۱۶ رقمی
                   </label>
                   <input
                     type="text"
@@ -709,17 +892,14 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                     onChange={(e) => setCardNumber(e.target.value)}
                     placeholder="۶۰۳۷۹۹..."
                     maxLength={19}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:outline-hidden focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:outline-hidden focus:border-blue-500 text-left"
                     dir="ltr"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Account Holder */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    صاحب حساب / صاحبان امضا
+                    صاحب حساب / شرکت
                   </label>
                   <input
                     type="text"
@@ -729,35 +909,38 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:border-blue-500 font-medium"
                   />
                 </div>
-
-                {/* Branch Name / Code */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    نام یا کد شعبه
-                  </label>
-                  <input
-                    type="text"
-                    value={branchName}
-                    onChange={(e) => setBranchName(e.target.value)}
-                    placeholder="شعبه مرکزی / کد ۱۲۳"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:border-blue-500"
-                  />
-                </div>
               </div>
 
-              {/* Initial / Current Balance */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  موجودی دفتری (به ریال)
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={balance}
-                    onChange={(e) => setBalance(e.target.value)}
+              {/* Three-Balance Input Section: Opening, Current, Closing */}
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2 font-bold text-slate-800 text-xs border-b border-slate-200 pb-2">
+                  <Banknote className="w-4 h-4 text-blue-600" />
+                  <span>تنظیم موجودی‌های دوره‌ای حساب:</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <AmountInput
+                    label="موجودی اول دوره"
+                    value={openingBalance}
+                    onChange={(val) => setOpeningBalance(val.toString())}
                     placeholder="0"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-blue-700 focus:bg-white focus:outline-hidden focus:border-blue-500"
-                    dir="ltr"
+                    helperText="مانده در ابتدای سال مالی"
+                  />
+
+                  <AmountInput
+                    label="موجودی جاری / دفتری *"
+                    value={balance}
+                    onChange={(val) => setBalance(val.toString())}
+                    placeholder="0"
+                    helperText="موجودی حاضر در حساب"
+                  />
+
+                  <AmountInput
+                    label="موجودی پایان دوره"
+                    value={closingBalance}
+                    onChange={(val) => setClosingBalance(val.toString())}
+                    placeholder="0"
+                    helperText="مانده در پایان دوره مالی"
                   />
                 </div>
               </div>
@@ -792,7 +975,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                   className="w-4 h-4 text-blue-600 rounded-sm focus:ring-blue-500"
                 />
                 <label htmlFor="isActiveCheck" className="text-xs font-bold text-slate-700 cursor-pointer">
-                  حساب فعال و عملیاتی است
+                  حساب / کارت تنخواه فعال و عملیاتی است
                 </label>
               </div>
 
@@ -803,7 +986,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="مثال: حساب متصل به درگاه زرین‌پال و باسینا جهت دریافت وجوه نوبت‌دهی آنلاین"
+                  placeholder="مثال: کارت تنخواه خریدهای روزانه، شارژ هفتگی، متصل به تنخواه دفتر..."
                   rows={2}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:border-blue-500"
                 />
@@ -822,7 +1005,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                   type="submit"
                   className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
                 >
-                  {editingAccount ? 'ذخیره تغییرات حساب' : 'ثبت حساب بانکی جدید'}
+                  {editingAccount ? 'ذخیره تغییرات' : 'ثبت حساب / کارت'}
                 </button>
               </div>
             </form>
@@ -837,9 +1020,9 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
             <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 mx-auto flex items-center justify-center mb-3">
               <Trash2 className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-black text-slate-900 mb-1">حذف حساب بانکی</h3>
+            <h3 className="text-base font-black text-slate-900 mb-1">حذف حساب / کارت</h3>
             <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-              آیا از حذف این حساب بانکی اطمینان دارید؟ اطلاعات کارت و شبا از سیستم حذف خواهند شد.
+              آیا از حذف این مورد اطمینان دارید؟ اطلاعات کارت و شبا از سیستم حذف خواهند شد.
             </p>
             <div className="flex items-center justify-center gap-3">
               <button
@@ -852,7 +1035,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                 onClick={() => {
                   onDeleteAccount(deletingId);
                   setDeletingId(null);
-                  onShowToast('حساب بانکی با موفقیت حذف گردید.');
+                  onShowToast('مورد انتخابی با موفقیت حذف گردید.');
                 }}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
               >

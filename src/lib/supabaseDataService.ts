@@ -102,37 +102,66 @@ const dbToTransaction = (row: any): FinancialTransaction => ({
 });
 
 // --- Employee ---
-const employeeToDb = (emp: Employee) => ({
-  id: emp.id,
-  name: emp.name,
-  role: emp.role,
-  start_date: emp.startDate,
-  end_date: emp.endDate || null,
-  status: emp.status,
-  base_salary: emp.baseSalary,
-  has_insurance: emp.hasInsurance,
-  insurance_number: emp.insuranceNumber || null,
-  iban: emp.iban || null,
-  national_id: emp.nationalId || null,
-  phone: emp.phone || null,
-  notes: emp.notes || null,
-});
+const employeeToDb = (emp: Employee) => {
+  let packedNotes = emp.notes || null;
+  if (Array.isArray(emp.salaryHistory) && emp.salaryHistory.length > 0) {
+    const cleanNotes = (emp.notes || '').replace(/\n?<!--SALARY_HISTORY:.*?-->/s, '').trim();
+    packedNotes = `${cleanNotes ? cleanNotes + '\n' : ''}<!--SALARY_HISTORY:${JSON.stringify(emp.salaryHistory)}-->`;
+  }
+  return {
+    id: emp.id,
+    name: emp.name,
+    role: emp.role,
+    start_date: emp.startDate,
+    end_date: emp.endDate || null,
+    status: emp.status,
+    base_salary: emp.baseSalary,
+    has_insurance: emp.hasInsurance,
+    insurance_number: emp.insuranceNumber || null,
+    iban: emp.iban || null,
+    national_id: emp.nationalId || null,
+    phone: emp.phone || null,
+    notes: packedNotes,
+  };
+};
 
-const dbToEmployee = (row: any): Employee => ({
-  id: row.id,
-  name: row.name,
-  role: row.role,
-  startDate: row.start_date,
-  endDate: row.end_date,
-  status: row.status,
-  baseSalary: row.base_salary,
-  hasInsurance: row.has_insurance,
-  insuranceNumber: row.insurance_number,
-  iban: row.iban,
-  nationalId: row.national_id,
-  phone: row.phone,
-  notes: row.notes,
-});
+const dbToEmployee = (row: any): Employee => {
+  let cleanNotes = row.notes || undefined;
+  let parsedHistory: any[] | undefined = undefined;
+
+  if (row.notes && typeof row.notes === 'string' && row.notes.includes('<!--SALARY_HISTORY:')) {
+    const match = row.notes.match(/<!--SALARY_HISTORY:(.*?)-->/s);
+    if (match && match[1]) {
+      try {
+        parsedHistory = JSON.parse(match[1]);
+      } catch (e) {
+        console.warn('Could not parse salary history from notes:', e);
+      }
+    }
+    cleanNotes = row.notes.replace(/\n?<!--SALARY_HISTORY:.*?-->/s, '').trim() || undefined;
+  }
+
+  if (row.salary_history && Array.isArray(row.salary_history)) {
+    parsedHistory = row.salary_history;
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    role: row.role,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    status: row.status,
+    baseSalary: Number(row.base_salary) || 0,
+    hasInsurance: Boolean(row.has_insurance),
+    insuranceNumber: row.insurance_number,
+    iban: row.iban,
+    nationalId: row.national_id,
+    phone: row.phone,
+    notes: cleanNotes,
+    salaryHistory: parsedHistory,
+  };
+};
 
 // --- SalaryMatrixItem ---
 const salaryMatrixToDb = (item: SalaryMatrixItem) => ({
@@ -251,45 +280,87 @@ const dbToAppUser = (row: any): AppUser => ({
 });
 
 // --- BankAccount ---
-const bankAccountToDb = (acc: BankAccount) => ({
-  id: acc.id,
-  bank_name: acc.bankName,
-  account_number: acc.accountNumber,
-  card_number: acc.cardNumber || null,
-  shaba_number: acc.shabaNumber,
-  branch_name: acc.branchName || null,
-  account_holder: acc.accountHolder,
-  account_type: acc.accountType,
-  balance: acc.balance,
-  currency: acc.currency || 'rial',
-  is_active: acc.isActive,
-  pos_terminal_id: acc.posTerminalId || null,
-  internet_banking_id: acc.internetBankingId || null,
-  color_theme: acc.colorTheme || null,
-  notes: acc.notes || null,
-  created_at: acc.createdAt,
-  updated_at: acc.updatedAt || null,
-});
+const bankAccountToDb = (acc: BankAccount) => {
+  let packedNotes = acc.notes || null;
+  const extraData: any = {};
+  if (acc.openingBalance !== undefined) extraData.openingBalance = acc.openingBalance;
+  if (acc.closingBalance !== undefined) extraData.closingBalance = acc.closingBalance;
+  if (acc.pettyCashHolder) extraData.pettyCashHolder = acc.pettyCashHolder;
+  if (acc.accountCategory) extraData.accountCategory = acc.accountCategory;
 
-const dbToBankAccount = (row: any): BankAccount => ({
-  id: row.id,
-  bankName: row.bank_name,
-  accountNumber: row.account_number,
-  cardNumber: row.card_number,
-  shabaNumber: row.shaba_number,
-  branchName: row.branch_name,
-  accountHolder: row.account_holder,
-  accountType: row.account_type,
-  balance: row.balance,
-  currency: row.currency,
-  isActive: row.is_active,
-  posTerminalId: row.pos_terminal_id,
-  internetBankingId: row.internet_banking_id,
-  colorTheme: row.color_theme,
-  notes: row.notes,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
+  if (Object.keys(extraData).length > 0) {
+    const cleanNotes = (acc.notes || '').replace(/\n?<!--ACCOUNT_META:.*?-->/s, '').trim();
+    packedNotes = `${cleanNotes ? cleanNotes + '\n' : ''}<!--ACCOUNT_META:${JSON.stringify(extraData)}-->`;
+  }
+
+  return {
+    id: acc.id,
+    bank_name: acc.bankName,
+    account_number: acc.accountNumber,
+    card_number: acc.cardNumber || null,
+    shaba_number: acc.shabaNumber,
+    branch_name: acc.branchName || null,
+    account_holder: acc.accountHolder,
+    account_type: acc.accountType,
+    balance: acc.balance,
+    currency: acc.currency || 'rial',
+    is_active: acc.isActive,
+    pos_terminal_id: acc.posTerminalId || null,
+    internet_banking_id: acc.internetBankingId || null,
+    color_theme: acc.colorTheme || null,
+    notes: packedNotes,
+    created_at: acc.createdAt,
+    updated_at: acc.updatedAt || null,
+  };
+};
+
+const dbToBankAccount = (row: any): BankAccount => {
+  let cleanNotes = row.notes || undefined;
+  let openingBalance = row.opening_balance ?? undefined;
+  let closingBalance = row.closing_balance ?? undefined;
+  let pettyCashHolder = row.petty_cash_holder ?? undefined;
+  let accountCategory = row.account_category ?? undefined;
+
+  if (row.notes && typeof row.notes === 'string' && row.notes.includes('<!--ACCOUNT_META:')) {
+    const match = row.notes.match(/<!--ACCOUNT_META:(.*?)-->/s);
+    if (match && match[1]) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        if (parsed.openingBalance !== undefined && openingBalance === undefined) openingBalance = parsed.openingBalance;
+        if (parsed.closingBalance !== undefined && closingBalance === undefined) closingBalance = parsed.closingBalance;
+        if (parsed.pettyCashHolder && !pettyCashHolder) pettyCashHolder = parsed.pettyCashHolder;
+        if (parsed.accountCategory && !accountCategory) accountCategory = parsed.accountCategory;
+      } catch (e) {
+        console.warn('Could not parse account meta:', e);
+      }
+    }
+    cleanNotes = row.notes.replace(/\n?<!--ACCOUNT_META:.*?-->/s, '').trim() || undefined;
+  }
+
+  return {
+    id: row.id,
+    bankName: row.bank_name,
+    accountNumber: row.account_number,
+    cardNumber: row.card_number,
+    shabaNumber: row.shaba_number,
+    branchName: row.branch_name,
+    accountHolder: row.account_holder,
+    accountType: row.account_type,
+    accountCategory: accountCategory || (row.account_type === 'petty_cash' ? 'petty_cash' : 'bank_account'),
+    pettyCashHolder,
+    balance: row.balance,
+    openingBalance,
+    closingBalance,
+    currency: row.currency,
+    isActive: row.is_active,
+    posTerminalId: row.pos_terminal_id,
+    internetBankingId: row.internet_banking_id,
+    colorTheme: row.color_theme,
+    notes: cleanNotes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
 
 // --- VatInvoice ---
 const vatInvoiceToDb = (inv: VatInvoice) => ({
