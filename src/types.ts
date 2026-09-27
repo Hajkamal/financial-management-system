@@ -26,13 +26,33 @@ export type ExpenseCategory =
   | 'shareholder_payout'    // پرداختی به اعضا (حقوق یا برداشت)
   | 'loan_installment'      // بدهی های شرکت / تسهیلات پرداختی
   | 'guarantee_deposit'     // واریز سپرده حسن انجام تعهدات قراردادها / پیش‌پرداخت‌ها در تراز مالی
-  | 'office_site';          // هزینه های سایت و امور جاری
+  | 'office_site'           // هزینه های سایت و امور جاری
+  | string;                 // دسته‌بندی‌های سفارشی تعریف شده توسط کاربر
 
 export type InfrastructureSubCategory =
   | 'server'        // سرور و هاست
   | 'sms'           // پیامک
   | 'ai_tokens'     // هوش مصنوعی و اشتراک API
-  | 'domain_tools'; // ابزارها و دامنه
+  | 'domain_tools'  // ابزارها و دامنه
+  | string;         // انواع زیرساخت و زیردسته‌های سفارشی جدید
+
+export interface CategorySubItem {
+  id: string;        // شناسه یکتا یا کلید انگلیسی/فارسی
+  name: string;      // عنوان نمایشی زیردسته (مثلاً: سرور پشتیبان، کلودفلر، لایسنس نرم‌افزار)
+  isCustom?: boolean; // آیا توسط کاربر اضافه شده؟
+  description?: string;
+}
+
+export interface CustomCategoryDefinition {
+  id: string;        // شناسه یکتای دسته
+  type: TransactionType; // 'income' | 'expense'
+  label: string;     // عنوان دسته‌بندی اصلی (مثلاً: هزینه‌های زیرساختی، هزینه‌های تحقیق و توسعه)
+  color?: string;    // کلاس رنگ متن
+  badgeBg?: string;  // کلاس رنگ بج و بک‌گراند
+  isCustom?: boolean; // آیا دسته توسط کاربر تعریف شده؟
+  subCategories?: CategorySubItem[]; // لیست انواع یا زیردسته‌ها
+  description?: string;
+}
 
 export type MemberPayoutType =
   | 'salary'             // حقوق کارکرد ماهانه عضو

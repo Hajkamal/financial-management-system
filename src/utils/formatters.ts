@@ -12,8 +12,11 @@ import {
   SalaryMatrixItem,
   CompanyMember,
   Loan,
-  VatInvoice
+  VatInvoice,
+  CustomCategoryDefinition,
+  CategorySubItem
 } from '../types';
+import { INITIAL_CUSTOM_CATEGORIES } from '../data/initialData';
 
 export const PERSIAN_MONTHS: PersianMonthInfo[] = [
   { num: 1, name: 'فروردین', season: 'بهار' },
@@ -302,24 +305,99 @@ export const INFRASTRUCTURE_SUBCATEGORY_CONFIG: Record<InfrastructureSubCategory
   domain_tools: 'دامنه‌ها و ابزارهای توسعه',
 };
 
-// Helper to format transactions for Excel rows
-function mapTransactionsToExcelRows(transactions: FinancialTransaction[]) {
-  return transactions.map((t, idx) => {
-    let categoryLabel = '';
-    if (t.type === 'income') {
-      categoryLabel = INCOME_CATEGORY_CONFIG[t.category as IncomeCategory]?.label || t.category;
-      if (t.subCategory && t.category === 'sale_basina') {
-        categoryLabel += ` (${BASINA_SUBCATEGORY_CONFIG[t.subCategory as BasinaSubCategory] || t.subCategory})`;
-      }
-    } else {
-      categoryLabel = EXPENSE_CATEGORY_CONFIG[t.category as ExpenseCategory]?.label || t.category;
-      if (t.subCategory && t.category === 'infrastructure') {
-        categoryLabel += ` (${INFRASTRUCTURE_SUBCATEGORY_CONFIG[t.subCategory as InfrastructureSubCategory] || t.subCategory})`;
-      }
-      if (t.category === 'shareholder_payout') {
-        categoryLabel += t.memberPayoutType === 'salary' ? ' [حقوق کارکرد ماهانه]' : ' [برداشت سود سهام]';
-      }
+/**
+ * دریافت مشخصات دسته‌بندی با پشتیبانی کامل از دسته‌های سفارشی
+ */
+export function getCategoryDefinition(
+  type: 'income' | 'expense',
+  categoryId: string,
+  customCategories: CustomCategoryDefinition[] = INITIAL_CUSTOM_CATEGORIES
+): { label: string; color: string; badgeBg: string } {
+  // اول جستجو در دسته‌های سفارشی/پویا
+  const found = customCategories.find(c => c.type === type && c.id === categoryId);
+  if (found) {
+    return {
+      label: found.label,
+      color: found.color || (type === 'income' ? 'text-emerald-700' : 'text-rose-700'),
+      badgeBg: found.badgeBg || (type === 'income' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300'),
+    };
+  }
+
+  // سپس جستجو در کانفیگ‌های ثابت
+  if (type === 'income') {
+    const defaultCfg = INCOME_CATEGORY_CONFIG[categoryId as IncomeCategory];
+    if (defaultCfg) return defaultCfg;
+  } else {
+    const defaultCfg = EXPENSE_CATEGORY_CONFIG[categoryId as ExpenseCategory];
+    if (defaultCfg) return defaultCfg;
+  }
+
+  return {
+    label: categoryId,
+    color: type === 'income' ? 'text-emerald-700' : 'text-slate-700',
+    badgeBg: type === 'income' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-800 border-slate-200',
+  };
+}
+
+/**
+ * دریافت عنوان زیردسته‌بندی (مثلاً نوع زیرساخت، نوبت‌دهی، یا انواع سفارشی)
+ */
+export function getSubCategoryLabel(
+  categoryId: string,
+  subCategoryId?: string,
+  customCategories: CustomCategoryDefinition[] = INITIAL_CUSTOM_CATEGORIES
+): string {
+  if (!subCategoryId) return '';
+
+  // ۱. جستجو در زیردسته‌های دسته‌بندی پویا
+  const parentCat = customCategories.find(c => c.id === categoryId);
+  if (parentCat && parentCat.subCategories) {
+    const sub = parentCat.subCategories.find(s => s.id === subCategoryId);
+    if (sub) return sub.name;
+  }
+
+  // ۲. جستجو در ثابت‌های پیش‌فرض
+  if (categoryId === 'infrastructure' && INFRASTRUCTURE_SUBCATEGORY_CONFIG[subCategoryId as InfrastructureSubCategory]) {
+    return INFRASTRUCTURE_SUBCATEGORY_CONFIG[subCategoryId as InfrastructureSubCategory];
+  }
+  if (categoryId === 'sale_basina' && BASINA_SUBCATEGORY_CONFIG[subCategoryId as BasinaSubCategory]) {
+    return BASINA_SUBCATEGORY_CONFIG[subCategoryId as BasinaSubCategory];
+  }
+
+  return subCategoryId;
+}
+
+/**
+ * دریافت عنوان کامل و ترکیبی دسته‌بندی + زیردسته برای نمایش در جداول و گزارش‌ها
+ */
+export function getFullCategoryDisplayName(
+  tx: FinancialTransaction,
+  customCategories: CustomCategoryDefinition[] = INITIAL_CUSTOM_CATEGORIES
+): string {
+  const catInfo = getCategoryDefinition(tx.type, tx.category, customCategories);
+  let label = catInfo.label;
+
+  if (tx.subCategory) {
+    const subLabel = getSubCategoryLabel(tx.category, tx.subCategory, customCategories);
+    if (subLabel) {
+      label += ` (${subLabel})`;
     }
+  }
+
+  if (tx.category === 'shareholder_payout') {
+    label += tx.memberPayoutType === 'salary' ? ' [حقوق کارکرد ماهانه]' : ' [برداشت سود سهام]';
+  }
+
+  return label;
+}
+
+// Helper to format transactions for Excel rows
+function mapTransactionsToExcelRows(
+  transactions: FinancialTransaction[],
+  customCategories: CustomCategoryDefinition[] = INITIAL_CUSTOM_CATEGORIES
+) {
+  return transactions.map((t, idx) => {
+    const categoryLabel = getFullCategoryDisplayName(t, customCategories);
 
     return {
       'ردیف': idx + 1,

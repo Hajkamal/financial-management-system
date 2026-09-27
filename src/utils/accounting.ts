@@ -167,51 +167,47 @@ function transactionToJournalEntry(tx: FinancialTransaction): JournalEntry {
   const lines: JournalEntryLine[] = [];
   
   if (tx.type === 'income') {
-    const mapping = INCOME_ACCOUNT_MAP[tx.category as IncomeCategory];
-    if (mapping) {
-      const debitAccount = getAccountByCode(mapping.debitCode);
-      const creditAccount = getAccountByCode(mapping.creditCode);
-      
-      lines.push({
-        id: `${tx.id}-d`,
-        accountCode: mapping.debitCode,
-        accountTitle: debitAccount?.title || mapping.debitCode,
-        debit: tx.amount,
-        credit: 0,
-        description: tx.title,
-      });
-      lines.push({
-        id: `${tx.id}-c`,
-        accountCode: mapping.creditCode,
-        accountTitle: creditAccount?.title || mapping.creditCode,
-        debit: 0,
-        credit: tx.amount,
-        description: tx.title,
-      });
-    }
+    const mapping = (INCOME_ACCOUNT_MAP as any)[tx.category] || { debitCode: '1102', creditCode: '4202' };
+    const debitAccount = getAccountByCode(mapping.debitCode);
+    const creditAccount = getAccountByCode(mapping.creditCode);
+    
+    lines.push({
+      id: `${tx.id}-d`,
+      accountCode: mapping.debitCode,
+      accountTitle: debitAccount?.title || mapping.debitCode,
+      debit: tx.amount,
+      credit: 0,
+      description: tx.title,
+    });
+    lines.push({
+      id: `${tx.id}-c`,
+      accountCode: mapping.creditCode,
+      accountTitle: creditAccount?.title || mapping.creditCode,
+      debit: 0,
+      credit: tx.amount,
+      description: tx.title,
+    });
   } else {
-    const mapping = EXPENSE_ACCOUNT_MAP[tx.category as ExpenseCategory];
-    if (mapping) {
-      const debitAccount = getAccountByCode(mapping.debitCode);
-      const creditAccount = getAccountByCode(mapping.creditCode);
-      
-      lines.push({
-        id: `${tx.id}-d`,
-        accountCode: mapping.debitCode,
-        accountTitle: debitAccount?.title || mapping.debitCode,
-        debit: tx.amount,
-        credit: 0,
-        description: tx.title,
-      });
-      lines.push({
-        id: `${tx.id}-c`,
-        accountCode: mapping.creditCode,
-        accountTitle: creditAccount?.title || mapping.creditCode,
-        debit: 0,
-        credit: tx.amount,
-        description: tx.title,
-      });
-    }
+    const mapping = (EXPENSE_ACCOUNT_MAP as any)[tx.category] || { debitCode: '5203', creditCode: '1102' };
+    const debitAccount = getAccountByCode(mapping.debitCode);
+    const creditAccount = getAccountByCode(mapping.creditCode);
+    
+    lines.push({
+      id: `${tx.id}-d`,
+      accountCode: mapping.debitCode,
+      accountTitle: debitAccount?.title || mapping.debitCode,
+      debit: tx.amount,
+      credit: 0,
+      description: tx.title,
+    });
+    lines.push({
+      id: `${tx.id}-c`,
+      accountCode: mapping.creditCode,
+      accountTitle: creditAccount?.title || mapping.creditCode,
+      debit: 0,
+      credit: tx.amount,
+      description: tx.title,
+    });
   }
 
   const totalDebit = lines.reduce((sum, l) => sum + l.debit, 0);

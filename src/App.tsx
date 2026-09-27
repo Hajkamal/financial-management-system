@@ -65,6 +65,7 @@ export default function App() {
     bankAccounts,
     vatInvoices,
     serviceTariffs,
+    customCategories,
     handleSaveTransaction,
     handleDeleteTransaction,
     handleClearDemoTransactions,
@@ -94,6 +95,13 @@ export default function App() {
     handleDeleteVatInvoice,
     handleSyncVatInvoiceToTransactions,
     handleSaveServiceTariff,
+    handleAddCustomCategory,
+    handleUpdateCustomCategory,
+    handleDeleteCustomCategory,
+    handleAddSubCategory,
+    handleUpdateSubCategory,
+    handleDeleteSubCategory,
+    handleResetCategoriesToDefaults,
     handleRestoreData,
     handleResetToDefaults,
     handlePurge1404,
@@ -419,6 +427,7 @@ export default function App() {
               onShowToast={showToast}
               currentUser={currentAppUser}
               users={users}
+              customCategories={customCategories}
             />
           )}
 
@@ -618,6 +627,14 @@ export default function App() {
         members={members}
         loans={loans}
         currentUser={currentAppUser}
+        customCategories={customCategories}
+        onAddCategory={handleAddCustomCategory}
+        onUpdateCategory={handleUpdateCustomCategory}
+        onDeleteCategory={handleDeleteCustomCategory}
+        onAddSubCategory={handleAddSubCategory}
+        onUpdateSubCategory={handleUpdateSubCategory}
+        onDeleteSubCategory={handleDeleteSubCategory}
+        onResetCategoriesToDefaults={handleResetCategoriesToDefaults}
       />
 
       {/* مودال پشتیبان‌گیری و بازیابی */}
@@ -636,6 +653,7 @@ export default function App() {
         bankAccounts={bankAccounts}
         vatInvoices={vatInvoices}
         serviceTariffs={serviceTariffs}
+        customCategories={customCategories}
         onRestoreData={handleRestoreData}
         onResetToDefaults={handleResetToDefaults}
         onPurge1404={handlePurge1404}

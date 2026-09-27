@@ -18,7 +18,7 @@ import {
   ShieldCheck,
   Cloud
 } from 'lucide-react';
-import { FinancialTransaction, Employee, SalaryMatrixItem, CompanyMember, Loan, FiscalYear, AppUser, BankAccount, VatInvoice, ServiceTariff } from '../types';
+import { FinancialTransaction, Employee, SalaryMatrixItem, CompanyMember, Loan, FiscalYear, AppUser, BankAccount, VatInvoice, ServiceTariff, CustomCategoryDefinition } from '../types';
 import { toPersianDigits, getCurrentJalaliDateTime, generateBackupFilename } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
@@ -47,6 +47,7 @@ interface BackupModalProps {
   bankAccounts?: BankAccount[];
   vatInvoices?: VatInvoice[];
   serviceTariffs?: ServiceTariff[];
+  customCategories?: CustomCategoryDefinition[];
   onRestoreData: (data: {
     transactions: FinancialTransaction[];
     employees: Employee[];
@@ -58,6 +59,7 @@ interface BackupModalProps {
     bankAccounts?: BankAccount[];
     vatInvoices?: VatInvoice[];
     serviceTariffs?: ServiceTariff[];
+    customCategories?: CustomCategoryDefinition[];
   }) => void;
   onResetToDefaults: () => void;
   onPurge1404?: () => void;
@@ -80,14 +82,13 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   bankAccounts,
   vatInvoices,
   serviceTariffs,
+  customCategories,
   onRestoreData,
   onResetToDefaults,
   onPurge1404,
   onClearDemoTransactions,
   onShowToast,
 }) => {
-  if (!isOpen) return null;
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'snapshots' | 'purge'>('export');
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
@@ -117,6 +118,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     }
   };
 
+  if (!isOpen) return null;
+
   // Build the complete unified backup object
   const createBackupPayload = () => {
     const dt = getCurrentJalaliDateTime();
@@ -132,6 +135,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       bankAccounts: bankAccounts || [],
       vatInvoices: vatInvoices || [],
       serviceTariffs: serviceTariffs || [],
+      customCategories: customCategories || [],
       transactions: transactions || [],
       employees: employees || [],
       salaryMatrix: salaryMatrix || [],
@@ -145,6 +149,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         totalBankAccounts: (bankAccounts || []).length,
         totalVatInvoices: (vatInvoices || []).length,
         totalServiceTariffs: (serviceTariffs || []).length,
+        totalCustomCategories: (customCategories || []).length,
       }
     };
   };
@@ -260,6 +265,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       bankAccounts: parsed.bankAccounts,
       vatInvoices: parsed.vatInvoices,
       serviceTariffs: parsed.serviceTariffs,
+      customCategories: parsed.customCategories,
       sourceInfo: {
         exportDate: parsed.exportJalaliDateTime || parsed.exportDateIso || 'نامشخص',
         companyName: parsed.companyName || companyName,

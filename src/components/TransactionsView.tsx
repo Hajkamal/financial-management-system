@@ -36,7 +36,9 @@ import {
   PersianMonthNumber,
   BasinaSubCategory,
   InfrastructureSubCategory,
-  AppUser
+  AppUser,
+  CustomCategoryDefinition,
+  CategorySubItem
 } from '../types';
 import { 
   PERSIAN_MONTHS, 
@@ -45,9 +47,13 @@ import {
   EXPENSE_CATEGORY_CONFIG,
   BASINA_SUBCATEGORY_CONFIG,
   INFRASTRUCTURE_SUBCATEGORY_CONFIG,
+  getCategoryDefinition,
+  getSubCategoryLabel,
+  getFullCategoryDisplayName,
   toPersianDigits,
   exportTransactionsToExcel
 } from '../utils/formatters';
+import { INITIAL_CUSTOM_CATEGORIES } from '../data/initialData';
 import { PersianDatePicker } from './PersianDatePicker';
 import { AmountInput } from './AmountInput';
 import { parseJalaliDateString, getTodayJalali, compareTransactionsByDate } from '../utils/jalali';
@@ -64,6 +70,7 @@ interface TransactionsViewProps {
   onShowToast?: (msg: string) => void;
   currentUser?: AppUser | null;
   users?: AppUser[];
+  customCategories?: CustomCategoryDefinition[];
 }
 
 export type TransactionSortOption = 
@@ -84,6 +91,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   onShowToast,
   currentUser,
   users = [],
+  customCategories = INITIAL_CUSTOM_CATEGORIES,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | TransactionType>('all');
@@ -670,22 +678,22 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   <option value="all">همه دسته‌بندی‌ها</option>
                   {typeFilter !== 'expense' && (
                     <optgroup label="درآمدها (+)">
-                      {Object.entries(INCOME_CATEGORY_CONFIG).map(([k, v]) => (
-                        <option key={k} value={k}>{v.label}</option>
+                      {customCategories.filter(c => c.type === 'income').map(c => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
                       ))}
                     </optgroup>
                   )}
                   {typeFilter !== 'income' && (
                     <optgroup label="هزینه‌ها (-)">
-                      {Object.entries(EXPENSE_CATEGORY_CONFIG).map(([k, v]) => (
-                        <option key={k} value={k}>{v.label}</option>
+                      {customCategories.filter(c => c.type === 'expense').map(c => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
                       ))}
                     </optgroup>
                   )}
                 </select>
               </div>
 
-              {/* SubCategory (conditional if Basina or Infrastructure selected) */}
+              {/* SubCategory */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   زیردسته تخصصی
@@ -696,20 +704,17 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none font-medium text-slate-700 bg-white cursor-pointer"
                 >
                   <option value="all">همه زیردسته‌ها</option>
-                  {categoryFilter === 'sale_basina' || categoryFilter === 'all' ? (
-                    <optgroup label="خدمات پلتفرم باسینا">
-                      {Object.entries(BASINA_SUBCATEGORY_CONFIG).map(([k, v]) => (
-                        <option key={k} value={k}>{v}</option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                  {categoryFilter === 'infrastructure' || categoryFilter === 'all' ? (
-                    <optgroup label="فناوری و زیرساخت سرور">
-                      {Object.entries(INFRASTRUCTURE_SUBCATEGORY_CONFIG).map(([k, v]) => (
-                        <option key={k} value={k}>{v}</option>
-                      ))}
-                    </optgroup>
-                  ) : null}
+                  {customCategories.map(cat => {
+                    if (categoryFilter !== 'all' && cat.id !== categoryFilter) return null;
+                    if (!cat.subCategories || cat.subCategories.length === 0) return null;
+                    return (
+                      <optgroup key={cat.id} label={cat.label}>
+                        {cat.subCategories.map(sub => (
+                          <option key={sub.id} value={sub.id}>{sub.name}</option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -872,7 +877,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             {categoryFilter !== 'all' && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg">
                 <span>
-                  دسته: {INCOME_CATEGORY_CONFIG[categoryFilter as IncomeCategory]?.label || EXPENSE_CATEGORY_CONFIG[categoryFilter as ExpenseCategory]?.label || categoryFilter}
+                  دسته: {getCategoryDefinition(typeFilter === 'expense' ? 'expense' : 'income', categoryFilter, customCategories).label}
                 </span>
                 <button onClick={() => setCategoryFilter('all')} className="hover:text-amber-900 cursor-pointer">
                   <X className="w-3 h-3" />
@@ -883,7 +888,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             {subCategoryFilter !== 'all' && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-50 text-teal-800 border border-teal-200 rounded-lg">
                 <span>
-                  زیردسته: {BASINA_SUBCATEGORY_CONFIG[subCategoryFilter as BasinaSubCategory] || INFRASTRUCTURE_SUBCATEGORY_CONFIG[subCategoryFilter as InfrastructureSubCategory] || subCategoryFilter}
+                  زیردسته: {getSubCategoryLabel(categoryFilter, subCategoryFilter, customCategories)}
                 </span>
                 <button onClick={() => setSubCategoryFilter('all')} className="hover:text-teal-900 cursor-pointer">
                   <X className="w-3 h-3" />
@@ -994,37 +999,24 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 const monthName = PERSIAN_MONTHS.find(m => m.num === t.month)?.name || t.month;
                 const creatorDisplayName = t.createdByName || 'وحید کمالی';
 
-                let badge = null;
-                if (isIncome) {
-                  const cfg = INCOME_CATEGORY_CONFIG[t.category as IncomeCategory];
-                  badge = (
-                    <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium ${cfg?.badgeBg || 'bg-slate-100 text-slate-800'}`}>
-                      {cfg?.label || t.category}
-                      {t.subCategory && t.category === 'sale_basina' && (
-                        <span className="font-bold">
-                          : {BASINA_SUBCATEGORY_CONFIG[t.subCategory as BasinaSubCategory] || t.subCategory}
-                        </span>
-                      )}
-                    </span>
-                  );
-                } else {
-                  const cfg = EXPENSE_CATEGORY_CONFIG[t.category as ExpenseCategory];
-                  badge = (
-                    <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium ${cfg?.badgeBg || 'bg-slate-100 text-slate-800'}`}>
-                      {cfg?.label || t.category}
-                      {t.subCategory && t.category === 'infrastructure' && (
-                        <span className="font-bold">
-                          : {INFRASTRUCTURE_SUBCATEGORY_CONFIG[t.subCategory as InfrastructureSubCategory] || t.subCategory}
-                        </span>
-                      )}
-                      {t.category === 'shareholder_payout' && (
-                        <span className="font-bold text-[10px] mr-1">
-                          ({t.memberPayoutType === 'salary' ? 'حقوق' : 'سود'})
-                        </span>
-                      )}
-                    </span>
-                  );
-                }
+                const catInfo = getCategoryDefinition(t.type, t.category, customCategories);
+                const subLabel = t.subCategory ? getSubCategoryLabel(t.category, t.subCategory, customCategories) : '';
+
+                const badge = (
+                  <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium ${catInfo.badgeBg}`}>
+                    {catInfo.label}
+                    {subLabel && (
+                      <span className="font-bold">
+                        : {subLabel}
+                      </span>
+                    )}
+                    {t.category === 'shareholder_payout' && (
+                      <span className="font-bold text-[10px] mr-1">
+                        ({t.memberPayoutType === 'salary' ? 'حقوق' : 'سود'})
+                      </span>
+                    )}
+                  </span>
+                );
 
                 return (
                   <div key={t.id} className="p-4 space-y-2.5 hover:bg-slate-50/60 transition-colors">
@@ -1132,38 +1124,24 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map((t) => {
                     const isIncome = t.type === 'income';
-                    let badge = null;
+                    const catInfo = getCategoryDefinition(t.type, t.category, customCategories);
+                    const subLabel = t.subCategory ? getSubCategoryLabel(t.category, t.subCategory, customCategories) : '';
 
-                    if (isIncome) {
-                      const cfg = INCOME_CATEGORY_CONFIG[t.category as IncomeCategory];
-                      badge = (
-                        <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${cfg?.badgeBg || 'bg-slate-100 text-slate-800'}`}>
-                          {cfg?.label || t.category}
-                          {t.subCategory && t.category === 'sale_basina' && (
-                            <span className="font-bold">
-                              : {BASINA_SUBCATEGORY_CONFIG[t.subCategory as BasinaSubCategory] || t.subCategory}
-                            </span>
-                          )}
-                        </span>
-                      );
-                    } else {
-                      const cfg = EXPENSE_CATEGORY_CONFIG[t.category as ExpenseCategory];
-                      badge = (
-                        <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${cfg?.badgeBg || 'bg-slate-100 text-slate-800'}`}>
-                          {cfg?.label || t.category}
-                          {t.subCategory && t.category === 'infrastructure' && (
-                            <span className="font-bold">
-                              : {INFRASTRUCTURE_SUBCATEGORY_CONFIG[t.subCategory as InfrastructureSubCategory] || t.subCategory}
-                            </span>
-                          )}
-                          {t.category === 'shareholder_payout' && (
-                            <span className="font-bold text-[10px] mr-1">
-                              ({t.memberPayoutType === 'salary' ? 'حقوق کارکرد ماهانه' : 'برداشت سود سهام'})
-                            </span>
-                          )}
-                        </span>
-                      );
-                    }
+                    const badge = (
+                      <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border font-medium ${catInfo.badgeBg}`}>
+                        {catInfo.label}
+                        {subLabel && (
+                          <span className="font-bold">
+                            : {subLabel}
+                          </span>
+                        )}
+                        {t.category === 'shareholder_payout' && (
+                          <span className="font-bold text-[10px] mr-1">
+                            ({t.memberPayoutType === 'salary' ? 'حقوق کارکرد ماهانه' : 'برداشت سود سهام'})
+                          </span>
+                        )}
+                      </span>
+                    );
 
                     const monthName = PERSIAN_MONTHS.find(m => m.num === t.month)?.name || t.month;
                     const creatorDisplayName = t.createdByName || 'وحید کمالی';

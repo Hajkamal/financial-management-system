@@ -17,6 +17,7 @@ import type {
   VatInvoice,
   ServiceTariff,
   PersianMonthNumber,
+  CustomCategoryDefinition,
 } from '../types';
 
 // =====================================================
@@ -718,6 +719,7 @@ export const SupabaseDataService = {
     bankAccounts: BankAccount[];
     vatInvoices: VatInvoice[];
     serviceTariffs: ServiceTariff[];
+    customCategories?: CustomCategoryDefinition[];
   }): Promise<{ success: boolean; errors: string[]; isPermissionDenied?: boolean; details?: string }> {
     if (!supabase || !isSupabaseConfigured) {
       return { success: false, errors: ['Supabase is not configured'] };

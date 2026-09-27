@@ -13,7 +13,9 @@ import {
   CurrencyMode,
   PersianMonthNumber,
   MemberPayoutType,
-  SEASON_MONTHS
+  SEASON_MONTHS,
+  CustomCategoryDefinition,
+  CategorySubItem
 } from '../types';
 import { 
   INITIAL_YEAR, 
@@ -26,7 +28,8 @@ import {
   INITIAL_USERS,
   INITIAL_BANK_ACCOUNTS,
   INITIAL_VAT_INVOICES,
-  INITIAL_SERVICE_TARIFFS
+  INITIAL_SERVICE_TARIFFS,
+  INITIAL_CUSTOM_CATEGORIES
 } from '../data/initialData';
 import { 
   formatCurrency, 
@@ -300,6 +303,13 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   const [serviceTariffs, setServiceTariffs] = useState<ServiceTariff[]>(() => 
     readLocal('ayandeh_service_tariffs', INITIAL_SERVICE_TARIFFS)
   );
+
+  // ۱۱. دسته‌بندی‌ها و زیردسته‌های سفارشی مالی
+  const [customCategories, setCustomCategories] = useState<CustomCategoryDefinition[]>(() => {
+    const local = readLocal<CustomCategoryDefinition[]>('ayandeh_custom_categories', INITIAL_CUSTOM_CATEGORIES);
+    if (!Array.isArray(local) || local.length === 0) return INITIAL_CUSTOM_CATEGORIES;
+    return local;
+  });
 
   // =====================================================
   // ⚡ بارگذاری و همگام‌سازی بلادرنگ از دیتابیس متمرکز ابری (Supabase + Server)
@@ -1336,6 +1346,88 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   };
 
   // ==========================
+  // مدیریت دسته‌بندی‌ها و زیردسته‌های مالی
+  // ==========================
+  const handleAddCustomCategory = (cat: CustomCategoryDefinition) => {
+    setCustomCategories(prev => {
+      const updated = [...prev, cat];
+      writeLocal('ayandeh_custom_categories', updated);
+      return updated;
+    });
+    onShowToast(`دسته‌بندی اصلی «${cat.label}» با موفقیت افزوده شد.`);
+  };
+
+  const handleUpdateCustomCategory = (cat: CustomCategoryDefinition) => {
+    setCustomCategories(prev => {
+      const updated = prev.map(c => c.id === cat.id ? cat : c);
+      writeLocal('ayandeh_custom_categories', updated);
+      return updated;
+    });
+    onShowToast(`عنوان دسته‌بندی «${cat.label}» به‌روزرسانی شد.`);
+  };
+
+  const handleDeleteCustomCategory = (categoryId: string) => {
+    setCustomCategories(prev => {
+      const target = prev.find(c => c.id === categoryId);
+      const updated = prev.filter(c => c.id !== categoryId);
+      writeLocal('ayandeh_custom_categories', updated);
+      onShowToast(`دسته‌بندی «${target?.label || categoryId}» حذف گردید.`);
+      return updated;
+    });
+  };
+
+  const handleAddSubCategory = (categoryId: string, subCat: CategorySubItem) => {
+    setCustomCategories(prev => {
+      const updated = prev.map(c => {
+        if (c.id === categoryId) {
+          const subs = c.subCategories ? [...c.subCategories, subCat] : [subCat];
+          return { ...c, subCategories: subs };
+        }
+        return c;
+      });
+      writeLocal('ayandeh_custom_categories', updated);
+      return updated;
+    });
+    onShowToast(`نوع / زیردسته جدید «${subCat.name}» با موفقیت اضافه شد.`);
+  };
+
+  const handleUpdateSubCategory = (categoryId: string, subCategoryId: string, newName: string) => {
+    setCustomCategories(prev => {
+      const updated = prev.map(c => {
+        if (c.id === categoryId && c.subCategories) {
+          const subs = c.subCategories.map(s => s.id === subCategoryId ? { ...s, name: newName } : s);
+          return { ...c, subCategories: subs };
+        }
+        return c;
+      });
+      writeLocal('ayandeh_custom_categories', updated);
+      return updated;
+    });
+    onShowToast(`عنوان زیردسته به «${newName}» تغییر یافت.`);
+  };
+
+  const handleDeleteSubCategory = (categoryId: string, subCategoryId: string) => {
+    setCustomCategories(prev => {
+      const updated = prev.map(c => {
+        if (c.id === categoryId && c.subCategories) {
+          const subs = c.subCategories.filter(s => s.id !== subCategoryId);
+          return { ...c, subCategories: subs };
+        }
+        return c;
+      });
+      writeLocal('ayandeh_custom_categories', updated);
+      return updated;
+    });
+    onShowToast('زیردسته با موفقیت حذف شد.');
+  };
+
+  const handleResetCategoriesToDefaults = () => {
+    setCustomCategories(INITIAL_CUSTOM_CATEGORIES);
+    writeLocal('ayandeh_custom_categories', INITIAL_CUSTOM_CATEGORIES);
+    onShowToast('ساختار دسته‌بندی‌ها به حالت اولیه بازنشانی شد.');
+  };
+
+  // ==========================
   // پشتیبان‌گیری و بازیابی
   // ==========================
   const handleRestoreData = async (data: {
@@ -1349,6 +1441,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     bankAccounts?: BankAccount[];
     vatInvoices?: VatInvoice[];
     serviceTariffs?: ServiceTariff[];
+    customCategories?: CustomCategoryDefinition[];
   }) => {
     // ۱. به‌روزرسانی استیت‌های ری‌اکت
     if (data.transactions) setTransactions(data.transactions);
@@ -1361,6 +1454,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     if (data.bankAccounts) setBankAccounts(data.bankAccounts);
     if (data.vatInvoices) setVatInvoices(data.vatInvoices);
     if (data.serviceTariffs) setServiceTariffs(data.serviceTariffs);
+    if (data.customCategories) setCustomCategories(data.customCategories);
 
     // ۲. تثبیت فوری در حافظه محلی
     if (data.transactions) writeLocal('ayandeh_transactions', data.transactions);
@@ -1373,6 +1467,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     if (data.bankAccounts) writeLocal('ayandeh_bank_accounts', data.bankAccounts);
     if (data.vatInvoices) writeLocal('ayandeh_vat_invoices', data.vatInvoices);
     if (data.serviceTariffs) writeLocal('ayandeh_service_tariffs', data.serviceTariffs);
+    if (data.customCategories) writeLocal('ayandeh_custom_categories', data.customCategories);
 
     onShowToast('اطلاعات فایل پشتیبان با موفقیت بازگردانی شد.');
 
@@ -1422,6 +1517,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     setBankAccounts(INITIAL_BANK_ACCOUNTS);
     setVatInvoices(INITIAL_VAT_INVOICES);
     setServiceTariffs(INITIAL_SERVICE_TARIFFS);
+    setCustomCategories(INITIAL_CUSTOM_CATEGORIES);
     setSelectedYear(1405);
 
     writeLocal('ayandeh_transactions', INITIAL_TRANSACTIONS);
@@ -1434,6 +1530,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     writeLocal('ayandeh_bank_accounts', INITIAL_BANK_ACCOUNTS);
     writeLocal('ayandeh_vat_invoices', INITIAL_VAT_INVOICES);
     writeLocal('ayandeh_service_tariffs', INITIAL_SERVICE_TARIFFS);
+    writeLocal('ayandeh_custom_categories', INITIAL_CUSTOM_CATEGORIES);
     writeLocal('ayandeh_selected_year', '1405');
 
     onShowToast('کلیه اطلاعات و اسناد ورودی سامانه با موفقیت پاکسازی و صفر گردید.');
@@ -1453,6 +1550,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       bankAccounts: INITIAL_BANK_ACCOUNTS,
       vatInvoices: INITIAL_VAT_INVOICES,
       serviceTariffs: INITIAL_SERVICE_TARIFFS,
+      customCategories: INITIAL_CUSTOM_CATEGORIES,
     });
   };
 
@@ -1482,6 +1580,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       bankAccounts,
       vatInvoices,
       serviceTariffs,
+      customCategories,
     };
 
     // ۱. به‌روزرسانی لوکال‌استوریج
@@ -1495,6 +1594,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     writeLocal('ayandeh_bank_accounts', bankAccounts);
     writeLocal('ayandeh_vat_invoices', vatInvoices);
     writeLocal('ayandeh_service_tariffs', serviceTariffs);
+    writeLocal('ayandeh_custom_categories', customCategories);
 
     // ۲. ذخیره در دیتابیس ابری سرور (مستقر در کلاد با همگامی کامل بین تمام مرورگرها)
     let serverOk = false;
@@ -1536,7 +1636,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       onShowToast(`❌ خطا در ارتباط با سرور ابری: ${reason}. لطفاً اتصال اینترنت خود را بررسی نمایید.`);
       return { success: false, errors: [reason] };
     }
-  }, [fiscalYears, transactions, employees, salaryMatrix, members, loans, users, bankAccounts, vatInvoices, serviceTariffs, onShowToast]);
+  }, [fiscalYears, transactions, employees, salaryMatrix, members, loans, users, bankAccounts, vatInvoices, serviceTariffs, customCategories, onShowToast]);
 
   return {
     // داده‌ها
@@ -1552,6 +1652,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     bankAccounts,
     vatInvoices,
     serviceTariffs,
+    customCategories,
     
     // وضعیت ابری
     isCloudLoading,
@@ -1587,6 +1688,13 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     handleDeleteVatInvoice,
     handleSyncVatInvoiceToTransactions,
     handleSaveServiceTariff,
+    handleAddCustomCategory,
+    handleUpdateCustomCategory,
+    handleDeleteCustomCategory,
+    handleAddSubCategory,
+    handleUpdateSubCategory,
+    handleDeleteSubCategory,
+    handleResetCategoriesToDefaults,
     handleRestoreData,
     handleResetToDefaults,
     handlePurge1404,
