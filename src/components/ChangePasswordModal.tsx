@@ -16,8 +16,6 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   currentUser,
   onSavePassword,
 }) => {
-  if (!isOpen) return null;
-
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -51,6 +49,8 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       setIsSubmitting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">

@@ -691,8 +691,6 @@ const UserModal: React.FC<UserModalProps> = ({
   userToEdit,
   onSave,
 }) => {
-  if (!isOpen) return null;
-
   const [firstName, setFirstName] = useState(userToEdit?.firstName || '');
   const [lastName, setLastName] = useState(userToEdit?.lastName || '');
   const [email, setEmail] = useState(userToEdit?.email || '');
@@ -776,6 +774,8 @@ const UserModal: React.FC<UserModalProps> = ({
       notes: notes.trim() || undefined,
     });
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">

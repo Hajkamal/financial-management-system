@@ -48,8 +48,6 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   initialType = 'expense',
   initialSelectedCategoryId
 }) => {
-  if (!isOpen) return null;
-
   const [activeTab, setActiveTab] = useState<TransactionType>(initialType);
   const [expandedCatId, setExpandedCatId] = useState<string | null>(
     initialSelectedCategoryId || (initialType === 'expense' ? 'infrastructure' : 'sale_basina')
@@ -144,6 +142,8 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
     setNewSubNames(prev => ({ ...prev, [catId]: '' }));
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-60 animate-in fade-in">

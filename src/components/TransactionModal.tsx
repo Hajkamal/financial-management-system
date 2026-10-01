@@ -91,8 +91,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onDeleteSubCategory,
   onResetCategoriesToDefaults,
 }) => {
-  if (!isOpen) return null;
-
   const [type, setType] = useState<TransactionType>(editingTransaction ? editingTransaction.type : 'expense');
   const [category, setCategory] = useState<string>(
     editingTransaction 
@@ -273,6 +271,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     onSave(tx);
     onClose();
   };
+
+  if (!isOpen) return null;
 
   return (
     <>

@@ -25,6 +25,7 @@ import {
   BookOpenCheck
 } from 'lucide-react';
 import { ActiveTab, CurrencyMode, FiscalYear, AppUser } from '../types';
+import { CompanyLogo } from './CompanyLogo';
 
 interface NavigationProps {
   companyName: string;
@@ -140,14 +141,14 @@ export const Sidebar: React.FC<NavigationProps> = ({
   const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Brand Header */}
-      <div className="p-6 border-b border-slate-800 text-center">
-        <div className="flex items-center justify-center gap-2 mb-1">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold">
-            <Building2 className="w-4 h-4" />
-          </div>
-          <div className="text-xl font-bold tracking-tight text-white">{companyName}</div>
+      <div className="p-5 border-b border-slate-800 text-center">
+        <div className="flex items-center justify-center gap-2.5 mb-1.5">
+          <CompanyLogo size="md" canUpload={true} />
+          <div className="text-lg font-bold tracking-tight text-white leading-tight">{companyName}</div>
         </div>
-        <div className="text-xs text-slate-400 mt-1 uppercase tracking-widest font-medium">مدیریت مالی متمرکز</div>
+        <div className="text-[11px] text-slate-400 mt-1 tracking-wider font-medium flex items-center justify-center gap-1">
+          <span>مدیریت مالی متمرکز</span>
+        </div>
       </div>
 
       {/* Quick Action Button in Sidebar */}
@@ -314,9 +315,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
       {/* Enhanced Mobile Top Bar */}
       <div className="md:hidden bg-slate-900 text-white px-3 py-2.5 border-b border-slate-800 flex items-center justify-between sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold shrink-0">
-            <Building2 className="w-4 h-4 text-white" />
-          </div>
+          <CompanyLogo size="sm" canUpload={true} />
           <div>
             <div className="text-xs font-bold truncate max-w-[130px]">{companyName}</div>
             <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
