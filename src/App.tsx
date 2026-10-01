@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Sidebar,
   TopHeader,
@@ -34,6 +34,7 @@ import { generateBackupFilename } from './utils/formatters';
 import { useAuthManager } from './hooks/useAuthManager';
 import { useFinancialData } from './hooks/useFinancialData';
 import { SupabaseDataService } from './lib/supabaseDataService';
+import { updateDocumentFavicon } from './components/CompanyLogo';
 
 import { Building2, Loader2, DatabaseBackup, Download, AlertCircle, X, CloudUpload, Cloud, CloudOff } from 'lucide-react';
 
@@ -137,6 +138,14 @@ export default function App() {
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   // یادآور دوره‌ای بک‌آپ
+  useEffect(() => {
+    try {
+      const savedLogo = localStorage.getItem('ayandeh_company_logo');
+      updateDocumentFavicon(savedLogo);
+    } catch {
+      updateDocumentFavicon(null);
+    }
+  }, []);
   const [showBackupReminder, setShowBackupReminder] = useState<boolean>(() => {
     try {
       const dismissedUntil = localStorage.getItem('ayandeh_backup_reminder_dismissed');

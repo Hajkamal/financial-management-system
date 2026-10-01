@@ -11,6 +11,26 @@ interface CompanyLogoProps {
 
 const STORAGE_KEY = 'ayandeh_company_logo';
 
+export const updateDocumentFavicon = (logoUrl: string | null) => {
+  try {
+    let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    const finalHref = logoUrl || '/logo.svg';
+    link.href = finalHref;
+    if (finalHref.endsWith('.svg') || finalHref.includes('image/svg')) {
+      link.type = 'image/svg+xml';
+    } else {
+      link.type = 'image/png';
+    }
+  } catch (e) {
+    console.warn('Could not update favicon:', e);
+  }
+};
+
 export const CompanyLogo: React.FC<CompanyLogoProps> = ({
   className = '',
   size = 'md',
@@ -38,6 +58,10 @@ export const CompanyLogo: React.FC<CompanyLogoProps> = ({
     }
   }, [currentLogo]);
 
+  useEffect(() => {
+    updateDocumentFavicon(logo);
+  }, [logo]);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -58,6 +82,7 @@ export const CompanyLogo: React.FC<CompanyLogoProps> = ({
 
   const handleSave = () => {
     setLogo(previewUrl);
+    updateDocumentFavicon(previewUrl);
     try {
       if (previewUrl) {
         localStorage.setItem(STORAGE_KEY, previewUrl);
@@ -200,8 +225,13 @@ export const CompanyLogo: React.FC<CompanyLogoProps> = ({
                 </span>
               </div>
 
-              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-[11px] text-blue-900 leading-relaxed">
-                💡 این لوگو در نوار کناری (Sidebar)، سربرگ موبایل، گزارش‌ها و فایل‌های خروجی سامانه به عنوان نماد رسمی شرکت نمایش داده می‌شود.
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-[11px] text-blue-900 leading-relaxed space-y-1">
+                <p className="font-bold flex items-center gap-1">
+                  <span>💡 اعمال همزمان به عنوان لوگوی سامانه و فاوآیکون (Favicon):</span>
+                </p>
+                <p className="text-[10px] text-blue-800">
+                  با بارگذاری فایل تصویر لوگوی شرکت، این لوگو بلافاصله در نوار کناری (Sidebar)، سربرگ موبایل و همچنین در تب بالای مرورگر (فاوآیکون) قرار می‌گیرد.
+                </p>
               </div>
 
               {/* Action Buttons */}
