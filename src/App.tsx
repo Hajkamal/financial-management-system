@@ -637,6 +637,7 @@ export default function App() {
 
       {/* مودال ثبت و ویرایش تراکنش */}
       <TransactionModal
+        key={editingTx ? editingTx.id : (isTxModalOpen ? 'new-tx-open' : 'tx-closed')}
         isOpen={isTxModalOpen}
         onClose={() => {
           setIsTxModalOpen(false);

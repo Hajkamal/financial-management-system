@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Plus, 
   ArrowDownLeft, 
@@ -91,61 +91,94 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onDeleteSubCategory,
   onResetCategoriesToDefaults,
 }) => {
+  const today = getTodayJalali();
   const [type, setType] = useState<TransactionType>(editingTransaction ? editingTransaction.type : 'expense');
   const [category, setCategory] = useState<string>(
     editingTransaction 
       ? editingTransaction.category 
       : (type === 'income' ? 'sale_basina' : 'salary')
   );
-  const [subCategory, setSubCategory] = useState<string>(
-    editingTransaction?.subCategory || ''
-  );
-  const [amount, setAmount] = useState<string>(
-    editingTransaction ? editingTransaction.amount.toString() : ''
-  );
-  const today = getTodayJalali();
-  const [year, setYear] = useState<number>(editingTransaction ? editingTransaction.year : today.year);
+  const [subCategory, setSubCategory] = useState<string>(editingTransaction?.subCategory || '');
+  const [amount, setAmount] = useState<string>(editingTransaction ? editingTransaction.amount.toString() : '');
+  const [year, setYear] = useState<number>(editingTransaction ? editingTransaction.year : (selectedYear || today.year));
   const [month, setMonth] = useState<PersianMonthNumber>(editingTransaction ? editingTransaction.month : today.month);
   const [day, setDay] = useState<number>(editingTransaction ? editingTransaction.day : today.day);
-
-  // وضعیت‌های مدیریت و افزودن دسته و زیردسته
-  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
-  const [isInlineAddingCategory, setIsInlineAddingCategory] = useState(false);
-  const [inlineCatName, setInlineCatName] = useState('');
-  
-  const [isInlineAddingSub, setIsInlineAddingSub] = useState(false);
-  const [inlineSubName, setInlineSubName] = useState('');
-
-  const [isInlineEditingSub, setIsInlineEditingSub] = useState(false);
-  const [inlineEditSubName, setInlineEditSubName] = useState('');
-
-  useEffect(() => {
-    if (editingTransaction) {
-      setYear(editingTransaction.year);
-      setMonth(editingTransaction.month);
-      setDay(editingTransaction.day);
-      setType(editingTransaction.type);
-      setCategory(editingTransaction.category);
-      setSubCategory(editingTransaction.subCategory || '');
-    } else {
-      const cur = getTodayJalali();
-      setYear(cur.year);
-      setMonth(cur.month);
-      setDay(cur.day);
-    }
-  }, [editingTransaction, isOpen]);
-
   const [title, setTitle] = useState<string>(editingTransaction ? editingTransaction.title : '');
   const [description, setDescription] = useState<string>(editingTransaction?.description || '');
   const [recipientOrPayer, setRecipientOrPayer] = useState<string>(editingTransaction?.recipientOrPayer || '');
   const [trackingCode, setTrackingCode] = useState<string>(editingTransaction?.trackingCode || '');
-  
   const [relatedMemberId, setRelatedMemberId] = useState<string>(editingTransaction?.relatedMemberId || '');
   const [memberPayoutType, setMemberPayoutType] = useState<MemberPayoutType>(
     editingTransaction?.memberPayoutType || 'salary'
   );
   const [relatedEmployeeId, setRelatedEmployeeId] = useState<string>(editingTransaction?.relatedEmployeeId || '');
   const [relatedLoanId, setRelatedLoanId] = useState<string>(editingTransaction?.relatedLoanId || '');
+
+  // وضعیت‌های مدیریت و افزودن دسته و زیردسته
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+  const [isInlineAddingCategory, setIsInlineAddingCategory] = useState(false);
+  const [inlineCatName, setInlineCatName] = useState('');
+  const [isInlineAddingSub, setIsInlineAddingSub] = useState(false);
+  const [inlineSubName, setInlineSubName] = useState('');
+  const [isInlineEditingSub, setIsInlineEditingSub] = useState(false);
+  const [inlineEditSubName, setInlineEditSubName] = useState('');
+
+  // بازنشانی کامل و پاکسازی فرم یا مقداردهی دقیق جهت ویرایش
+  const resetForm = useCallback((tx: FinancialTransaction | null) => {
+    if (tx) {
+      setType(tx.type);
+      setCategory(tx.category);
+      setSubCategory(tx.subCategory || '');
+      setAmount(tx.amount ? tx.amount.toString() : '');
+      setYear(tx.year);
+      setMonth(tx.month);
+      setDay(tx.day);
+      setTitle(tx.title || '');
+      setDescription(tx.description || '');
+      setRecipientOrPayer(tx.recipientOrPayer || '');
+      setTrackingCode(tx.trackingCode || '');
+      setRelatedMemberId(tx.relatedMemberId || '');
+      setMemberPayoutType(tx.memberPayoutType || 'salary');
+      setRelatedEmployeeId(tx.relatedEmployeeId || '');
+      setRelatedLoanId(tx.relatedLoanId || '');
+    } else {
+      const cur = getTodayJalali();
+      const defaultType: TransactionType = 'expense';
+      const defaultCat = customCategories.find(c => c.type === defaultType)?.id || 'salary';
+      const defaultSubs = customCategories.find(c => c.id === defaultCat)?.subCategories;
+
+      setType(defaultType);
+      setCategory(defaultCat);
+      setSubCategory(defaultSubs && defaultSubs.length > 0 ? defaultSubs[0].id : '');
+      setAmount('');
+      setYear(selectedYear || cur.year);
+      setMonth(cur.month);
+      setDay(cur.day);
+      setTitle('');
+      setDescription('');
+      setRecipientOrPayer('');
+      setTrackingCode('');
+      setRelatedMemberId('');
+      setMemberPayoutType('salary');
+      setRelatedEmployeeId('');
+      setRelatedLoanId('');
+    }
+
+    setIsInlineAddingCategory(false);
+    setInlineCatName('');
+    setIsInlineAddingSub(false);
+    setInlineSubName('');
+    setIsInlineEditingSub(false);
+    setInlineEditSubName('');
+    setIsCategoryManagerOpen(false);
+  }, [selectedYear, customCategories]);
+
+  // همگام‌سازی و ریست قطعی هنگام باز شدن مودال یا تغییر سند مورد ویرایش
+  useEffect(() => {
+    if (isOpen) {
+      resetForm(editingTransaction || null);
+    }
+  }, [isOpen, editingTransaction, resetForm]);
 
   // لیست دسته‌های مرتبط با نوع جاری
   const currentTypeCategories = customCategories.filter(c => c.type === type);
@@ -269,6 +302,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     };
 
     onSave(tx);
+    resetForm(null);
+    onClose();
+  };
+
+  const handleCloseModal = () => {
+    resetForm(null);
     onClose();
   };
 
@@ -291,8 +330,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
             <button
               type="button"
-              onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 text-lg leading-none"
+              onClick={handleCloseModal}
+              className="text-slate-400 hover:text-slate-600 text-lg leading-none cursor-pointer"
             >
               ×
             </button>
@@ -732,8 +771,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                onClick={handleCloseModal}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               >
                 انصراف
               </button>
