@@ -119,6 +119,8 @@ export function loadDatabase(): ServerDatabase {
         bankAccounts: Array.isArray(parsed.bankAccounts) ? parsed.bankAccounts : [],
         vatInvoices: Array.isArray(parsed.vatInvoices) ? parsed.vatInvoices : [],
         serviceTariffs: Array.isArray(parsed.serviceTariffs) ? parsed.serviceTariffs : [],
+        customCategories: Array.isArray(parsed.customCategories) ? parsed.customCategories : [],
+        companyLogo: parsed.companyLogo || null,
       };
       return inMemoryDb;
     }

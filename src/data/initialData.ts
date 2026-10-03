@@ -104,6 +104,28 @@ export const INITIAL_CUSTOM_CATEGORIES: CustomCategoryDefinition[] = [
     color: 'text-slate-700',
     badgeBg: 'bg-slate-100 text-slate-800 border-slate-300',
     isCustom: false,
+    subCategories: [
+      { id: 'supermarket', name: 'سوپرمارکت' },
+      { id: 'office_supplies', name: 'لوازم التحریر و اقلام مصرفی' },
+      { id: 'cleaning_tea', name: 'پذیرایی و نظافت' },
+      { id: 'internet_tel', name: 'اینترنت و تلفن' },
+    ],
+  },
+  {
+    id: 'ads_basina',
+    type: 'expense',
+    label: 'تبلیغات باسینا',
+    color: 'text-blue-700',
+    badgeBg: 'bg-blue-100 text-blue-800 border-blue-300',
+    isCustom: false,
+    subCategories: [
+      { id: 'cafe_bazaar', name: 'کافه بازار' },
+      { id: 'myket', name: 'مایکت' },
+      { id: 'google_ads', name: 'گوگل ادز' },
+      { id: 'yektanet', name: 'یکتانت' },
+      { id: 'social_ads', name: 'تبلیغات اینستاگرام و شبکه‌های اجتماعی' },
+      { id: 'sms_campaign', name: 'کمپین پیامکی تبلیغاتی' },
+    ],
   },
 
   // درآمدها

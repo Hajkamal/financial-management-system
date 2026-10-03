@@ -54,6 +54,51 @@ export const sanitizeFiscalYearsList = (list: any): FiscalYear[] => {
   return cleaned;
 };
 
+/** ادغام و به‌روزرسانی خودکار دسته‌بندی‌های پایه ضروری (مثل تبلیغات باسینا و زیردسته سوپرمارکت) */
+export const mergeWithDefaultCategories = (local: any[]): CustomCategoryDefinition[] => {
+  if (!Array.isArray(local) || local.length === 0) {
+    return INITIAL_CUSTOM_CATEGORIES;
+  }
+
+  let result = [...local];
+
+  // ۱. اطمینان از وجود دسته‌بندی «تبلیغات باسینا» با زیردسته «کافه بازار»
+  const hasAdsBasina = result.some(c => 
+    c.id === 'ads_basina' || 
+    c.label?.includes('تبلیغات باسینا') || 
+    c.label?.includes('تبلیغات')
+  );
+  if (!hasAdsBasina) {
+    const defaultAds = INITIAL_CUSTOM_CATEGORIES.find(c => c.id === 'ads_basina');
+    if (defaultAds) result.push(defaultAds);
+  } else {
+    result = result.map(c => {
+      if (c.id === 'ads_basina' || c.label?.includes('تبلیغات باسینا')) {
+        const subs = Array.isArray(c.subCategories) ? [...c.subCategories] : [];
+        if (!subs.some(s => s.name?.includes('کافه بازار') || s.id === 'cafe_bazaar')) {
+          subs.unshift({ id: 'cafe_bazaar', name: 'کافه بازار' });
+        }
+        return { ...c, subCategories: subs };
+      }
+      return c;
+    });
+  }
+
+  // ۲. اطمینان از وجود زیردسته «سوپرمارکت» در «هزینه‌های سایت و اداری»
+  result = result.map(c => {
+    if (c.id === 'office_site' || c.label?.includes('سایت و اداری')) {
+      const subs = Array.isArray(c.subCategories) ? [...c.subCategories] : [];
+      if (!subs.some(s => s.name?.includes('سوپرمارکت') || s.id === 'supermarket')) {
+        subs.unshift({ id: 'supermarket', name: 'سوپرمارکت' });
+      }
+      return { ...c, subCategories: subs };
+    }
+    return c;
+  });
+
+  return result;
+};
+
 /**
  * همگام‌سازی هوشمند فاکتورهای مودیان و ارزش افزوده با تراکنش‌های درآمدی دفتر کل
  */
@@ -307,8 +352,9 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   // ۱۱. دسته‌بندی‌ها و زیردسته‌های سفارشی مالی
   const [customCategories, setCustomCategories] = useState<CustomCategoryDefinition[]>(() => {
     const local = readLocal<CustomCategoryDefinition[]>('ayandeh_custom_categories', INITIAL_CUSTOM_CATEGORIES);
-    if (!Array.isArray(local) || local.length === 0) return INITIAL_CUSTOM_CATEGORIES;
-    return local;
+    const merged = mergeWithDefaultCategories(local);
+    writeLocal('ayandeh_custom_categories', merged);
+    return merged;
   });
 
   // =====================================================
@@ -1516,7 +1562,11 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     if (data.bankAccounts) setBankAccounts(data.bankAccounts);
     if (data.vatInvoices) setVatInvoices(data.vatInvoices);
     if (data.serviceTariffs) setServiceTariffs(data.serviceTariffs);
-    if (data.customCategories) setCustomCategories(data.customCategories);
+    if (data.customCategories) {
+      const mergedCats = mergeWithDefaultCategories(data.customCategories);
+      setCustomCategories(mergedCats);
+      writeLocal('ayandeh_custom_categories', mergedCats);
+    }
 
     // ۲. تثبیت فوری در حافظه محلی
     if (data.transactions) writeLocal('ayandeh_transactions', data.transactions);
@@ -1529,7 +1579,6 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     if (data.bankAccounts) writeLocal('ayandeh_bank_accounts', data.bankAccounts);
     if (data.vatInvoices) writeLocal('ayandeh_vat_invoices', data.vatInvoices);
     if (data.serviceTariffs) writeLocal('ayandeh_service_tariffs', data.serviceTariffs);
-    if (data.customCategories) writeLocal('ayandeh_custom_categories', data.customCategories);
 
     onShowToast('اطلاعات فایل پشتیبان با موفقیت بازگردانی شد.');
 
