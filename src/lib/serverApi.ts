@@ -13,7 +13,8 @@ import {
   VatInvoice,
   ServiceTariff,
   FiscalYear,
-  AppUser
+  AppUser,
+  CustomCategoryDefinition
 } from '../types';
 
 export interface ServerFullData {
@@ -30,6 +31,8 @@ export interface ServerFullData {
   bankAccounts: BankAccount[];
   vatInvoices: VatInvoice[];
   serviceTariffs: ServiceTariff[];
+  customCategories?: CustomCategoryDefinition[];
+  companyLogo?: string | null;
 }
 
 export const serverApi = {
@@ -345,6 +348,49 @@ export const serverApi = {
     } catch (err: any) {
       console.warn('serverApi.restoreData fetch exception:', err);
       return { ok: false, error: err?.message || 'خطای اتصال به سرور' };
+    }
+  },
+
+  // ذخیره دسته‌بندی‌های اختصاصی
+  async saveCustomCategories(customCategories: CustomCategoryDefinition[]): Promise<boolean> {
+    try {
+      const res = await fetch('/api/financial-data/custom-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customCategories }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  // ذخیره لوگوی شرکت
+  async saveCompanyLogo(companyLogo: string | null): Promise<boolean> {
+    try {
+      const res = await fetch('/api/financial-data/company-logo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyLogo }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  // ارسال کلیه داده‌های دستگاه جاری به سرور برای دریافت فوری در گوشی و لپ‌تاپ دیگر
+  async pushAllData(payload: any): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const res = await fetch('/api/financial-data/push-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      return { ok: res.ok, message: json.message };
+    } catch (err: any) {
+      return { ok: false, message: err?.message || 'خطا در برقراری ارتباط با سرور' };
     }
   }
 };

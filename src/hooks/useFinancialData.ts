@@ -457,6 +457,19 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
             writeLocal('ayandeh_service_tariffs', serverData.serviceTariffs);
           }
 
+          if (Array.isArray(serverData.customCategories) && serverData.customCategories.length > 0) {
+            setCustomCategories(serverData.customCategories);
+            writeLocal('ayandeh_custom_categories', serverData.customCategories);
+          }
+
+          if (serverData.companyLogo !== undefined && serverData.companyLogo) {
+            writeLocal('ayandeh_company_logo', serverData.companyLogo);
+            try {
+              let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+              if (link) link.href = serverData.companyLogo;
+            } catch {}
+          }
+
           setIsCloudConnected(true);
         }
       }
@@ -1352,6 +1365,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     setCustomCategories(prev => {
       const updated = [...prev, cat];
       writeLocal('ayandeh_custom_categories', updated);
+      serverApi.saveCustomCategories(updated);
       return updated;
     });
     onShowToast(`دسته‌بندی اصلی «${cat.label}» با موفقیت افزوده شد.`);
@@ -1361,6 +1375,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     setCustomCategories(prev => {
       const updated = prev.map(c => c.id === cat.id ? cat : c);
       writeLocal('ayandeh_custom_categories', updated);
+      serverApi.saveCustomCategories(updated);
       return updated;
     });
     onShowToast(`عنوان دسته‌بندی «${cat.label}» به‌روزرسانی شد.`);
@@ -1371,6 +1386,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       const target = prev.find(c => c.id === categoryId);
       const updated = prev.filter(c => c.id !== categoryId);
       writeLocal('ayandeh_custom_categories', updated);
+      serverApi.saveCustomCategories(updated);
       onShowToast(`دسته‌بندی «${target?.label || categoryId}» حذف گردید.`);
       return updated;
     });
@@ -1386,6 +1402,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         return c;
       });
       writeLocal('ayandeh_custom_categories', updated);
+      serverApi.saveCustomCategories(updated);
       return updated;
     });
     onShowToast(`نوع / زیردسته جدید «${subCat.name}» با موفقیت اضافه شد.`);
@@ -1401,6 +1418,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         return c;
       });
       writeLocal('ayandeh_custom_categories', updated);
+      serverApi.saveCustomCategories(updated);
       return updated;
     });
     onShowToast(`عنوان زیردسته به «${newName}» تغییر یافت.`);
@@ -1416,10 +1434,54 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         return c;
       });
       writeLocal('ayandeh_custom_categories', updated);
+      serverApi.saveCustomCategories(updated);
       return updated;
     });
     onShowToast('زیردسته با موفقیت حذف شد.');
   };
+
+  // ارسال کلیه داده‌های دستگاه جاری به سرور (برای هماهنگ‌سازی لپ‌تاپ و گوشی)
+  const handlePushAllDataToServer = useCallback(async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      let savedLogo: string | null = null;
+      try { savedLogo = localStorage.getItem('ayandeh_company_logo'); } catch {}
+      const payload = {
+        transactions,
+        employees,
+        salaryMatrix,
+        members,
+        loans,
+        bankAccounts,
+        vatInvoices,
+        serviceTariffs,
+        fiscalYears,
+        users,
+        customCategories,
+        companyLogo: savedLogo,
+      };
+      const res = await serverApi.pushAllData(payload);
+      if (res.ok) {
+        onShowToast('اطلاعات این مرورگر با موفقیت روی سرور متمرکز ذخیره شد و در گوشی و دیگر دستگاه‌ها در دسترس است.');
+        return { success: true, message: res.message || 'همگام‌سازی انجام شد' };
+      } else {
+        return { success: false, message: res.message || 'خطا در ثبت روی سرور' };
+      }
+    } catch (e: any) {
+      return { success: false, message: e?.message || 'خطای شبکه' };
+    }
+  }, [transactions, employees, salaryMatrix, members, loans, bankAccounts, vatInvoices, serviceTariffs, fiscalYears, users, customCategories, onShowToast]);
+
+  // دریافت فوری و اجباری آخرین اطلاعات از سرور
+  const handlePullAllDataFromServer = useCallback(async (): Promise<boolean> => {
+    try {
+      await syncDataFromServer(true);
+      onShowToast('اطلاعات با موفقیت از سرور متمرکز دریافت و به‌روزرسانی شد.');
+      return true;
+    } catch {
+      onShowToast('خطا در دریافت اطلاعات از سرور.');
+      return false;
+    }
+  }, [syncDataFromServer, onShowToast]);
 
   const handleResetCategoriesToDefaults = () => {
     setCustomCategories(INITIAL_CUSTOM_CATEGORIES);
@@ -1699,5 +1761,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     handleResetToDefaults,
     handlePurge1404,
     handleMigrateToCloud,
+    handlePushAllDataToServer,
+    handlePullAllDataFromServer,
   };
 }

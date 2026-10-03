@@ -67,6 +67,8 @@ export interface ServerDatabase {
   bankAccounts: any[];
   vatInvoices: any[];
   serviceTariffs: any[];
+  customCategories?: any[];
+  companyLogo?: string | null;
 }
 
 function getDefaultDb(): ServerDatabase {
@@ -84,6 +86,8 @@ function getDefaultDb(): ServerDatabase {
     bankAccounts: [],
     vatInvoices: [],
     serviceTariffs: [],
+    customCategories: [],
+    companyLogo: null,
   };
 }
 

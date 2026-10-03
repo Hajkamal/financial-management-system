@@ -107,6 +107,8 @@ export default function App() {
     handleResetToDefaults,
     handlePurge1404,
     handleMigrateToCloud,
+    handlePushAllDataToServer,
+    handlePullAllDataFromServer,
     isCloudLoading,
     isCloudConnected,
   } = useFinancialData({
@@ -304,33 +306,45 @@ export default function App() {
           </div>
         )}
 
-        {!isCloudLoading && !isCloudConnected && SupabaseDataService.isAvailable() && (
-          <div className="bg-gradient-to-r from-amber-900 via-orange-900 to-amber-900 text-white px-4 py-3 text-xs flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md border-b border-amber-700/50 z-20">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-600/90 flex items-center justify-center shrink-0 shadow-xs">
-                <CloudOff className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <p className="font-bold text-white text-xs">⚠️ داده‌ها هنوز در حافظه محلی مرورگر ذخیره هستند</p>
-                <p className="text-[11px] text-amber-200 mt-0.5">برای همگام‌سازی بین مرورگرها و دستگاه‌ها، داده‌ها را به دیتابیس ابری منتقل کنید.</p>
-              </div>
-            </div>
+        {/* نوار وضعیت و ابزار همگام‌سازی بین لپ‌تاپ و گوشی */}
+        <div className="bg-slate-900 border-b border-slate-800 text-white px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-2.5 z-20">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="font-bold text-slate-200 text-xs">
+              همگام‌سازی سرور فعال است
+            </span>
+            <span className="text-[11px] text-slate-400 hidden md:inline">
+              (تغییرات شما به صورت خودکار با دیتابیس متمرکز همگام می‌شود)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
             <button
-              onClick={handleMigrateToCloud}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 transition-all shadow-lg hover:shadow-emerald-500/25 cursor-pointer shrink-0"
+              onClick={async () => {
+                const res = await handlePushAllDataToServer();
+                if (res.success) {
+                  showToast('✅ اطلاعات این مرورگر به سرور فرستاده شد. در گوشی دکمه «دریافت از سرور» یا رفرش را بزنید.');
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
+              title="ارسال کلیه اطلاعات این دستگاه به سرور برای دریافت در گوشی"
             >
-              <CloudUpload className="w-4 h-4" />
-              <span>انتقال داده‌ها به ابر</span>
+              <CloudUpload className="w-3.5 h-3.5" />
+              <span>ارسال به سرور (برای گوشی)</span>
+            </button>
+
+            <button
+              onClick={async () => {
+                await handlePullAllDataFromServer();
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition cursor-pointer"
+              title="دریافت آخرین اطلاعات از سرور متمرکز (همگام‌سازی با لپ‌تاپ)"
+            >
+              <Cloud className="w-3.5 h-3.5 text-sky-400" />
+              <span>دریافت از سرور</span>
             </button>
           </div>
-        )}
-
-        {!isCloudLoading && isCloudConnected && (
-          <div className="bg-emerald-800/30 text-emerald-300 px-4 py-1.5 text-[10px] flex items-center justify-center gap-1.5 border-b border-emerald-700/30">
-            <Cloud className="w-3 h-3" />
-            <span>☁️ متصل به دیتابیس ابری — داده‌ها بین همه مرورگرها همگام‌سازی می‌شوند</span>
-          </div>
-        )}
+        </div>
 
         {/* هدر بالای صفحه */}
         <TopHeader

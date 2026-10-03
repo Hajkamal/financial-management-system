@@ -399,6 +399,33 @@ app.post('/api/financial-data/service-tariff', (req, res) => {
   }
 });
 
+// دسته‌بندی‌های اختصاصی
+app.post('/api/financial-data/custom-categories', (req, res) => {
+  try {
+    const { customCategories } = req.body;
+    if (!Array.isArray(customCategories)) return res.status(400).json({ error: 'آرایه نامعتبر' });
+    const db = loadDatabase();
+    db.customCategories = customCategories;
+    saveDatabase(db);
+    res.json({ success: true, count: customCategories.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// لوگوی رسمی شرکت
+app.post('/api/financial-data/company-logo', (req, res) => {
+  try {
+    const { companyLogo } = req.body;
+    const db = loadDatabase();
+    db.companyLogo = companyLogo || null;
+    saveDatabase(db);
+    res.json({ success: true, companyLogo: db.companyLogo });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // سال‌های مالی
 app.post('/api/financial-data/fiscal-year', (req, res) => {
   try {
@@ -515,6 +542,8 @@ app.post('/api/financial-data/restore', (req, res) => {
     if (Array.isArray(backup.vatInvoices)) db.vatInvoices = backup.vatInvoices;
     if (Array.isArray(backup.serviceTariffs)) db.serviceTariffs = backup.serviceTariffs;
     if (Array.isArray(backup.fiscalYears)) db.fiscalYears = backup.fiscalYears;
+    if (Array.isArray(backup.customCategories)) db.customCategories = backup.customCategories;
+    if (backup.companyLogo !== undefined) db.companyLogo = backup.companyLogo;
     if (Array.isArray(backup.users) && backup.users.length > 0) {
       db.users = backup.users;
     }
@@ -524,6 +553,38 @@ app.post('/api/financial-data/restore', (req, res) => {
   } catch (err: any) {
     console.error('[RESTORE ERROR] in /api/financial-data/restore:', err);
     res.status(500).json({ error: err.message || 'خطا در ثبت اطلاعات در دیتابیس سرور' });
+  }
+});
+
+// ارسال کامل داده‌های مرورگر به سرور (برای همگام‌سازی فوری لپ‌تاپ و گوشی)
+app.post('/api/financial-data/push-all', (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || typeof payload !== 'object') {
+      return res.status(400).json({ error: 'داده‌های ارسالی نامعتبر است' });
+    }
+    const db = loadDatabase();
+    if (Array.isArray(payload.transactions)) db.transactions = payload.transactions;
+    if (Array.isArray(payload.employees)) db.employees = payload.employees;
+    if (Array.isArray(payload.salaryMatrix)) db.salaryMatrix = payload.salaryMatrix;
+    if (Array.isArray(payload.members)) db.members = payload.members;
+    if (Array.isArray(payload.loans)) db.loans = payload.loans;
+    if (Array.isArray(payload.bankAccounts)) db.bankAccounts = payload.bankAccounts;
+    if (Array.isArray(payload.vatInvoices)) db.vatInvoices = payload.vatInvoices;
+    if (Array.isArray(payload.serviceTariffs)) db.serviceTariffs = payload.serviceTariffs;
+    if (Array.isArray(payload.fiscalYears)) db.fiscalYears = payload.fiscalYears;
+    if (Array.isArray(payload.users) && payload.users.length > 0) db.users = payload.users;
+    if (Array.isArray(payload.customCategories)) db.customCategories = payload.customCategories;
+    if (payload.companyLogo !== undefined) db.companyLogo = payload.companyLogo;
+
+    saveDatabase(db);
+    res.json({ 
+      success: true, 
+      message: 'تمامی اطلاعات مرورگر با موفقیت به سرور متمرکز ارسال شد و در سایر دستگاه‌ها قابل مشاهده است.', 
+      data: db 
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 
