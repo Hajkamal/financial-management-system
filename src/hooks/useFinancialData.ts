@@ -100,6 +100,138 @@ export const mergeWithDefaultCategories = (local: any[]): CustomCategoryDefiniti
 };
 
 /**
+ * تابع همگام‌سازی و ادغام کامل، بدون اتلاف داده، میان آرایه‌های دسته‌بندی و تمامی زیرمجموعه‌ها
+ * (Lossless bidirectional reconciliation of customCategories and subcategory structures)
+ */
+export const reconcileCustomCategories = (
+  localList: CustomCategoryDefinition[] = [],
+  incomingList: CustomCategoryDefinition[] = [],
+  transactionsList: FinancialTransaction[] = []
+): CustomCategoryDefinition[] => {
+  const mergedMap = new Map<string, CustomCategoryDefinition>();
+
+  // ۱. مقداردهی اولیه با دسته‌بندی‌های پایه و پیش‌فرض سامانه
+  INITIAL_CUSTOM_CATEGORIES.forEach(cat => {
+    mergedMap.set(cat.id, {
+      ...cat,
+      subCategories: Array.isArray(cat.subCategories) ? cat.subCategories.map(s => ({ ...s })) : []
+    });
+  });
+
+  // تابع درونی برای ادغام دقیق هر لیست ورودی بدون از دست رفتن داده
+  const mergeListIntoMap = (list: CustomCategoryDefinition[]) => {
+    if (!Array.isArray(list) || list.length === 0) return;
+
+    list.forEach(item => {
+      if (!item || !item.id) return;
+
+      // جستجو بر اساس ID یا بر اساس عنوان و نوع یکسان
+      let existingKey = item.id;
+      if (!mergedMap.has(existingKey)) {
+        for (const [k, v] of mergedMap.entries()) {
+          if (
+            v.label.trim().toLowerCase() === item.label.trim().toLowerCase() && 
+            v.type === item.type
+          ) {
+            existingKey = k;
+            break;
+          }
+        }
+      }
+
+      if (mergedMap.has(existingKey)) {
+        const existing = mergedMap.get(existingKey)!;
+        // ادغام تمامی زیردسته‌ها به صورت یکتا و بدون از بین رفتن موارد موجود
+        const subMap = new Map<string, CategorySubItem>();
+
+        // ابتدا زیردسته‌های موجود قبلی
+        (existing.subCategories || []).forEach(sub => {
+          if (sub && sub.id) {
+            subMap.set(sub.id, { ...sub });
+          }
+        });
+
+        // سپس اضافه کردن و ادغام زیردسته‌های جدید
+        (item.subCategories || []).forEach(sub => {
+          if (!sub || !sub.id) return;
+
+          let existingSubKey = sub.id;
+          if (!subMap.has(existingSubKey)) {
+            for (const [sk, sv] of subMap.entries()) {
+              if (sv.name.trim().toLowerCase() === sub.name.trim().toLowerCase()) {
+                existingSubKey = sk;
+                break;
+              }
+            }
+          }
+
+          if (subMap.has(existingSubKey)) {
+            const currentSub = subMap.get(existingSubKey)!;
+            subMap.set(existingSubKey, {
+              id: currentSub.id,
+              name: sub.name || currentSub.name
+            });
+          } else {
+            subMap.set(sub.id, { ...sub });
+          }
+        });
+
+        mergedMap.set(existingKey, {
+          ...existing,
+          label: item.label || existing.label,
+          type: item.type || existing.type,
+          color: item.color || existing.color,
+          badgeBg: item.badgeBg || existing.badgeBg,
+          isCustom: existing.isCustom && item.isCustom,
+          subCategories: Array.from(subMap.values())
+        });
+      } else {
+        // دسته کاملاً جدید سفارشی
+        mergedMap.set(item.id, {
+          ...item,
+          subCategories: Array.isArray(item.subCategories) ? item.subCategories.map(s => ({ ...s })) : []
+        });
+      }
+    });
+  };
+
+  // ادغام لیست‌های کلاینت و سرور
+  mergeListIntoMap(localList);
+  mergeListIntoMap(incomingList);
+
+  // ۲. بررسی تراکنش‌ها برای جلوگیری از یتیم شدن هر دسته یا زیردسته ثبت‌شده
+  if (Array.isArray(transactionsList) && transactionsList.length > 0) {
+    transactionsList.forEach(tx => {
+      if (!tx || !tx.category) return;
+      const catKey = tx.category;
+
+      if (!mergedMap.has(catKey)) {
+        mergedMap.set(catKey, {
+          id: catKey,
+          type: tx.type || 'expense',
+          label: catKey === 'ads_basina' ? 'تبلیغات باسینا' : catKey,
+          color: tx.type === 'income' ? 'text-emerald-700' : 'text-slate-700',
+          badgeBg: tx.type === 'income' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-800 border-slate-300',
+          isCustom: true,
+          subCategories: tx.subCategory ? [{ id: tx.subCategory, name: tx.subCategory }] : []
+        });
+      } else if (tx.subCategory) {
+        const cat = mergedMap.get(catKey)!;
+        const subs = cat.subCategories || [];
+        if (!subs.some(s => s.id === tx.subCategory || s.name === tx.subCategory)) {
+          cat.subCategories = [...subs, { id: tx.subCategory, name: tx.subCategory }];
+          mergedMap.set(catKey, cat);
+        }
+      }
+    });
+  }
+
+  // ۳. بازبینی و تایید وجود دسته‌های ضروری اولیه
+  const allMerged = Array.from(mergedMap.values());
+  return mergeWithDefaultCategories(allMerged);
+};
+
+/**
  * همگام‌سازی هوشمند فاکتورهای مودیان و ارزش افزوده با تراکنش‌های درآمدی دفتر کل
  */
 export const reconcileVatInvoicesWithTransactions = (
@@ -503,9 +635,16 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
             writeLocal('ayandeh_service_tariffs', serverData.serviceTariffs);
           }
 
-          if (Array.isArray(serverData.customCategories) && serverData.customCategories.length > 0) {
-            setCustomCategories(serverData.customCategories);
-            writeLocal('ayandeh_custom_categories', serverData.customCategories);
+          if (Array.isArray(serverData.customCategories)) {
+            setCustomCategories(prev => {
+              const reconciled = reconcileCustomCategories(
+                prev, 
+                serverData.customCategories, 
+                serverData.transactions || transactions
+              );
+              writeLocal('ayandeh_custom_categories', reconciled);
+              return reconciled;
+            });
           }
 
           if (serverData.companyLogo !== undefined && serverData.companyLogo) {
@@ -1486,11 +1625,30 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     onShowToast('زیردسته با موفقیت حذف شد.');
   };
 
-  // ارسال کلیه داده‌های دستگاه جاری به سرور (برای هماهنگ‌سازی لپ‌تاپ و گوشی)
+  // ارسال کلیه داده‌های دستگاه جاری به سرور (برای هماهنگ‌سازی لپ‌تاپ و گوشی بدون اتلاف داده در دسته‌ها و زیردسته‌ها)
   const handlePushAllDataToServer = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     try {
       let savedLogo: string | null = null;
       try { savedLogo = localStorage.getItem('ayandeh_company_logo'); } catch {}
+
+      // ۱. بررسی داده‌های سرور و ادغام جامع دوطرفه (Lossless Reconciliation) قبل از ارسال
+      let reconciledCategories = reconcileCustomCategories(customCategories, [], transactions);
+      try {
+        const currentServer = await serverApi.getFinancialData();
+        if (currentServer && Array.isArray(currentServer.customCategories) && currentServer.customCategories.length > 0) {
+          reconciledCategories = reconcileCustomCategories(
+            customCategories, 
+            currentServer.customCategories, 
+            transactions
+          );
+        }
+      } catch (checkErr) {
+        console.warn('Could not pre-fetch server categories before push:', checkErr);
+      }
+
+      setCustomCategories(reconciledCategories);
+      writeLocal('ayandeh_custom_categories', reconciledCategories);
+
       const payload = {
         transactions,
         employees,
@@ -1502,12 +1660,13 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         serviceTariffs,
         fiscalYears,
         users,
-        customCategories,
+        customCategories: reconciledCategories,
         companyLogo: savedLogo,
       };
+
       const res = await serverApi.pushAllData(payload);
       if (res.ok) {
-        onShowToast('اطلاعات این مرورگر با موفقیت روی سرور متمرکز ذخیره شد و در گوشی و دیگر دستگاه‌ها در دسترس است.');
+        onShowToast('اطلاعات این مرورگر و کلیه دسته‌بندی‌ها با موفقیت روی سرور متمرکز ذخیره شد.');
         return { success: true, message: res.message || 'همگام‌سازی انجام شد' };
       } else {
         return { success: false, message: res.message || 'خطا در ثبت روی سرور' };
@@ -1517,17 +1676,27 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     }
   }, [transactions, employees, salaryMatrix, members, loans, bankAccounts, vatInvoices, serviceTariffs, fiscalYears, users, customCategories, onShowToast]);
 
-  // دریافت فوری و اجباری آخرین اطلاعات از سرور
+  // دریافت فوری و اجباری آخرین اطلاعات از سرور با تضمین ادغام کامل دسته‌ها و زیردسته‌ها
   const handlePullAllDataFromServer = useCallback(async (): Promise<boolean> => {
     try {
+      const serverData = await serverApi.getFinancialData();
+      if (serverData && Array.isArray(serverData.customCategories)) {
+        const mergedCategories = reconcileCustomCategories(
+          customCategories, 
+          serverData.customCategories, 
+          serverData.transactions || transactions
+        );
+        setCustomCategories(mergedCategories);
+        writeLocal('ayandeh_custom_categories', mergedCategories);
+      }
       await syncDataFromServer(true);
-      onShowToast('اطلاعات با موفقیت از سرور متمرکز دریافت و به‌روزرسانی شد.');
+      onShowToast('اطلاعات و تمامی دسته‌بندی‌ها با موفقیت از سرور متمرکز دریافت و یکپارچه شد.');
       return true;
     } catch {
       onShowToast('خطا در دریافت اطلاعات از سرور.');
       return false;
     }
-  }, [syncDataFromServer, onShowToast]);
+  }, [syncDataFromServer, customCategories, transactions, onShowToast]);
 
   const handleResetCategoriesToDefaults = () => {
     setCustomCategories(INITIAL_CUSTOM_CATEGORIES);
@@ -1812,5 +1981,6 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     handleMigrateToCloud,
     handlePushAllDataToServer,
     handlePullAllDataFromServer,
+    reconcileCustomCategories,
   };
 }
