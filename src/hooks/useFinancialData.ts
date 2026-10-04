@@ -858,6 +858,57 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     }
   }, []);
 
+  // همگام‌سازی و انتقال خودکار اسناد مالی ثبت‌شده برای پرسنل به ماتریس حقوق (بر پایه ماه کارکرد حقوق)
+  useEffect(() => {
+    if (employees.length === 0 || transactions.length === 0) return;
+
+    let hasMatrixUpdates = false;
+    let newMatrix = [...salaryMatrix];
+
+    employees.forEach(emp => {
+      for (let m = 1; m <= 12; m++) {
+        const empMonthTxs = transactions.filter(t => {
+          const targetYear = t.salaryYear || t.year;
+          const targetMonth = t.salaryMonth || t.month;
+          return targetYear === selectedYear && 
+            targetMonth === m && 
+            (t.relatedEmployeeId === emp.id || (t.recipientOrPayer && emp.name.trim().toLowerCase() === t.recipientOrPayer.trim().toLowerCase()) || (t.title && t.title.includes(emp.name))) &&
+            (t.category === 'salary' || t.relatedEmployeeId === emp.id || Boolean(t.title?.includes('حقوق')) || Boolean(t.description?.includes('حقوق')) || Boolean(t.title?.includes('دستمزد')));
+        });
+
+        if (empMonthTxs.length > 0) {
+          const totalMonthSalary = empMonthTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
+          const cellIndex = newMatrix.findIndex(item => item.employeeId === emp.id && item.year === selectedYear && item.month === m);
+          if (cellIndex >= 0) {
+            if (newMatrix[cellIndex].amount !== totalMonthSalary) {
+              newMatrix[cellIndex] = {
+                ...newMatrix[cellIndex],
+                amount: totalMonthSalary,
+                status: totalMonthSalary > 0 ? 'paid' : 'zero'
+              };
+              hasMatrixUpdates = true;
+            }
+          } else {
+            newMatrix.push({
+              id: `sm-${emp.id}-${selectedYear}-${m}`,
+              employeeId: emp.id,
+              year: selectedYear,
+              month: m as PersianMonthNumber,
+              amount: totalMonthSalary,
+              status: totalMonthSalary > 0 ? 'paid' : 'zero'
+            });
+            hasMatrixUpdates = true;
+          }
+        }
+      }
+    });
+
+    if (hasMatrixUpdates) {
+      setSalaryMatrix(newMatrix);
+      writeLocal('ayandeh_salary_matrix', newMatrix);
+    }
+  }, [transactions, employees, selectedYear]);
+
   // ==========================
   // عملیات تراکنش‌ها (Transactions)
   // ==========================
@@ -877,14 +928,115 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     // ☁️ ذخیره در سرور و ابر
     serverApi.saveTransaction(tx);
     SupabaseDataService.saveTransaction(tx);
+
+    // ⚡ همگام‌سازی مستقیم و بلادرنگ با ماتریس حقوق پرسنل (بر پایه ماه کارکرد حقوق)
+    const targetEmpId = tx.relatedEmployeeId || employees.find(e => 
+      (tx.recipientOrPayer && e.name.trim().toLowerCase() === tx.recipientOrPayer.trim().toLowerCase()) ||
+      (tx.title && tx.title.includes(e.name.trim()))
+    )?.id;
+
+    const isSalaryTx = tx.category === 'salary' || 
+      Boolean(tx.relatedEmployeeId) || 
+      Boolean(tx.title?.includes('حقوق')) || 
+      Boolean(tx.description?.includes('حقوق')) || 
+      Boolean(tx.title?.includes('دستمزد'));
+
+    if (targetEmpId && isSalaryTx) {
+      const salYear = tx.salaryYear || tx.year;
+      const salMonth = tx.salaryMonth || tx.month;
+
+      const empMonthTxs = updated.filter(t => {
+        const tYear = t.salaryYear || t.year;
+        const tMonth = t.salaryMonth || t.month;
+        return tYear === salYear && 
+          tMonth === salMonth && 
+          (t.relatedEmployeeId === targetEmpId || (t.recipientOrPayer && employees.find(e => e.id === targetEmpId)?.name.trim().toLowerCase() === t.recipientOrPayer.trim().toLowerCase()) || (employees.find(e => e.id === targetEmpId)?.name && t.title?.includes(employees.find(e => e.id === targetEmpId)!.name))) &&
+          (t.category === 'salary' || t.relatedEmployeeId === targetEmpId || Boolean(t.title?.includes('حقوق')) || Boolean(t.description?.includes('حقوق')) || Boolean(t.title?.includes('دستمزد')));
+      });
+      const totalMonthSalary = empMonthTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
+
+      setSalaryMatrix(prev => {
+        const smIndex = prev.findIndex(item => item.employeeId === targetEmpId && item.year === salYear && item.month === salMonth);
+        let updatedSm: SalaryMatrixItem[];
+        let savedCell: SalaryMatrixItem;
+
+        if (smIndex >= 0) {
+          updatedSm = [...prev];
+          savedCell = {
+            ...updatedSm[smIndex],
+            amount: totalMonthSalary,
+            status: totalMonthSalary > 0 ? 'paid' : 'zero',
+          };
+          updatedSm[smIndex] = savedCell;
+        } else {
+          savedCell = {
+            id: `sm-${targetEmpId}-${salYear}-${salMonth}`,
+            employeeId: targetEmpId,
+            year: salYear,
+            month: salMonth,
+            amount: totalMonthSalary,
+            status: totalMonthSalary > 0 ? 'paid' : 'zero',
+          };
+          updatedSm = [...prev, savedCell];
+        }
+
+        writeLocal('ayandeh_salary_matrix', updatedSm);
+        serverApi.saveSalaryCell(savedCell);
+        SupabaseDataService.saveSalaryMatrixItem(savedCell);
+        return updatedSm;
+      });
+    }
   };
 
   const handleDeleteTransaction = (id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
+    const txToDelete = transactions.find(t => t.id === id);
+    const updated = transactions.filter(t => t.id !== id);
+    setTransactions(updated);
     onShowToast('سند مالی با موفقیت حذف گردید.');
     // ☁️ حذف از سرور و ابر
     serverApi.deleteTransaction(id);
     SupabaseDataService.deleteTransaction(id);
+
+    // به‌روزرسانی مجدد ماتریس حقوق در صورت حذف سند مربوط به کارمند
+    if (txToDelete) {
+      const targetEmpId = txToDelete.relatedEmployeeId || employees.find(e => 
+        (txToDelete.recipientOrPayer && e.name.trim().toLowerCase() === txToDelete.recipientOrPayer.trim().toLowerCase()) ||
+        (txToDelete.title && txToDelete.title.includes(e.name.trim()))
+      )?.id;
+
+      if (targetEmpId) {
+        const salYear = txToDelete.salaryYear || txToDelete.year;
+        const salMonth = txToDelete.salaryMonth || txToDelete.month;
+
+        const empMonthTxs = updated.filter(t => {
+          const tYear = t.salaryYear || t.year;
+          const tMonth = t.salaryMonth || t.month;
+          return tYear === salYear && 
+            tMonth === salMonth && 
+            (t.relatedEmployeeId === targetEmpId || (t.recipientOrPayer && employees.find(e => e.id === targetEmpId)?.name.trim().toLowerCase() === t.recipientOrPayer.trim().toLowerCase()) || (employees.find(e => e.id === targetEmpId)?.name && t.title?.includes(employees.find(e => e.id === targetEmpId)!.name))) &&
+            (t.category === 'salary' || t.relatedEmployeeId === targetEmpId || Boolean(t.title?.includes('حقوق')) || Boolean(t.description?.includes('حقوق')) || Boolean(t.title?.includes('دستمزد')));
+        });
+        const totalMonthSalary = empMonthTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
+
+        setSalaryMatrix(prev => {
+          const smIndex = prev.findIndex(item => item.employeeId === targetEmpId && item.year === salYear && item.month === salMonth);
+          if (smIndex >= 0) {
+            const updatedSm = [...prev];
+            const savedCell = {
+              ...updatedSm[smIndex],
+              amount: totalMonthSalary,
+              status: totalMonthSalary > 0 ? 'paid' : 'zero',
+            };
+            updatedSm[smIndex] = savedCell;
+            writeLocal('ayandeh_salary_matrix', updatedSm);
+            serverApi.saveSalaryCell(savedCell);
+            SupabaseDataService.saveSalaryMatrixItem(savedCell);
+            return updatedSm;
+          }
+          return prev;
+        });
+      }
+    }
   };
 
   const handleClearDemoTransactions = () => {
@@ -1015,6 +1167,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     day?: number;
     dateString?: string;
     trackingCode?: string;
+    salaryMonth?: PersianMonthNumber;
+    salaryYear?: number;
   }) => {
     const member = members.find(m => m.id === params.memberId);
     const day = params.day || (params.month <= 6 ? 31 : (params.month <= 11 ? 30 : 29));
@@ -1035,6 +1189,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       recipientOrPayer: member?.name || 'عضو هیئت مدیره',
       relatedMemberId: params.memberId,
       memberPayoutType: params.type,
+      salaryMonth: params.salaryMonth || (params.type === 'salary' ? params.month : undefined),
+      salaryYear: params.salaryYear || (params.type === 'salary' ? selectedYear : undefined),
       trackingCode: params.trackingCode,
       createdBy: currentUser?.email || 'vahidkamali03@gmail.com',
       createdByName: currentUser?.fullName || 'وحید کمالی',

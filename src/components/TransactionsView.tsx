@@ -143,7 +143,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       if (typeFilter !== 'all' && t.type !== typeFilter) return false;
       if (categoryFilter !== 'all' && t.category !== categoryFilter) return false;
       if (subCategoryFilter !== 'all' && t.subCategory !== subCategoryFilter) return false;
-      if (monthFilter !== 'all' && t.month !== Number(monthFilter)) return false;
+      if (monthFilter !== 'all') {
+        const filterM = Number(monthFilter);
+        const effectiveM = t.salaryMonth || t.month;
+        if (t.month !== filterM && effectiveM !== filterM) return false;
+      }
 
       // Creator filter
       if (creatorFilter !== 'all') {
@@ -1036,6 +1040,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                             </span>
                             <span>•</span>
                             <span>ماه {monthName}</span>
+                            {t.salaryMonth && t.salaryMonth !== t.month && (
+                              <span className="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded font-bold text-[9px]">
+                                بابت کارکرد: {PERSIAN_MONTHS.find(m => m.num === t.salaryMonth)?.name || t.salaryMonth}
+                              </span>
+                            )}
                           </div>
                           {t.createdAt && (
                             <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5" title="زمان ثبت سند در سامانه">
@@ -1208,6 +1217,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                             <span>{t.dateString}</span>
                           </div>
                           <span className="text-[11px] text-slate-500 block mt-0.5">ماه {monthName}</span>
+                          {t.salaryMonth && t.salaryMonth !== t.month && (
+                            <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded font-bold mt-1">
+                              بابت کارکرد: {PERSIAN_MONTHS.find(m => m.num === t.salaryMonth)?.name || t.salaryMonth}
+                            </span>
+                          )}
                           {t.createdAt && (
                             <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1 font-normal" title="زمان دقیق ثبت سند در سامانه">
                               <Clock className="w-3 h-3 text-slate-400 shrink-0" />

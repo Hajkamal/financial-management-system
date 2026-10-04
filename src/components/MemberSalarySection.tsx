@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { 
   Briefcase, 
   Wallet, 
@@ -48,6 +48,8 @@ interface MemberSalarySectionProps {
     day?: number;
     dateString?: string;
     trackingCode?: string;
+    salaryMonth?: PersianMonthNumber;
+    salaryYear?: number;
   }) => void;
   onDeleteTransaction: (id: string) => void;
   onNavigateToMembers?: () => void;
@@ -72,6 +74,8 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
   const [amount, setAmount] = useState<string>('');
   const [month, setMonth] = useState<PersianMonthNumber>(1);
   const [day, setDay] = useState<number>(28);
+  const [salaryMonth, setSalaryMonth] = useState<PersianMonthNumber>(1);
+  const [salaryYear, setSalaryYear] = useState<number>(selectedYear);
   const [trackingCode, setTrackingCode] = useState<string>('');
   const [title, setTitle] = useState<string>('');
   const [description, setDescription] = useState<string>('');
@@ -85,27 +89,61 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
   // Deletion Modal
   const [deletingTx, setDeletingTx] = useState<{ id: string; title: string } | null>(null);
 
-  // Filter shareholder payout transactions for current year
-  const memberTransactions = useMemo(() => {
-    return transactions.filter(
-      t => t.type === 'expense' && 
-           t.category === 'shareholder_payout' && 
-           t.year === selectedYear
-    );
-  }, [transactions, selectedYear]);
+  // تابع کمکی جامع برای شناسایی عضو متناظر و نوع پرداخت (حقوق یا برداشت) برای هر تراکنش مالی
+  const getTxMemberInfo = useCallback((t: FinancialTransaction) => {
+    let member = members.find(m => m.id === t.relatedMemberId);
+    if (!member && t.recipientOrPayer) {
+      const rec = t.recipientOrPayer.trim().toLowerCase();
+      member = members.find(m => m.name.trim().toLowerCase() === rec);
+    }
+    if (!member && t.title) {
+      const tit = t.title.toLowerCase();
+      member = members.find(m => tit.includes(m.name.trim().toLowerCase()));
+    }
 
-  // Statistics calculation
+    if (!member && t.category !== 'shareholder_payout') {
+      return null;
+    }
+
+    const isExplicitSalary = t.memberPayoutType === 'salary' || 
+      t.category === 'salary' || 
+      Boolean(t.title?.includes('حقوق')) || 
+      Boolean(t.description?.includes('حقوق'));
+
+    const payoutType: MemberPayoutType = isExplicitSalary 
+      ? 'salary' 
+      : (t.memberPayoutType || (member?.isWorkingForce ? 'salary' : 'profit_withdrawal'));
+
+    return {
+      member,
+      memberId: member ? member.id : (t.relatedMemberId || ''),
+      memberName: member ? member.name : (t.recipientOrPayer || 'عضو شرکت'),
+      payoutType
+    };
+  }, [members]);
+
+  // فیلتر تمامی اسناد پرداختی و حقوق اعضای شرکت در سال مالی انتخابی (با لحاظ سال کارکرد حقوق)
+  const memberTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      const targetYear = t.salaryYear || t.year;
+      if (targetYear !== selectedYear) return false;
+      const info = getTxMemberInfo(t);
+      return Boolean(info);
+    });
+  }, [transactions, selectedYear, getTxMemberInfo]);
+
+  // محاسبات آمار کل پرداختی‌ها به اعضا
   const totalSalaryPayout = useMemo(() => {
     return memberTransactions
-      .filter(t => t.memberPayoutType === 'salary')
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [memberTransactions]);
+      .filter(t => getTxMemberInfo(t)?.payoutType === 'salary')
+      .reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
+  }, [memberTransactions, getTxMemberInfo]);
 
   const totalProfitWithdrawal = useMemo(() => {
     return memberTransactions
-      .filter(t => t.memberPayoutType === 'profit_withdrawal')
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [memberTransactions]);
+      .filter(t => getTxMemberInfo(t)?.payoutType === 'profit_withdrawal')
+      .reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
+  }, [memberTransactions, getTxMemberInfo]);
 
   const totalAllMemberPayouts = totalSalaryPayout + totalProfitWithdrawal;
 
@@ -117,12 +155,15 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
   const handleOpenAddModal = (defaultMemberId?: string, defaultMonth?: PersianMonthNumber) => {
     const memId = defaultMemberId || (members[0]?.id || '');
     const mem = members.find(m => m.id === memId);
+    const targetSalMonth = defaultMonth || 1;
     
     setSelectedMemberId(memId);
     setPayoutType(mem?.isWorkingForce ? 'salary' : 'profit_withdrawal');
     setAmount('');
-    setMonth(defaultMonth || 1);
+    setMonth(targetSalMonth);
     setDay(28);
+    setSalaryMonth(targetSalMonth);
+    setSalaryYear(selectedYear);
     setTrackingCode('');
     setTitle('');
     setDescription('');
@@ -145,11 +186,18 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
     if (numAmount <= 0 || !selectedMemberId) return;
 
     const mem = members.find(m => m.id === selectedMemberId);
-    const monthObj = PERSIAN_MONTHS.find(m => m.num === month);
-    const monthName = monthObj ? monthObj.name : month;
+    const payMonthObj = PERSIAN_MONTHS.find(m => m.num === month);
+    const salMonthObj = PERSIAN_MONTHS.find(m => m.num === salaryMonth);
+    const payMonthName = payMonthObj ? payMonthObj.name : month;
+    const salMonthName = salMonthObj ? salMonthObj.name : salaryMonth;
     const typeLabel = payoutType === 'salary' ? 'واریز حقوق نیروی فعال' : 'برداشت عضو / سود';
 
-    const defaultTitle = `${typeLabel} - ${mem?.name || 'عضو شرکت'} (ماه ${monthName})`;
+    const defaultTitle = payoutType === 'salary'
+      ? (salaryMonth !== month 
+          ? `${typeLabel} - ${mem?.name || 'عضو شرکت'} (کارکرد ${salMonthName} - پرداخت در ${payMonthName})`
+          : `${typeLabel} - ${mem?.name || 'عضو شرکت'} (ماه ${salMonthName})`)
+      : `برداشت عضو / سود - ${mem?.name || 'عضو شرکت'} (ماه ${payMonthName})`;
+
     const finalTitle = title.trim() || defaultTitle;
     const finalDateString = `${selectedYear}/${month < 10 ? '0' + month : month}/${day < 10 ? '0' + day : day}`;
 
@@ -163,6 +211,8 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
       title: finalTitle,
       description: description.trim() || undefined,
       trackingCode: trackingCode.trim() || `MEM-${Date.now().toString().slice(-6)}`,
+      salaryMonth: payoutType === 'salary' ? salaryMonth : undefined,
+      salaryYear: payoutType === 'salary' ? salaryYear : undefined,
     });
 
     setIsModalOpen(false);
@@ -171,27 +221,32 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
   // Filtered ledger transactions
   const filteredTransactions = useMemo(() => {
     return memberTransactions.filter(t => {
-      if (filterMember !== 'all' && t.relatedMemberId !== filterMember) {
+      const info = getTxMemberInfo(t);
+      if (filterMember !== 'all' && info?.memberId !== filterMember) {
         return false;
       }
-      if (filterType !== 'all' && t.memberPayoutType !== filterType) {
+      if (filterType !== 'all' && info?.payoutType !== filterType) {
         return false;
       }
-      if (filterMonth !== 'all' && t.month !== Number(filterMonth)) {
-        return false;
+      if (filterMonth !== 'all') {
+        const filterM = Number(filterMonth);
+        const effectiveM = t.salaryMonth || t.month;
+        if (t.month !== filterM && effectiveM !== filterM) {
+          return false;
+        }
       }
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
-        const mem = members.find(m => m.id === t.relatedMemberId);
+        const memName = info?.memberName || '';
         const matchTitle = (t.title || '').toLowerCase().includes(q);
         const matchDesc = (t.description || '').toLowerCase().includes(q);
         const matchCode = (t.trackingCode || '').toLowerCase().includes(q);
-        const matchMem = mem ? mem.name.toLowerCase().includes(q) : false;
+        const matchMem = memName.toLowerCase().includes(q);
         if (!matchTitle && !matchDesc && !matchCode && !matchMem) return false;
       }
       return true;
     });
-  }, [memberTransactions, filterMember, filterType, filterMonth, searchQuery, members]);
+  }, [memberTransactions, filterMember, filterType, filterMonth, searchQuery, getTxMemberInfo]);
 
   return (
     <div className="space-y-6" id="member-salary-section">
@@ -397,17 +452,20 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
 
                       {/* Member Cells */}
                       {members.map(mem => {
-                        const cellTxs = memberTransactions.filter(
-                          t => t.relatedMemberId === mem.id && t.month === monthItem.num
-                        );
+                        const cellTxs = memberTransactions.filter(t => {
+                          const info = getTxMemberInfo(t);
+                          const targetMonth = t.salaryMonth || t.month;
+                          const targetYear = t.salaryYear || t.year;
+                          return info?.memberId === mem.id && targetMonth === monthItem.num && targetYear === selectedYear;
+                        });
 
                         const salarySum = cellTxs
-                          .filter(t => t.memberPayoutType === 'salary')
-                          .reduce((sum, t) => sum + t.amount, 0);
+                          .filter(t => getTxMemberInfo(t)?.payoutType === 'salary')
+                          .reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
 
                         const withdrawalSum = cellTxs
-                          .filter(t => t.memberPayoutType === 'profit_withdrawal')
-                          .reduce((sum, t) => sum + t.amount, 0);
+                          .filter(t => getTxMemberInfo(t)?.payoutType === 'profit_withdrawal')
+                          .reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
 
                         const totalCell = salarySum + withdrawalSum;
                         monthTotal += totalCell;
@@ -475,13 +533,13 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                     جمع کل سال
                   </td>
                   {members.map(mem => {
-                    const memTxs = memberTransactions.filter(t => t.relatedMemberId === mem.id);
+                    const memTxs = memberTransactions.filter(t => getTxMemberInfo(t)?.memberId === mem.id);
                     const memSalary = memTxs
-                      .filter(t => t.memberPayoutType === 'salary')
-                      .reduce((sum, t) => sum + t.amount, 0);
+                      .filter(t => getTxMemberInfo(t)?.payoutType === 'salary')
+                      .reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
                     const memWithdrawal = memTxs
-                      .filter(t => t.memberPayoutType === 'profit_withdrawal')
-                      .reduce((sum, t) => sum + t.amount, 0);
+                      .filter(t => getTxMemberInfo(t)?.payoutType === 'profit_withdrawal')
+                      .reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
                     const memTotal = memSalary + memWithdrawal;
 
                     return (
@@ -594,8 +652,10 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                   </tr>
                 ) : (
                   filteredTransactions.map(tx => {
-                    const mem = members.find(m => m.id === tx.relatedMemberId);
-                    const isSalary = tx.memberPayoutType === 'salary';
+                    const info = getTxMemberInfo(tx);
+                    const mem = info?.member || members.find(m => m.id === tx.relatedMemberId);
+                    const isSalary = info?.payoutType === 'salary';
+                    const displayName = mem ? mem.name : (info?.memberName || tx.recipientOrPayer || 'عضو شرکت');
 
                     return (
                       <tr key={tx.id} className="hover:bg-slate-50/70 transition-colors">
@@ -603,7 +663,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                           {tx.dateString}
                         </td>
                         <td className="p-3">
-                          <div className="font-bold text-slate-900">{mem ? mem.name : tx.recipientOrPayer}</div>
+                          <div className="font-bold text-slate-900">{displayName}</div>
                           {mem && (
                             <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
                               <span>{mem.role}</span>
@@ -630,6 +690,11 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                         </td>
                         <td className="p-3">
                           <div className="font-semibold text-slate-800">{tx.title}</div>
+                          {tx.salaryMonth && tx.salaryMonth !== tx.month && (
+                            <div className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded font-bold inline-block mt-0.5">
+                              کارکرد ماه {PERSIAN_MONTHS.find(m => m.num === tx.salaryMonth)?.name || tx.salaryMonth} (پرداخت در ماه {PERSIAN_MONTHS.find(m => m.num === tx.month)?.name})
+                            </div>
+                          )}
                           {tx.description && (
                             <div className="text-[11px] text-slate-500 mt-0.5">{tx.description}</div>
                           )}
@@ -763,14 +828,22 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                 />
               </div>
 
-              {/* Month & Day */}
+              {/* Month & Day (Payment Date) */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">ماه کارکرد / واریز *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">ماه تاریخ پرداخت / سند *</label>
                   <select
                     value={month}
-                    onChange={(e) => setMonth(Number(e.target.value) as PersianMonthNumber)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    onChange={(e) => {
+                      const newM = Number(e.target.value) as PersianMonthNumber;
+                      setMonth(newM);
+                      if (day <= 10) {
+                        setSalaryMonth(newM === 1 ? 12 : (newM - 1) as PersianMonthNumber);
+                      } else {
+                        setSalaryMonth(newM);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-xs"
                   >
                     {PERSIAN_MONTHS.map(m => (
                       <option key={m.num} value={m.num}>{m.name} ({m.season})</option>
@@ -779,18 +852,89 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">روز ماه (۱ تا ۳۱) *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">روز ماه پرداخت (۱ تا ۳۱) *</label>
                   <input
                     type="number"
                     min="1"
                     max="31"
                     required
                     value={day}
-                    onChange={(e) => setDay(Number(e.target.value) || 1)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-left"
+                    onChange={(e) => {
+                      const newD = Number(e.target.value) || 1;
+                      setDay(newD);
+                      if (newD <= 10) {
+                        setSalaryMonth(month === 1 ? 12 : (month - 1) as PersianMonthNumber);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-left font-mono"
                   />
                 </div>
               </div>
+
+              {/* Salary Period Box for Working Force Members */}
+              {payoutType === 'salary' && (
+                <div className="p-3 bg-amber-50/90 rounded-xl border border-amber-200 space-y-2 text-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-amber-700" />
+                      <span>این پرداختی، حقوق مربوط به کارکرد کدام ماه است؟ *</span>
+                    </span>
+                    {salaryMonth !== month && (
+                      <span className="text-[10px] bg-amber-200/80 text-amber-950 px-2 py-0.5 rounded-full font-black border border-amber-300">
+                        پرداخت در {PERSIAN_MONTHS.find(m => m.num === month)?.name} ⬅️ کارکرد {PERSIAN_MONTHS.find(m => m.num === salaryMonth)?.name}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    مبلغ این پرداختی دقیقاً در ردیف و ستون همین ماه در <strong>جدول حقوق و دستمزد</strong> ثبت می‌شود (حتی اگر پرداخت در روزهای آغازین ماه بعد مثل ۱ یا ۲ تیر انجام شده باشد).
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <div className="flex-1 min-w-[140px]">
+                      <select
+                        value={salaryMonth}
+                        onChange={(e) => setSalaryMonth(Number(e.target.value) as PersianMonthNumber)}
+                        className="w-full px-3 py-2 bg-white border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 font-bold text-xs text-slate-900 cursor-pointer"
+                      >
+                        {PERSIAN_MONTHS.map(m => (
+                          <option key={m.num} value={m.num}>
+                            حقوق ماه {m.name} {m.num === month ? '— (همین ماه پرداخت)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const prevM = (month === 1 ? 12 : month - 1) as PersianMonthNumber;
+                          setSalaryMonth(prevM);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
+                          salaryMonth === (month === 1 ? 12 : month - 1)
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                            : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-100/60'
+                        }`}
+                      >
+                        ماه قبل ({PERSIAN_MONTHS.find(m => m.num === (month === 1 ? 12 : month - 1))?.name}) {day <= 10 ? '⭐' : ''}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSalaryMonth(month)}
+                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
+                          salaryMonth === month
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                            : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-100/60'
+                        }`}
+                      >
+                        همین ماه ({PERSIAN_MONTHS.find(m => m.num === month)?.name})
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Title & Tracking */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

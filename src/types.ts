@@ -192,6 +192,10 @@ export interface FinancialTransaction {
   relatedEmployeeId?: string;
   relatedLoanId?: string;
 
+  // دوره و ماه کارکرد حقوق (مثلاً پرداخت در یکم یا دوم تیر ماه ۴ انجام شده اما حقوق کارکرد خرداد ماه ۳ است)
+  salaryMonth?: PersianMonthNumber;
+  salaryYear?: number;
+
   // فیلدهای ثبت‌کننده و ویرایش‌کننده (رهگیری کاربر)
   createdBy?: string;        // ایمیل یا شناسه کاربر ثبت‌کننده
   createdByName?: string;    // نام و نام خانوادگی کاربر ثبت‌کننده (مثلاً وحید کمالی)

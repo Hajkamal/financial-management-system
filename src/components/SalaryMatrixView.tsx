@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   Table2, 
   Check, 
@@ -11,7 +11,8 @@ import {
   Download,
   Users2,
   Briefcase,
-  FileSpreadsheet
+  FileSpreadsheet,
+  FileCheck
 } from 'lucide-react';
 import { 
   Employee, 
@@ -81,6 +82,62 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
   // Sub-tab: 'staff' (Employees Matrix) or 'members' (Company Members Salary & Withdrawals)
   const [payrollSubTab, setPayrollSubTab] = useState<'staff' | 'members'>('staff');
 
+  // تابع تجمیع حقوق هر کارمند در هر ماه از دو منبع ماتریس و اسناد مالی ثبت‌شده در دفتر کل
+  const getEmployeeMonthData = useCallback((empId: string, monthNum: PersianMonthNumber) => {
+    const emp = employees.find(e => e.id === empId);
+    const cell = salaryMatrix.find(
+      item => item.employeeId === empId && item.month === monthNum && item.year === selectedYear
+    );
+
+    // اسناد مالی ثبت شده در دفتر هزینه‌ها/درآمدها برای این کارمند در این ماه (با اولویت ماه کارکرد حقوق)
+    const empTxs = transactions.filter(t => {
+      const targetYear = t.salaryYear || t.year;
+      const targetMonth = t.salaryMonth || t.month;
+      if (targetYear !== selectedYear || targetMonth !== monthNum) return false;
+      
+      const isDirectMatch = t.relatedEmployeeId === empId;
+      const isNameMatch = Boolean(emp && emp.name && (
+        (t.recipientOrPayer && t.recipientOrPayer.trim().toLowerCase() === emp.name.trim().toLowerCase()) ||
+        (t.title && t.title.toLowerCase().includes(emp.name.trim().toLowerCase()))
+      ));
+
+      if (!isDirectMatch && !isNameMatch) return false;
+
+      // سند باید مربوط به حقوق، پرسنل یا انتخاب کارمند باشد
+      const isSalaryCat = t.category === 'salary' || 
+        isDirectMatch || 
+        Boolean(t.title?.includes('حقوق')) || 
+        Boolean(t.description?.includes('حقوق')) ||
+        Boolean(t.title?.includes('دستمزد'));
+
+      return isSalaryCat;
+    });
+
+    const txTotal = empTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
+    const hasTransactions = empTxs.length > 0;
+
+    // اگر سندی ثبت شده باشد، مبلغ آن به عنوان اصل مبلغ پرداختی ملاک است؛ در غیر این صورت مبلغ ماتریس یا پیش‌فرض پایه
+    const amt = hasTransactions ? txTotal : (cell ? cell.amount : 0);
+    const bonus = cell?.bonus || 0;
+    const totalCell = amt + bonus;
+    const status: 'paid' | 'pending' | 'zero' = totalCell === 0 
+      ? 'zero' 
+      : (hasTransactions ? 'paid' : (cell?.status || 'paid'));
+    const colorTag = cell?.colorTag || '';
+
+    return {
+      amt,
+      bonus,
+      totalCell,
+      status,
+      colorTag,
+      hasTransactions,
+      transactionsCount: empTxs.length,
+      transactions: empTxs,
+      cell
+    };
+  }, [employees, salaryMatrix, transactions, selectedYear]);
+
   const [editingCell, setEditingCell] = useState<{
     employeeId: string;
     month: PersianMonthNumber;
@@ -88,6 +145,9 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
     currentBonus: number;
     currentStatus: 'paid' | 'pending' | 'zero';
     colorTag?: string;
+    hasTransactions?: boolean;
+    transactionsCount?: number;
+    transactions?: FinancialTransaction[];
   } | null>(null);
 
   const [inputAmount, setInputAmount] = useState<string>('');
@@ -100,14 +160,12 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
       if (onShowToast) onShowToast('سطح دسترسی شما فقط خواندنی است و امکان ویرایش مبالغ ماتریس را ندارید.');
       return;
     }
-    const existing = salaryMatrix.find(
-      i => i.employeeId === empId && i.month === month && i.year === selectedYear
-    );
+    const empData = getEmployeeMonthData(empId, month);
     const emp = employees.find(e => e.id === empId);
-    const defAmount = existing ? existing.amount : (emp?.baseSalary || 0);
-    const defBonus = existing?.bonus || 0;
-    const defStatus = existing?.status || 'paid';
-    const defColor = existing?.colorTag || '';
+    const defAmount = empData.amt || (emp?.baseSalary || 0);
+    const defBonus = empData.bonus;
+    const defStatus = empData.status;
+    const defColor = empData.colorTag;
 
     setEditingCell({
       employeeId: empId,
@@ -116,6 +174,9 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
       currentBonus: defBonus,
       currentStatus: defStatus,
       colorTag: defColor,
+      hasTransactions: empData.hasTransactions,
+      transactionsCount: empData.transactionsCount,
+      transactions: empData.transactions,
     });
     setInputAmount(defAmount.toString());
     setInputBonus(defBonus.toString());
@@ -141,12 +202,14 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
     setEditingCell(null);
   };
 
-  // Compute Grand totals
+  // Compute Grand totals using unified amounts (salaryMatrix + transactions)
   const columnGrandTotals: Record<string, number> = {};
   employees.forEach(emp => {
-    const total = salaryMatrix
-      .filter(item => item.employeeId === emp.id && item.year === selectedYear)
-      .reduce((sum, item) => sum + item.amount + (item.bonus || 0), 0);
+    let total = 0;
+    for (let m = 1; m <= 12; m++) {
+      const data = getEmployeeMonthData(emp.id, m as PersianMonthNumber);
+      total += data.totalCell;
+    }
     columnGrandTotals[emp.id] = total;
   });
 
@@ -335,20 +398,17 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
 
                     {/* Employee Cells */}
                     {employees.map(emp => {
-                      const cell = salaryMatrix.find(
-                        item => item.employeeId === emp.id && item.month === month.num && item.year === selectedYear
-                      );
-
-                      const amt = cell ? cell.amount : 0;
-                      const bonus = cell?.bonus || 0;
-                      const totalCell = amt + bonus;
+                      const empData = getEmployeeMonthData(emp.id, month.num);
+                      const amt = empData.amt;
+                      const bonus = empData.bonus;
+                      const totalCell = empData.totalCell;
                       monthTotal += totalCell;
 
                       // Styles based on sheet colors
                       let bgCustom = '';
-                      if (cell?.colorTag) {
-                        bgCustom = cell.colorTag;
-                      } else if (cell?.status === 'pending' || totalCell === 0) {
+                      if (empData.colorTag) {
+                        bgCustom = empData.colorTag;
+                      } else if (empData.status === 'pending' || totalCell === 0) {
                         bgCustom = 'bg-rose-50 text-rose-700';
                       } else if (amt >= 500000000) {
                         bgCustom = 'bg-emerald-100 text-emerald-900 font-bold'; // سبز فسفری مانند شیت کاظم
@@ -358,20 +418,35 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
                         <td 
                           key={emp.id} 
                           onClick={() => handleOpenEdit(emp.id, month.num)}
-                          className={`p-2.5 text-center border-l border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-500 hover:ring-inset transition-all ${bgCustom}`}
-                          title="برای ویرایش کلیک کنید"
+                          className={`p-2 sm:p-2.5 text-center border-l border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-500 hover:ring-inset transition-all ${bgCustom}`}
+                          title={empData.hasTransactions ? `دارای ${toPersianDigits(empData.transactionsCount)} سند مالی ثبت‌شده در دفتر هزینه‌ها/درآمدها` : 'برای ویرایش کلیک کنید'}
                         >
                           {totalCell === 0 ? (
                             <span className="text-slate-400 text-[11px]">۰</span>
                           ) : (
-                            <div className="flex flex-col items-center justify-center">
-                              <span className="font-bold text-slate-900">
+                            <div className="flex flex-col items-center justify-center gap-0.5">
+                              <span className="font-bold text-slate-900 flex items-center justify-center gap-1">
                                 {formatCurrency(amt, currencyMode)}
+                                {empData.hasTransactions && (
+                                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="سند ثبت‌شده در دفتر مالی" />
+                                )}
                               </span>
                               {bonus > 0 && (
                                 <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded mt-0.5">
                                   عیدی/پاداش: {formatCurrency(bonus, currencyMode)}
                                 </span>
+                              )}
+                              {empData.hasTransactions && (
+                                <div className="flex flex-col items-center gap-0.5 mt-0.5">
+                                  <span className="text-[9px] text-emerald-800 bg-emerald-100/80 border border-emerald-300 px-1.5 py-0.2 rounded-full font-bold">
+                                    سند ثبت‌شده ({toPersianDigits(empData.transactionsCount)})
+                                  </span>
+                                  {empData.transactions.some(t => t.salaryMonth && t.salaryMonth !== t.month) && (
+                                    <span className="text-[8px] text-blue-800 bg-blue-50 border border-blue-200 px-1 rounded font-medium" title="پرداخت در ماهی غیر از ماه کارکرد">
+                                      پرداخت در {empData.transactions.map(t => PERSIAN_MONTHS.find(m => m.num === t.month)?.name).join('، ')}
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           )}
@@ -450,6 +525,41 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
             </div>
 
             <div className="space-y-4 py-4">
+              {editingCell.hasTransactions && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-950 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-emerald-900">
+                    <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      مبلغ پایه این ماه مستقیماً از روی <strong>{toPersianDigits(editingCell.transactionsCount || 1)} سند مالی</strong> در دفتر هزینه‌ها استخراج شده است:
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 pt-1">
+                    {editingCell.transactions?.map(tx => {
+                      const payMonthName = PERSIAN_MONTHS.find(m => m.num === tx.month)?.name;
+                      const isDiffMonth = tx.salaryMonth && tx.salaryMonth !== tx.month;
+                      return (
+                        <div key={tx.id} className="p-2 bg-white rounded-lg border border-emerald-100 flex items-center justify-between gap-2 shadow-2xs">
+                          <div>
+                            <div className="font-bold text-slate-800 text-[11px]">{tx.title}</div>
+                            <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                              <span>تاریخ پرداخت: {toPersianDigits(tx.dateString)}</span>
+                              {isDiffMonth && (
+                                <span className="bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded font-bold border border-amber-200 text-[9px]">
+                                  پرداخت در ماه {payMonthName}
+                                </span>
+                              )}
+                              {tx.trackingCode && <span>• پیگیری: {tx.trackingCode}</span>}
+                            </div>
+                          </div>
+                          <div className="font-black text-emerald-800 text-xs shrink-0">
+                            {formatCurrency(tx.amount, currencyMode)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div>
                 <AmountInput
                   label="مبلغ حقوق پرداختی ماهانه"

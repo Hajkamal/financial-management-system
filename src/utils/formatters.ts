@@ -459,15 +459,19 @@ function prepareSalaryMatrixRows(employees: Employee[], salaryMatrix: SalaryMatr
 
 // Helper to prepare Members & Shareholders data for a specific year
 function prepareMembersRows(members: CompanyMember[], transactions: FinancialTransaction[], year: number) {
-  const yearTxs = transactions.filter(t => t.year === year);
+  const yearTxs = transactions.filter(t => (t.salaryYear || t.year) === year);
   return members.map((m, idx) => {
-    const memberTxs = yearTxs.filter(t => t.relatedMemberId === m.id);
+    const memberTxs = yearTxs.filter(t => 
+      t.relatedMemberId === m.id || 
+      Boolean(t.recipientOrPayer && t.recipientOrPayer.trim().toLowerCase() === m.name.trim().toLowerCase()) ||
+      Boolean(t.title && t.title.toLowerCase().includes(m.name.trim().toLowerCase()))
+    );
     const salaryPaid = memberTxs
-      .filter(t => t.memberPayoutType === 'salary')
-      .reduce((acc, t) => acc + t.amount, 0);
+      .filter(t => t.memberPayoutType === 'salary' || t.category === 'salary' || Boolean(t.title?.includes('حقوق')) || (m.isWorkingForce && !t.memberPayoutType))
+      .reduce((acc, t) => acc + (t.type === 'expense' ? t.amount : -t.amount), 0);
     const profitWithdrawal = memberTxs
-      .filter(t => t.memberPayoutType === 'profit_withdrawal')
-      .reduce((acc, t) => acc + t.amount, 0);
+      .filter(t => t.memberPayoutType === 'profit_withdrawal' || (t.category === 'shareholder_payout' && t.memberPayoutType !== 'salary' && !t.title?.includes('حقوق') && !m.isWorkingForce))
+      .reduce((acc, t) => acc + (t.type === 'expense' ? t.amount : -t.amount), 0);
 
     return {
       'ردیف': idx + 1,
