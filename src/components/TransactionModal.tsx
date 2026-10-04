@@ -315,13 +315,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-2xl p-6 max-w-xl w-full shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 max-h-[92vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 z-50">
+        <div className="bg-white rounded-2xl p-4 sm:p-6 max-w-xl w-full shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 max-h-[94vh] sm:max-h-[92vh] overflow-y-auto">
           
           {/* Modal Header */}
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div>
-              <h3 className="font-bold text-slate-900 text-base">
+              <h3 className="font-bold text-slate-900 text-sm sm:text-base">
                 {editingTransaction ? 'ویرایش سند مالی' : 'ثبت سند درآمد یا هزینه جدید'}
               </h3>
               <span className="text-[11px] text-slate-500 block mt-0.5">
@@ -331,13 +331,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <button
               type="button"
               onClick={handleCloseModal}
-              className="text-slate-400 hover:text-slate-600 text-lg leading-none cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-xl leading-none cursor-pointer"
             >
               ×
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4 py-4 text-xs">
+          <form onSubmit={handleSubmit} className="space-y-4 py-3 sm:py-4 text-xs">
             
             {/* Type Toggle: Income vs Expense */}
             <div>
@@ -346,27 +346,27 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 <button
                   type="button"
                   onClick={() => handleTypeSwitch('income')}
-                  className={`py-2.5 px-4 rounded-xl border flex items-center justify-center gap-2 font-bold transition-colors ${
+                  className={`py-2 sm:py-2.5 px-2 sm:px-4 rounded-xl border flex items-center justify-center gap-1.5 sm:gap-2 font-bold text-[11px] sm:text-xs transition-colors cursor-pointer active:scale-95 ${
                     type === 'income'
                       ? 'border-emerald-600 bg-emerald-50 text-emerald-800 shadow-xs'
                       : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
-                  <span>درآمد (واریز به شرکت)</span>
+                  <ArrowDownLeft className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>درآمد (واریز)</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleTypeSwitch('expense')}
-                  className={`py-2.5 px-4 rounded-xl border flex items-center justify-center gap-2 font-bold transition-colors ${
+                  className={`py-2 sm:py-2.5 px-2 sm:px-4 rounded-xl border flex items-center justify-center gap-1.5 sm:gap-2 font-bold text-[11px] sm:text-xs transition-colors cursor-pointer active:scale-95 ${
                     type === 'expense'
                       ? 'border-rose-600 bg-rose-50 text-rose-800 shadow-xs'
                       : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  <ArrowUpRight className="w-4 h-4 text-rose-600" />
-                  <span>هزینه (پرداخت از شرکت)</span>
+                  <ArrowUpRight className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>هزینه (پرداخت)</span>
                 </button>
               </div>
             </div>

@@ -266,7 +266,7 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
 
       {/* Spreadsheet Table Container or Empty Notice */}
       {employees.length === 0 ? (
-        <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300 shadow-xs">
+        <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-dashed border-slate-300 shadow-xs">
           <Table2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <h3 className="font-bold text-slate-800 text-base mb-1">
             هیچ کارمندی برای محاسبه ماتریس حقوق وجود ندارد
@@ -284,25 +284,33 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Swipe Hint */}
+          <div className="md:hidden px-3.5 py-2 bg-blue-50/80 border-b border-blue-100 text-blue-800 text-[11px] font-medium flex items-center justify-between">
+            <span>ماتریس سالانه حقوق پرسنل</span>
+            <span className="text-[10px] bg-blue-200/60 px-2 py-0.5 rounded font-bold">↔️ پیمایش افقی ستون‌ها</span>
+          </div>
+
+          <div className="overflow-x-auto relative">
             <table className="w-full text-xs text-right border-collapse" id="salary-table">
             <thead>
               <tr className="bg-slate-900 text-white font-bold border-b border-slate-800">
-                <th className="p-3.5 w-28 text-center border-l border-slate-800">ماه / کارمندان</th>
+                <th className="p-3.5 w-24 sm:w-28 text-center border-l border-slate-800 sticky right-0 z-20 bg-slate-900 shadow-xs">
+                  ماه / کارمندان
+                </th>
                 {employees.map(emp => (
-                  <th key={emp.id} className="p-3.5 text-center border-l border-slate-800 min-w-[160px]">
+                  <th key={emp.id} className="p-3.5 text-center border-l border-slate-800 min-w-[140px] sm:min-w-[160px]">
                     <div className="flex flex-col items-center">
                       <span className="font-extrabold text-sm text-white">{emp.name}</span>
-                      <span className="text-[11px] font-normal text-slate-400">
+                      <span className="text-[10px] sm:text-[11px] font-normal text-slate-400">
                         {emp.hasInsurance ? '(دارای بیمه)' : '(بدون بیمه)'} • {emp.role}
                       </span>
                     </div>
                   </th>
                 ))}
-                <th className="p-3.5 w-36 text-center bg-slate-950 font-extrabold text-emerald-400">
+                <th className="p-3.5 w-32 sm:w-36 text-center bg-slate-950 font-extrabold text-emerald-400">
                   جمع کل ماه
                 </th>
-                <th className="p-3.5 w-28 text-center bg-slate-950 font-medium text-slate-300">
+                <th className="p-3.5 w-24 sm:w-28 text-center bg-slate-950 font-medium text-slate-300">
                   عملیات سند
                 </th>
               </tr>
@@ -320,8 +328,8 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
                       isEven ? 'bg-white' : 'bg-slate-50/50'
                     }`}
                   >
-                    {/* Month Name Column */}
-                    <td className="p-3 font-bold text-slate-800 text-center border-l border-slate-200 bg-slate-50/80">
+                    {/* Month Name Column - Sticky on Right */}
+                    <td className="p-3 font-extrabold text-slate-900 text-center border-l border-slate-200 sticky right-0 z-10 bg-slate-100/95 shadow-xs">
                       {month.name}
                     </td>
 
@@ -404,7 +412,7 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
 
               {/* Total Summary Row */}
               <tr className="bg-slate-800 text-white font-extrabold border-t-2 border-slate-900">
-                <td className="p-3.5 text-center border-l border-slate-700 bg-slate-900">
+                <td className="p-3.5 text-center border-l border-slate-700 bg-slate-900 sticky right-0 z-10 shadow-xs">
                   جمع کل سال
                 </td>
                 {employees.map(emp => (

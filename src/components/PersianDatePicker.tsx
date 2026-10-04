@@ -151,7 +151,7 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
       {/* Popover Calendar */}
       {isOpen && (
         <div 
-          className="absolute z-60 top-full mt-1.5 right-0 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 w-72 sm:w-80 text-xs animate-in fade-in zoom-in-95"
+          className="absolute z-60 top-full mt-1.5 right-0 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 sm:p-3.5 w-[calc(100vw-2.5rem)] max-w-xs sm:w-80 text-xs animate-in fade-in zoom-in-95"
           dir="rtl"
         >
           {/* Calendar Header */}

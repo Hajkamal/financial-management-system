@@ -346,41 +346,41 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 px-4 bg-white overflow-x-auto shrink-0">
+        <div className="flex border-b border-slate-200 px-2 sm:px-4 bg-white overflow-x-auto shrink-0 no-scrollbar">
           <button
             onClick={() => { setActiveTab('export'); setParseError(null); }}
-            className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`py-2.5 sm:py-3 px-2.5 sm:px-3.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer shrink-0 ${
               activeTab === 'export'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Download className="w-4 h-4" />
-            <span>تهیه پشتیبان (دانلود)</span>
+            <span>تهیه پشتیبان</span>
           </button>
 
           <button
             onClick={() => { setActiveTab('import'); setParseError(null); }}
-            className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`py-2.5 sm:py-3 px-2.5 sm:px-3.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer shrink-0 ${
               activeTab === 'import'
                 ? 'border-emerald-600 text-emerald-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Upload className="w-4 h-4" />
-            <span>بازخوانی پشتیبان</span>
+            <span>بازخوانی</span>
           </button>
 
           <button
             onClick={() => { setActiveTab('snapshots'); setParseError(null); }}
-            className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`py-2.5 sm:py-3 px-2.5 sm:px-3.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer shrink-0 ${
               activeTab === 'snapshots'
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span>نقاط بازیابی گوشی/مرورگر</span>
+            <span>نقاط بازیابی</span>
             {snapshots.length > 0 && (
               <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 text-[10px] flex items-center justify-center font-bold">
                 {snapshots.length}

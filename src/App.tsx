@@ -307,18 +307,18 @@ export default function App() {
         )}
 
         {/* نوار وضعیت و ابزار همگام‌سازی بین لپ‌تاپ و گوشی */}
-        <div className="bg-slate-900 border-b border-slate-800 text-white px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-2.5 z-20">
+        <div className="bg-slate-900 border-b border-slate-800 text-white px-3 sm:px-4 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 z-20">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
             <span className="font-bold text-slate-200 text-xs">
-              همگام‌سازی سرور فعال است
+              همگام‌سازی متمرکز فعال است
             </span>
-            <span className="text-[11px] text-slate-400 hidden md:inline">
-              (تغییرات شما به صورت خودکار با دیتابیس متمرکز همگام می‌شود)
+            <span className="text-[11px] text-slate-400 hidden lg:inline">
+              (تغییرات شما به صورت خودکار با دیتابیس همگام می‌شود)
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-end">
             <button
               onClick={async () => {
                 const res = await handlePushAllDataToServer();
@@ -326,21 +326,21 @@ export default function App() {
                   showToast('✅ اطلاعات این مرورگر به سرور فرستاده شد. در گوشی دکمه «دریافت از سرور» یا رفرش را بزنید.');
                 }
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
               title="ارسال کلیه اطلاعات این دستگاه به سرور برای دریافت در گوشی"
             >
-              <CloudUpload className="w-3.5 h-3.5" />
-              <span>ارسال به سرور (برای گوشی)</span>
+              <CloudUpload className="w-3.5 h-3.5 shrink-0" />
+              <span>ارسال به سرور</span>
             </button>
 
             <button
               onClick={async () => {
                 await handlePullAllDataFromServer();
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition cursor-pointer"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition cursor-pointer active:scale-95"
               title="دریافت آخرین اطلاعات از سرور متمرکز (همگام‌سازی با لپ‌تاپ)"
             >
-              <Cloud className="w-3.5 h-3.5 text-sky-400" />
+              <Cloud className="w-3.5 h-3.5 text-sky-400 shrink-0" />
               <span>دریافت از سرور</span>
             </button>
           </div>
@@ -415,7 +415,7 @@ export default function App() {
         )}
 
         {/* ناحیه محتوای تب‌ها */}
-        <main className="flex-1 p-3 sm:p-6 lg:p-8 pb-24 md:pb-8 flex flex-col gap-5 sm:gap-6 overflow-y-auto">
+        <main className="flex-1 p-3 sm:p-6 lg:p-8 pb-28 md:pb-8 flex flex-col gap-5 sm:gap-6 overflow-y-auto">
           {activeTab === 'dashboard' && (
             <DashboardView
               transactions={transactions}

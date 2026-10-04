@@ -24,3 +24,20 @@ body {
   background: #94a3b8;
 }
 
+/* Mobile & Touch Utilities */
+.safe-area-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
