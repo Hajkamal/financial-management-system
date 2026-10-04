@@ -14,7 +14,11 @@ import {
   X,
   Sparkles,
   FolderPlus,
-  Layers
+  Layers,
+  UserCheck,
+  CreditCard,
+  Phone,
+  ShieldCheck
 } from 'lucide-react';
 import { 
   FinancialTransaction, 
@@ -196,6 +200,62 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         : [])
   );
 
+  // بررسی آیا دسته انتخاب شده مربوط به حقوق کارمندان است
+  const isSalaryCategory = type === 'expense' && (
+    category === 'salary' || 
+    Boolean(currentCategoryDef?.label?.includes('حقوق')) || 
+    Boolean(currentCategoryDef?.label?.includes('دستمزد'))
+  );
+
+  // کارمند انتخاب شده فعلی
+  const selectedEmployee = employees.find(e => e.id === relatedEmployeeId);
+
+  // عضو شرکت انتخاب شده فعلی
+  const selectedMember = members.find(m => m.id === relatedMemberId);
+
+  // اعضای حقوق‌بگیر (نیروهای فعال)
+  const salariedMembers = members.filter(m => m.isWorkingForce);
+
+  // مقدار جاری سلکتور تجمیعی پرسنل و اعضا
+  const currentPersonValue = relatedEmployeeId ? `emp:${relatedEmployeeId}` : (relatedMemberId ? `mem:${relatedMemberId}` : '');
+
+  // هندلر تغییر انتخاب فرد حقوق‌بگیر
+  const handlePersonSelect = (val: string) => {
+    if (!val) {
+      setRelatedEmployeeId('');
+      setRelatedMemberId('');
+      return;
+    }
+    const [kind, id] = val.split(':');
+    if (kind === 'emp') {
+      const emp = employees.find(e => e.id === id);
+      if (emp) {
+        setRelatedEmployeeId(emp.id);
+        setRelatedMemberId('');
+        setRecipientOrPayer(emp.name);
+        if (emp.baseSalary && (!amount || Number(amount) === 0)) {
+          setAmount(emp.baseSalary.toString());
+        }
+        const monthName = PERSIAN_MONTHS.find(m => m.num === month)?.name || month;
+        if (!title || title.startsWith('هزینه') || title.startsWith('حقوق') || title.startsWith('ثبت')) {
+          setTitle(`حقوق ${emp.name} - ماه ${monthName}`);
+        }
+      }
+    } else if (kind === 'mem') {
+      const mem = members.find(m => m.id === id);
+      if (mem) {
+        setRelatedMemberId(mem.id);
+        setRelatedEmployeeId('');
+        setMemberPayoutType('salary');
+        setRecipientOrPayer(mem.name);
+        const monthName = PERSIAN_MONTHS.find(m => m.num === month)?.name || month;
+        if (!title || title.startsWith('هزینه') || title.startsWith('حقوق') || title.startsWith('واریز') || title.startsWith('ثبت')) {
+          setTitle(`واریز حقوق ${mem.name} - ماه ${monthName}`);
+        }
+      }
+    }
+  };
+
   // سوییچ بین هزینه و درآمد
   const handleTypeSwitch = (newType: TransactionType) => {
     setType(newType);
@@ -288,9 +348,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       description: description.trim() || undefined,
       recipientOrPayer: recipientOrPayer.trim() || undefined,
       trackingCode: trackingCode.trim() || undefined,
-      relatedMemberId: category === 'shareholder_payout' ? relatedMemberId : undefined,
-      memberPayoutType: category === 'shareholder_payout' ? memberPayoutType : undefined,
-      relatedEmployeeId: category === 'salary' ? relatedEmployeeId : undefined,
+      relatedMemberId: (category === 'shareholder_payout' || isSalaryCategory) ? (relatedMemberId || undefined) : undefined,
+      memberPayoutType: (category === 'shareholder_payout' || (isSalaryCategory && relatedMemberId)) ? (memberPayoutType || 'salary') : undefined,
+      relatedEmployeeId: (isSalaryCategory || category === 'salary') ? (relatedEmployeeId || undefined) : undefined,
       relatedLoanId: category === 'loan_installment' ? relatedLoanId : undefined,
 
       createdBy: editingTransaction?.createdBy || currentUser?.email || 'vahidkamali03@gmail.com',
@@ -579,6 +639,198 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Conditional Employee / Salaried Member Selector for Salary */}
+            {isSalaryCategory && (
+              <div className="p-3.5 bg-rose-50/80 rounded-xl border border-rose-200 space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-rose-950 flex items-center gap-1.5 text-xs">
+                    <Users className="w-4 h-4 text-rose-600" />
+                    <span>انتخاب کارمند یا عضو حقوق‌بگیر شرکت *</span>
+                  </span>
+                  <span className="text-[10px] text-rose-700 bg-rose-100/70 px-2 py-0.5 rounded font-medium">
+                    {toPersianDigits(employees.length)} کارمند • {toPersianDigits(salariedMembers.length)} عضو فعال
+                  </span>
+                </div>
+
+                <div>
+                  <select
+                    value={currentPersonValue}
+                    onChange={(e) => handlePersonSelect(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-white border border-rose-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none font-bold text-xs text-slate-800 cursor-pointer shadow-2xs"
+                  >
+                    <option value="">-- لطفاً شخص دریافت‌کننده حقوق را انتخاب کنید --</option>
+                    
+                    {employees.length > 0 && (
+                      <optgroup label="👨‍💼 کارمندان و پرسنل شرکت">
+                        {employees.map(emp => (
+                          <option key={emp.id} value={`emp:${emp.id}`}>
+                            {emp.name} — {emp.role || 'کارمند'} {emp.baseSalary ? `(پایه: ${formatCurrency(emp.baseSalary, currencyMode)})` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+
+                    {members.length > 0 && (
+                      <optgroup label="🤝 اعضای هیئت‌مدیره و هم‌بنیان‌گذاران (نیروی فعال / سهامدار)">
+                        {members.map(m => (
+                          <option key={m.id} value={`mem:${m.id}`}>
+                            {m.name} — {m.role || 'عضو شرکت'} {m.isWorkingForce ? '(نیروی فعال حقوق‌بگیر)' : '(سهامدار)'}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+
+                {/* Detailed Information Box of the Selected Employee */}
+                {selectedEmployee && (
+                  <div className="p-3 bg-white rounded-xl border border-rose-200 shadow-2xs space-y-2.5 text-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-black text-sm shrink-0">
+                          {selectedEmployee.name.slice(0, 1)}
+                        </div>
+                        <div>
+                          <div className="font-extrabold text-slate-900 text-xs flex items-center gap-2">
+                            <span>{selectedEmployee.name}</span>
+                            <span className="text-[10px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-200 font-bold">
+                              {selectedEmployee.role || 'کارمند شرکت'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                            {selectedEmployee.hasInsurance ? (
+                              <span className="text-emerald-700 font-medium flex items-center gap-0.5">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>دارای بیمه تامین اجتماعی</span>
+                                {selectedEmployee.insuranceNumber && (
+                                  <span>({toPersianDigits(selectedEmployee.insuranceNumber)})</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-amber-700 font-medium">بدون بیمه تامین اجتماعی</span>
+                            )}
+                            {selectedEmployee.startDate && (
+                              <span>• شروع همکاری: {toPersianDigits(selectedEmployee.startDate)}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedEmployee.baseSalary && selectedEmployee.baseSalary > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setAmount(selectedEmployee.baseSalary!.toString())}
+                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold transition-colors cursor-pointer shrink-0 self-start sm:self-auto active:scale-95 flex items-center gap-1"
+                          title="کلیک برای درج خودکار این مبلغ در فیلد مبلغ سند"
+                        >
+                          <span>درج حقوق پایه:</span>
+                          <span className="font-black">{formatCurrency(selectedEmployee.baseSalary, currencyMode)}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Banking & Contact Details */}
+                    <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 bg-slate-50/70 p-2 rounded-lg">
+                      {selectedEmployee.iban ? (
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-slate-500 flex items-center gap-1">
+                            <CreditCard className="w-3 h-3 text-slate-400" />
+                            <span>شماره شبا:</span>
+                          </span>
+                          <span className="font-mono font-bold text-slate-900 text-[10px] dir-ltr select-all">
+                            {selectedEmployee.iban}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-slate-400 text-[10px]">شماره شبا در پرونده ثبت نشده</div>
+                      )}
+
+                      {selectedEmployee.phone ? (
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-slate-500 flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-slate-400" />
+                            <span>شماره تماس:</span>
+                          </span>
+                          <span className="font-mono text-slate-800">{selectedEmployee.phone}</span>
+                        </div>
+                      ) : null}
+
+                      {selectedEmployee.nationalId && (
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-slate-500">کد ملی:</span>
+                          <span className="font-mono text-slate-800">{toPersianDigits(selectedEmployee.nationalId)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Detailed Information Box of the Selected Member */}
+                {selectedMember && (
+                  <div className="p-3 bg-white rounded-xl border border-violet-200 shadow-2xs space-y-2.5 text-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center font-black text-sm shrink-0">
+                          {selectedMember.name.slice(0, 1)}
+                        </div>
+                        <div>
+                          <div className="font-extrabold text-slate-900 text-xs flex items-center gap-2">
+                            <span>{selectedMember.name}</span>
+                            <span className="text-[10px] bg-violet-50 text-violet-700 px-1.5 py-0.5 rounded-full border border-violet-200 font-bold">
+                              {selectedMember.role || 'عضو شرکت'}
+                            </span>
+                            {selectedMember.isWorkingForce && (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-300 font-bold">
+                                نیروی فعال حقوق‌بگیر
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            سهم‌الشرکه: {toPersianDigits(selectedMember.sharePercentage)}٪
+                            {selectedMember.joinDate && ` • تاریخ عضویت: ${toPersianDigits(selectedMember.joinDate)}`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Banking & Contact Details */}
+                    <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 bg-slate-50/70 p-2 rounded-lg">
+                      {selectedMember.iban ? (
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-slate-500 flex items-center gap-1">
+                            <CreditCard className="w-3 h-3 text-slate-400" />
+                            <span>شماره شبا:</span>
+                          </span>
+                          <span className="font-mono font-bold text-slate-900 text-[10px] dir-ltr select-all">
+                            {selectedMember.iban}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-slate-400 text-[10px]">شماره شبا در پرونده ثبت نشده</div>
+                      )}
+
+                      {selectedMember.phone ? (
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-slate-500 flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-slate-400" />
+                            <span>شماره تماس:</span>
+                          </span>
+                          <span className="font-mono text-slate-800">{selectedMember.phone}</span>
+                        </div>
+                      ) : null}
+
+                      {selectedMember.nationalId && (
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-slate-500">کد ملی:</span>
+                          <span className="font-mono text-slate-800">{toPersianDigits(selectedMember.nationalId)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Conditional Member Payout Selector */}
             {type === 'expense' && category === 'shareholder_payout' && (
