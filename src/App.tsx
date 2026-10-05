@@ -566,6 +566,11 @@ export default function App() {
               transactions={transactions}
               selectedYear={selectedYear}
               currencyMode={currencyMode}
+              onSaveTransaction={handleSaveTransaction}
+              onEditTransaction={(tx) => {
+                setEditingTx(tx);
+                setIsTxModalOpen(true);
+              }}
               onUpdateSalaryCell={handleUpdateSalaryCell}
               onAddSalaryExpenseTransaction={handleAddSalaryExpenseTransaction}
               onAddMemberPayoutTransaction={handleAddMemberPayoutTransaction}
@@ -576,6 +581,7 @@ export default function App() {
               onShowToast={showToast}
               canEdit={currentAppUser.permissions.canManageSalaryMatrix}
               canExport={currentAppUser.permissions.canExportExcel}
+              currentUser={currentAppUser}
             />
           )}
 
@@ -755,6 +761,11 @@ export default function App() {
         members={members}
         loans={loans}
         currentUser={currentAppUser}
+        transactions={transactions}
+        onEditTransaction={(tx) => {
+          setEditingTx(tx);
+          setIsTxModalOpen(true);
+        }}
         customCategories={customCategories}
         onAddCategory={handleAddCustomCategory}
         onUpdateCategory={handleUpdateCustomCategory}

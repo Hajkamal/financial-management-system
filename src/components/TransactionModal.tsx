@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Plus, 
   ArrowDownLeft, 
@@ -18,7 +18,9 @@ import {
   UserCheck,
   CreditCard,
   Phone,
-  ShieldCheck
+  ShieldCheck,
+  AlertCircle,
+  FileCheck
 } from 'lucide-react';
 import { 
   FinancialTransaction, 
@@ -65,6 +67,8 @@ interface TransactionModalProps {
   members: CompanyMember[];
   loans: Loan[];
   currentUser?: AppUser | null;
+  transactions?: FinancialTransaction[];
+  onEditTransaction?: (tx: FinancialTransaction) => void;
   customCategories?: CustomCategoryDefinition[];
   onAddCategory?: (cat: CustomCategoryDefinition) => void;
   onUpdateCategory?: (cat: CustomCategoryDefinition) => void;
@@ -86,6 +90,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   members,
   loans,
   currentUser,
+  transactions = [],
+  onEditTransaction,
   customCategories = INITIAL_CUSTOM_CATEGORIES,
   onAddCategory,
   onUpdateCategory,
@@ -246,6 +252,42 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   // مقدار جاری سلکتور تجمیعی پرسنل و اعضا
   const currentPersonValue = relatedEmployeeId ? `emp:${relatedEmployeeId}` : (relatedMemberId ? `mem:${relatedMemberId}` : '');
+
+  // بررسی اسناد قبلی ثبت‌شده برای این شخص در ماه کارکرد انتخابی جهت جلوگیری از ثبت تکراری
+  const existingSalaryTransactions = useMemo(() => {
+    if (!transactions || transactions.length === 0) return [];
+    if (!isSalaryCategory && category !== 'salary' && category !== 'shareholder_payout') return [];
+    const targetEmpId = relatedEmployeeId;
+    const targetMemId = relatedMemberId;
+    if (!targetEmpId && !targetMemId && !recipientOrPayer) return [];
+
+    const emp = employees.find(e => e.id === targetEmpId);
+    const mem = members.find(m => m.id === targetMemId);
+    const targetPersonName = (emp?.name || mem?.name || recipientOrPayer || '').trim().toLowerCase();
+
+    return transactions.filter(t => {
+      if (editingTransaction && t.id === editingTransaction.id) return false;
+      const tYear = t.salaryYear || t.year;
+      const tMonth = t.salaryMonth || t.month;
+      if (tYear !== (salaryYear || year) || tMonth !== salaryMonth) return false;
+
+      if (targetEmpId && t.relatedEmployeeId === targetEmpId) return true;
+      if (targetMemId && t.relatedMemberId === targetMemId) return true;
+      if (targetPersonName && (
+        (t.recipientOrPayer && t.recipientOrPayer.trim().toLowerCase() === targetPersonName) ||
+        (t.title && t.title.toLowerCase().includes(targetPersonName))
+      )) {
+        return (
+          t.category === 'salary' || 
+          t.category === 'shareholder_payout' ||
+          Boolean(t.title?.includes('حقوق')) || 
+          Boolean(t.description?.includes('حقوق')) ||
+          Boolean(t.title?.includes('دستمزد'))
+        );
+      }
+      return false;
+    });
+  }, [transactions, isSalaryCategory, category, relatedEmployeeId, relatedMemberId, recipientOrPayer, employees, members, editingTransaction, salaryYear, year, salaryMonth]);
 
   // هندلر تغییر انتخاب فرد حقوق‌بگیر
   const handlePersonSelect = (val: string) => {
@@ -1036,6 +1078,49 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       </button>
                     </div>
                   </div>
+
+                  {/* هشدار پیشگیری از ثبت تکراری و نمایش اسناد ثبت‌شده قبلی برای این کارکرد */}
+                  {existingSalaryTransactions.length > 0 && (
+                    <div className="mt-3 p-3 bg-amber-50/95 border-2 border-amber-300 rounded-xl space-y-2 text-xs">
+                      <div className="flex items-start gap-2 text-amber-950 font-bold">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <span>
+                            بررسی سوابق حسابداری: برای این شخص قبلاً در کارکرد ماه {PERSIAN_MONTHS.find(m => m.num === salaryMonth)?.name} سال {salaryYear || year} تعداد {toPersianDigits(existingSalaryTransactions.length)} سند هزینه ثبت شده است:
+                          </span>
+                          <p className="text-[11px] font-normal text-amber-900 mt-1 leading-relaxed">
+                            ثبت دوباره سند ممکن است باعث دوبرابر شدن هزینه حقوق گردد. اگر این مبلغ قسط دوم، پاداش یا علی‌الحساب جدید است ادامه دهید، وگرنه برای اصلاح می‌توانید همان سند را ویرایش کنید:
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 pt-1">
+                        {existingSalaryTransactions.map(tx => (
+                          <div key={tx.id} className="p-2.5 bg-white rounded-lg border border-amber-200 flex items-center justify-between gap-2 shadow-2xs">
+                            <div>
+                              <div className="font-bold text-slate-800 text-[11px]">{tx.title}</div>
+                              <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
+                                <span>تاریخ پرداخت: {toPersianDigits(tx.dateString)}</span>
+                                {tx.trackingCode && <span>• پیگیری: {tx.trackingCode}</span>}
+                                <span className="font-black text-rose-700 font-mono">مبلغ: {formatCurrency(tx.amount, currencyMode)}</span>
+                              </div>
+                            </div>
+                            {onEditTransaction && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onEditTransaction(tx);
+                                }}
+                                className="px-2.5 py-1 text-[11px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-md border border-amber-300 transition-colors shrink-0 cursor-pointer"
+                              >
+                                ویرایش این سند
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
