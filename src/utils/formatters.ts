@@ -33,24 +33,26 @@ export const PERSIAN_MONTHS: PersianMonthInfo[] = [
   { num: 12, name: 'اسفند', season: 'زمستان' },
 ];
 
-export function toPersianDigits(n: number | string): string {
+export function toPersianDigits(n: number | string | undefined | null): string {
+  if (n === undefined || n === null) return '';
   const farsiDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
   return n.toString().replace(/\d/g, (x) => farsiDigits[parseInt(x, 10)]);
 }
 
-export function formatCurrency(amountInRials: number, mode: CurrencyMode = 'rial'): string {
-  if (isNaN(amountInRials)) return '۰';
+export function formatCurrency(amountInRials: number | undefined | null, mode: CurrencyMode = 'rial'): string {
+  if (amountInRials === undefined || amountInRials === null || isNaN(Number(amountInRials))) return '۰ ریال';
+  const val = Number(amountInRials);
   
   if (mode === 'toman') {
-    const tomans = Math.round(amountInRials / 10);
+    const tomans = Math.round(val / 10);
     return `${toPersianDigits(tomans.toLocaleString('en-US'))} تومان`;
   }
-  return `${toPersianDigits(amountInRials.toLocaleString('en-US'))} ریال`;
+  return `${toPersianDigits(val.toLocaleString('en-US'))} ریال`;
 }
 
-export function formatNumber(n: number): string {
-  if (isNaN(n)) return '۰';
-  return toPersianDigits(n.toLocaleString('en-US'));
+export function formatNumber(n: number | undefined | null): string {
+  if (n === undefined || n === null || isNaN(Number(n))) return '۰';
+  return toPersianDigits(Number(n).toLocaleString('en-US'));
 }
 
 export function parseFormattedNumber(val: string | number): number {

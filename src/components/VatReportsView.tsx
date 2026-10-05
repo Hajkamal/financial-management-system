@@ -809,7 +809,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
                                   {formatCurrency(invoice.finalAmount, currencyMode)}
                                 </div>
                                 <div className="text-[9px] text-slate-400">
-                                  {toPersianDigits(invoice.totalQuantity.toLocaleString('fa-IR'))} نوبت
+                                  {toPersianDigits((invoice.totalQuantity ?? 0).toLocaleString('fa-IR'))} نوبت
                                 </div>
                                 <div className="flex items-center justify-center gap-1 pt-1 border-t border-emerald-500/20">
                                   <button
@@ -863,7 +863,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
                               )}
                             </div>
                             <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-2">
-                              <span>تعداد: {toPersianDigits(seasonalInv.totalQuantity.toLocaleString('fa-IR'))} نوبت</span>
+                              <span>تعداد: {toPersianDigits((seasonalInv.totalQuantity ?? 0).toLocaleString('fa-IR'))} نوبت</span>
                               <span>•</span>
                               <span>خالص: {formatCurrency(seasonalInv.totalGrossAmount, currencyMode)}</span>
                               <span>•</span>
@@ -1133,7 +1133,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
                             <td className="py-2.5 px-3 font-mono font-bold text-slate-700">{toPersianDigits(it.internalCode)}</td>
                             <td className="py-2.5 px-3 font-mono text-slate-500">{toPersianDigits(it.serviceCode)}</td>
                             <td className="py-2.5 px-3 font-bold text-slate-800">{it.title}</td>
-                            <td className="py-2.5 px-3 font-bold text-purple-700">{toPersianDigits(it.quantity.toLocaleString('fa-IR'))} {it.unit}</td>
+                            <td className="py-2.5 px-3 font-bold text-purple-700">{toPersianDigits((it.quantity ?? 0).toLocaleString('fa-IR'))} {it.unit}</td>
                             <td className="py-2.5 px-3 font-medium text-slate-700">{formatCurrency(it.unitPrice, currencyMode)}</td>
                             <td className="py-2.5 px-3 font-medium text-slate-900">{formatCurrency((it.quantity * it.unitPrice) - (it.discount || 0), currencyMode)}</td>
                             <td className="py-2.5 px-3 font-bold text-emerald-600">{formatCurrency(it.taxAmount, currencyMode)}</td>
@@ -1153,7 +1153,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
 
                     <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
                       <span className="text-slate-500">
-                        تعداد کل: <strong className="text-slate-800">{toPersianDigits(inv.totalQuantity.toLocaleString('fa-IR'))} نوبت</strong>
+                        تعداد کل: <strong className="text-slate-800">{toPersianDigits((inv.totalQuantity ?? 0).toLocaleString('fa-IR'))} نوبت</strong>
                       </span>
                       <span className="text-slate-500">
                         خالص: <strong className="text-slate-800">{formatCurrency(inv.totalGrossAmount, currencyMode)}</strong>
@@ -1289,7 +1289,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
                       <div className="space-y-1.5 text-xs text-slate-600">
                         <div className="flex justify-between">
                           <span>تعداد کل نوبت‌ها:</span>
-                          <strong className="text-purple-700">{toPersianDigits(val.count.toLocaleString('fa-IR'))}</strong>
+                          <strong className="text-purple-700">{toPersianDigits((val.count ?? 0).toLocaleString('fa-IR'))}</strong>
                         </div>
                         <div className="flex justify-between">
                           <span>فروش با ارزش افزوده:</span>
@@ -1422,24 +1422,24 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
                         <td className="border-l border-black p-2 font-mono">{toPersianDigits(it.serviceCode)}</td>
                         <td className="border-l border-black p-2 text-right font-medium">{it.title}</td>
                         <td className="border-l border-black p-2">{it.unit}</td>
-                        <td className="border-l border-black p-2 font-bold">{toPersianDigits(it.quantity.toLocaleString('fa-IR'))}</td>
-                        <td className="border-l border-black p-2 font-mono">{toPersianDigits(it.unitPrice.toLocaleString('fa-IR'))}</td>
-                        <td className="border-l border-black p-2 font-mono">{toPersianDigits((it.discount || 0).toLocaleString('fa-IR'))}</td>
+                        <td className="border-l border-black p-2 font-bold">{toPersianDigits((it.quantity ?? 0).toLocaleString('fa-IR'))}</td>
+                        <td className="border-l border-black p-2 font-mono">{toPersianDigits((it.unitPrice ?? 0).toLocaleString('fa-IR'))}</td>
+                        <td className="border-l border-black p-2 font-mono">{toPersianDigits(((it.discount || 0)).toLocaleString('fa-IR'))}</td>
                         <td className="border-l border-black p-2 font-bold">{toPersianDigits(it.vatRate)}%</td>
-                        <td className="border-l border-black p-2 font-bold font-mono">{toPersianDigits(it.taxAmount.toLocaleString('fa-IR'))}</td>
-                        <td className="p-2 font-bold font-mono">{toPersianDigits(it.totalAmount.toLocaleString('fa-IR'))}</td>
+                        <td className="border-l border-black p-2 font-bold font-mono">{toPersianDigits((it.taxAmount ?? 0).toLocaleString('fa-IR'))}</td>
+                        <td className="p-2 font-bold font-mono">{toPersianDigits((it.totalAmount ?? 0).toLocaleString('fa-IR'))}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="bg-slate-50 font-bold border-t border-black">
                       <td colSpan={5} className="border-l border-black p-2 text-right">جمع کل:</td>
-                      <td className="border-l border-black p-2">{toPersianDigits(officialPrintInvoice.totalQuantity.toLocaleString('fa-IR'))}</td>
+                      <td className="border-l border-black p-2">{toPersianDigits((officialPrintInvoice.totalQuantity ?? 0).toLocaleString('fa-IR'))}</td>
                       <td className="border-l border-black p-2">-</td>
-                      <td className="border-l border-black p-2 font-mono">{toPersianDigits(officialPrintInvoice.totalDiscount.toLocaleString('fa-IR'))}</td>
+                      <td className="border-l border-black p-2 font-mono">{toPersianDigits((officialPrintInvoice.totalDiscount ?? 0).toLocaleString('fa-IR'))}</td>
                       <td className="border-l border-black p-2">-</td>
-                      <td className="border-l border-black p-2 font-mono">{toPersianDigits(officialPrintInvoice.totalVatAmount.toLocaleString('fa-IR'))}</td>
-                      <td className="p-2 font-mono font-black">{toPersianDigits(officialPrintInvoice.finalAmount.toLocaleString('fa-IR'))}</td>
+                      <td className="border-l border-black p-2 font-mono">{toPersianDigits((officialPrintInvoice.totalVatAmount ?? 0).toLocaleString('fa-IR'))}</td>
+                      <td className="p-2 font-mono font-black">{toPersianDigits((officialPrintInvoice.finalAmount ?? 0).toLocaleString('fa-IR'))}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -1454,7 +1454,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
                   <div>
                     <strong>مبلغ نهایی صورتحساب:</strong>{' '}
                     <span className="text-sm font-black font-mono">
-                      {toPersianDigits(officialPrintInvoice.finalAmount.toLocaleString('fa-IR'))} ریال
+                      {toPersianDigits((officialPrintInvoice.finalAmount ?? 0).toLocaleString('fa-IR'))} ریال
                     </span>
                   </div>
                 </div>
@@ -2072,7 +2072,7 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
               <div>
                 <span className="text-slate-400 block mb-0.5">تعداد کل خدمات:</span>
                 <strong className="text-base text-purple-300 font-mono">
-                  {toPersianDigits(formData.totalQuantity.toLocaleString('fa-IR'))} نوبت
+                  {toPersianDigits((formData.totalQuantity ?? 0).toLocaleString('fa-IR'))} نوبت
                 </strong>
               </div>
               <div>

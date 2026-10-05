@@ -158,93 +158,99 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  // Helper for completely safe Persian number formatting without undefined errors
+  const safeFmt = (val: number | undefined | null): string => {
+    return Number(val || 0).toLocaleString('fa-IR');
+  };
+
   // Aggregate Financial Metrics into clean text context for Gemini
   const compileFinancialContext = () => {
-    const yearTransactions = transactions.filter((tx) => tx.year === selectedYear);
-    const totalIncome = yearTransactions
-      .filter((tx) => tx.type === 'income')
-      .reduce((sum, tx) => sum + (tx.amount || 0), 0);
-    const totalExpense = yearTransactions
-      .filter((tx) => tx.type === 'expense')
-      .reduce((sum, tx) => sum + (tx.amount || 0), 0);
-    const netProfit = totalIncome - totalExpense;
+    try {
+      const yearTransactions = transactions.filter((tx) => tx.year === selectedYear);
+      const totalIncome = yearTransactions
+        .filter((tx) => tx.type === 'income')
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+      const totalExpense = yearTransactions
+        .filter((tx) => tx.type === 'expense')
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+      const netProfit = totalIncome - totalExpense;
 
-    // Monthly breakdown for all 12 months
-    const monthlyBreakdown = PERSIAN_MONTHS.map((m) => {
-      const monthTxs = yearTransactions.filter((tx) => tx.month === m.num);
-      const inc = monthTxs.filter((tx) => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
-      const exp = monthTxs.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
-      return `${m.name}: درآمد ${inc.toLocaleString('fa-IR')} ریال، هزینه ${exp.toLocaleString('fa-IR')} ریال، تراز ${(inc - exp).toLocaleString('fa-IR')} ریال (${monthTxs.length} سند)`;
-    }).join('\n');
+      // Monthly breakdown for all 12 months
+      const monthlyBreakdown = PERSIAN_MONTHS.map((m) => {
+        const monthTxs = yearTransactions.filter((tx) => tx.month === m.num);
+        const inc = monthTxs.filter((tx) => tx.type === 'income').reduce((s, tx) => s + (tx.amount || 0), 0);
+        const exp = monthTxs.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + (tx.amount || 0), 0);
+        return `${m.name}: درآمد ${safeFmt(inc)} ریال، هزینه ${safeFmt(exp)} ریال، تراز ${safeFmt(inc - exp)} ریال (${monthTxs.length} سند)`;
+      }).join('\n');
 
-    // Income categories
-    const incomeByCategory: Record<string, number> = {};
-    yearTransactions
-      .filter((tx) => tx.type === 'income')
-      .forEach((tx) => {
-        incomeByCategory[tx.category] = (incomeByCategory[tx.category] || 0) + tx.amount;
+      // Income categories
+      const incomeByCategory: Record<string, number> = {};
+      yearTransactions
+        .filter((tx) => tx.type === 'income')
+        .forEach((tx) => {
+          incomeByCategory[tx.category] = (incomeByCategory[tx.category] || 0) + (tx.amount || 0);
+        });
+
+      // Expense categories
+      const expenseByCategory: Record<string, number> = {};
+      yearTransactions
+        .filter((tx) => tx.type === 'expense')
+        .forEach((tx) => {
+          expenseByCategory[tx.category] = (expenseByCategory[tx.category] || 0) + (tx.amount || 0);
+        });
+
+      // Basina subcategories
+      const basinaSubCategories: Record<string, number> = {};
+      yearTransactions
+        .filter((tx) => tx.category === 'sale_basina' && tx.subCategory)
+        .forEach((tx) => {
+          basinaSubCategories[tx.subCategory!] = (basinaSubCategories[tx.subCategory!] || 0) + (tx.amount || 0);
+        });
+
+      // Infrastructure subcategories
+      const infraSubCategories: Record<string, number> = {};
+      yearTransactions
+        .filter((tx) => tx.category === 'infrastructure' && tx.subCategory)
+        .forEach((tx) => {
+          infraSubCategories[tx.subCategory!] = (infraSubCategories[tx.subCategory!] || 0) + (tx.amount || 0);
+        });
+
+      // Top transactions
+      const topExpenses = [...yearTransactions.filter((tx) => tx.type === 'expense')]
+        .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+        .slice(0, 5)
+        .map((tx) => `- ${tx.title} (${tx.dateString}): ${safeFmt(tx.amount)} ریال [${tx.category}]`);
+
+      const topIncomes = [...yearTransactions.filter((tx) => tx.type === 'income')]
+        .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+        .slice(0, 5)
+        .map((tx) => `- ${tx.title} (${tx.dateString}): ${safeFmt(tx.amount)} ریال [${tx.category}]`);
+
+      // Loans summary
+      const totalLoanDebt = loans.reduce((sum, l) => sum + (l.totalAmount || 0), 0);
+      const totalMonthlyInstallments = loans.reduce((sum, l) => sum + (l.installmentAmount || 0), 0);
+      const loansList = loans.map((l) => {
+        const remaining = Math.max(0, ((l.totalInstallments || 0) - (l.paidInstallments || 0)) * (l.installmentAmount || 0));
+        return `- ${l.title} (${l.lender}): کل وام ${safeFmt(l.totalAmount)} ریال، قسط ماهانه ${safeFmt(l.installmentAmount)} ریال، ${l.paidInstallments || 0} از ${l.totalInstallments || 0} قسط پرداخت شده، مانده بدهی ${safeFmt(remaining)} ریال`;
       });
 
-    // Expense categories
-    const expenseByCategory: Record<string, number> = {};
-    yearTransactions
-      .filter((tx) => tx.type === 'expense')
-      .forEach((tx) => {
-        expenseByCategory[tx.category] = (expenseByCategory[tx.category] || 0) + tx.amount;
-      });
+      // Bank accounts
+      const activeBankBalances = bankAccounts
+        .filter((b) => b.isActive)
+        .map((b) => `- بانک ${b.bankName} (${b.accountNumber}): موجودی ${safeFmt(b.balance)} ریال [صاحب حساب: ${b.accountHolder}]`);
+      const totalBankBalance = bankAccounts
+        .filter((b) => b.isActive)
+        .reduce((sum, b) => sum + (b.balance || 0), 0);
 
-    // Basina subcategories
-    const basinaSubCategories: Record<string, number> = {};
-    yearTransactions
-      .filter((tx) => tx.category === 'sale_basina' && tx.subCategory)
-      .forEach((tx) => {
-        basinaSubCategories[tx.subCategory!] = (basinaSubCategories[tx.subCategory!] || 0) + tx.amount;
-      });
+      // Employees payroll
+      const activeEmployees = employees.filter((e) => e.status === 'active');
+      const totalBaseSalary = activeEmployees.reduce((sum, e) => sum + (e.baseSalary || 0), 0);
 
-    // Infrastructure subcategories
-    const infraSubCategories: Record<string, number> = {};
-    yearTransactions
-      .filter((tx) => tx.category === 'infrastructure' && tx.subCategory)
-      .forEach((tx) => {
-        infraSubCategories[tx.subCategory!] = (infraSubCategories[tx.subCategory!] || 0) + tx.amount;
-      });
-
-    // Top transactions
-    const topExpenses = [...yearTransactions.filter((tx) => tx.type === 'expense')]
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5)
-      .map((tx) => `- ${tx.title} (${tx.dateString}): ${tx.amount.toLocaleString('fa-IR')} ریال [${tx.category}]`);
-
-    const topIncomes = [...yearTransactions.filter((tx) => tx.type === 'income')]
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5)
-      .map((tx) => `- ${tx.title} (${tx.dateString}): ${tx.amount.toLocaleString('fa-IR')} ریال [${tx.category}]`);
-
-    // Loans summary
-    const totalLoanDebt = loans.reduce((sum, l) => sum + (l.totalAmount || 0), 0);
-    const totalMonthlyInstallments = loans.reduce((sum, l) => sum + (l.installmentAmount || 0), 0);
-    const loansList = loans.map((l) => {
-      const remaining = Math.max(0, (l.totalInstallments - l.paidInstallments) * l.installmentAmount);
-      return `- ${l.title} (${l.lender}): کل وام ${l.totalAmount.toLocaleString('fa-IR')} ریال، قسط ماهانه ${l.installmentAmount.toLocaleString('fa-IR')} ریال، ${l.paidInstallments} از ${l.totalInstallments} قسط پرداخت شده، مانده بدهی ${remaining.toLocaleString('fa-IR')} ریال`;
-    });
-
-    // Bank accounts
-    const activeBankBalances = bankAccounts
-      .filter((b) => b.isActive)
-      .map((b) => `- بانک ${b.bankName} (${b.accountNumber}): موجودی ${b.balance.toLocaleString('fa-IR')} ریال [صاحب حساب: ${b.accountHolder}]`);
-    const totalBankBalance = bankAccounts
-      .filter((b) => b.isActive)
-      .reduce((sum, b) => sum + (b.balance || 0), 0);
-
-    // Employees payroll
-    const activeEmployees = employees.filter((e) => e.status === 'active');
-    const totalBaseSalary = activeEmployees.reduce((sum, e) => sum + (e.baseSalary || 0), 0);
-
-    return `
+      return `
 پرونده جامع مالی شرکت ${companyName} در سال مالی ${selectedYear}:
-- کل درآمد سال: ${totalIncome.toLocaleString('fa-IR')} ریال (${(totalIncome / 10).toLocaleString('fa-IR')} تومان)
-- کل هزینه‌های سال: ${totalExpense.toLocaleString('fa-IR')} ریال (${(totalExpense / 10).toLocaleString('fa-IR')} تومان)
-- تراز نقدینگی و سود عملیاتی: ${netProfit.toLocaleString('fa-IR')} ریال (${(netProfit / 10).toLocaleString('fa-IR')} تومان)
+- کل درآمد سال: ${safeFmt(totalIncome)} ریال (${safeFmt(totalIncome / 10)} تومان)
+- کل هزینه‌های سال: ${safeFmt(totalExpense)} ریال (${safeFmt(totalExpense / 10)} تومان)
+- تراز نقدینگی و سود عملیاتی: ${safeFmt(netProfit)} ریال (${safeFmt(netProfit / 10)} تومان)
 - تعداد کل اسناد مالی سال: ${yearTransactions.length} سند
 
 وضعیت ماه به ماه سال ${selectedYear}:
@@ -252,22 +258,22 @@ ${monthlyBreakdown}
 
 سرفصل‌های درآمدی:
 ${Object.entries(incomeByCategory)
-  .map(([k, v]) => `- ${k}: ${v.toLocaleString('fa-IR')} ریال (${(v / 10).toLocaleString('fa-IR')} تومان)`)
+  .map(([k, v]) => `- ${k}: ${safeFmt(v)} ریال (${safeFmt(v / 10)} تومان)`)
   .join('\n') || 'درآمدی ثبت نشده'}
 
 زیردسته‌های فروش پلتفرم باسینا:
 ${Object.entries(basinaSubCategories)
-  .map(([k, v]) => `- ${k}: ${v.toLocaleString('fa-IR')} ریال`)
+  .map(([k, v]) => `- ${k}: ${safeFmt(v)} ریال`)
   .join('\n') || 'موردی ثبت نشده'}
 
 سرفصل‌های هزینه‌ای:
 ${Object.entries(expenseByCategory)
-  .map(([k, v]) => `- ${k}: ${v.toLocaleString('fa-IR')} ریال (${(v / 10).toLocaleString('fa-IR')} تومان)`)
+  .map(([k, v]) => `- ${k}: ${safeFmt(v)} ریال (${safeFmt(v / 10)} تومان)`)
   .join('\n') || 'هزینه‌ای ثبت نشده'}
 
 زیردسته‌های هزینه فناوری و زیرساخت:
 ${Object.entries(infraSubCategories)
-  .map(([k, v]) => `- ${k}: ${v.toLocaleString('fa-IR')} ریال`)
+  .map(([k, v]) => `- ${k}: ${safeFmt(v)} ریال`)
   .join('\n') || 'موردی ثبت نشده'}
 
 ۵ هزینه عمده ثبت‌شده:
@@ -277,40 +283,44 @@ ${topExpenses.join('\n') || 'سندی ثبت نشده'}
 ${topIncomes.join('\n') || 'سندی ثبت نشده'}
 
 وضعیت حساب‌های بانکی شرکت:
-- مجموع موجودی دفتری نقدینگی: ${totalBankBalance.toLocaleString('fa-IR')} ریال (${(totalBankBalance / 10).toLocaleString('fa-IR')} تومان)
+- مجموع موجودی دفتری نقدینگی: ${safeFmt(totalBankBalance)} ریال (${safeFmt(totalBankBalance / 10)} تومان)
 ${activeBankBalances.join('\n') || 'حسابی ثبت نشده'}
 
 وضعیت تسهیلات و وام‌ها:
-- مجموع اصل تسهیلات دریافتی: ${totalLoanDebt.toLocaleString('fa-IR')} ریال
-- مجموع اقساط ماهانه: ${totalMonthlyInstallments.toLocaleString('fa-IR')} ریال
+- مجموع اصل تسهیلات دریافتی: ${safeFmt(totalLoanDebt)} ریال
+- مجموع اقساط ماهانه: ${safeFmt(totalMonthlyInstallments)} ریال
 ${loansList.join('\n') || 'تسهیلاتی ثبت نشده'}
 
 وضعیت نیروی انسانی و حقوق و دستمزد:
 - تعداد کارمندان فعال: ${activeEmployees.length} نفر
-- مجموع حقوق پایه ماهانه پرسنل: ${totalBaseSalary.toLocaleString('fa-IR')} ریال (${(totalBaseSalary / 10).toLocaleString('fa-IR')} تومان)
-${activeEmployees.map((e) => `- ${e.name} (${e.role}): حقوق ماهانه پایه ${e.baseSalary.toLocaleString('fa-IR')} ریال [وضعیت: ${e.status}]`).join('\n')}
+- مجموع حقوق پایه ماهانه پرسنل: ${safeFmt(totalBaseSalary)} ریال (${safeFmt(totalBaseSalary / 10)} تومان)
+${activeEmployees.map((e) => `- ${e.name} (${e.role}): حقوق ماهانه پایه ${safeFmt(e.baseSalary)} ریال [وضعیت: ${e.status}]`).join('\n')}
 
 ماتریس حقوق و دستمزد ماهانه پرسنل (سال ${selectedYear}):
 ${employees.map(emp => {
   const empCells = salaryMatrix.filter(m => m.employeeId === emp.id && m.year === selectedYear);
   const paidMonths = empCells.map(c => {
     const mName = PERSIAN_MONTHS.find(pm => pm.num === c.month)?.name || c.month;
-    return `${mName}: پایه ${c.baseAmount.toLocaleString('fa-IR')} ریال${c.bonusAmount ? ` + پاداش ${c.bonusAmount.toLocaleString('fa-IR')} ریال` : ''} [وضعیت: ${c.isPaid ? 'پرداخت‌شده' : 'ثبت‌شده'}]`;
+    return `${mName}: پایه ${safeFmt(c.baseAmount)} ریال${c.bonusAmount ? ` + پاداش ${safeFmt(c.bonusAmount)} ریال` : ''} [وضعیت: ${c.isPaid ? 'پرداخت‌شده' : 'ثبت‌شده'}]`;
   });
-  return `- ${emp.name} (${emp.role}): پایه مصوب ${emp.baseSalary.toLocaleString('fa-IR')} ریال | جزئیات ماه‌ها: ${paidMonths.join(' | ') || 'سندی ثبت نشده'}`;
+  return `- ${emp.name} (${emp.role}): پایه مصوب ${safeFmt(emp.baseSalary)} ریال | جزئیات ماه‌ها: ${paidMonths.join(' | ') || 'سندی ثبت نشده'}`;
 }).join('\n')}
 
 وضعیت سهامداران و اعضای هیئت مدیره:
 - تعداد اعضا و سهامداران: ${members.length} نفر
-${members.map((m) => `- ${m.name} (${m.role}): سهم‌الشرکه ${m.sharePercentage}٪ [وضعیت: ${m.isWorkingForce ? 'نیروی فعال حقوق‌بگیر' : 'صرفاً سهامدار'}]`).join('\n') || 'عضوی ثبت نشده'}
+${members.map((m) => `- ${m.name} (${m.role}): سهم‌الشرکه ${m.sharePercentage || 0}٪ [وضعیت: ${m.isWorkingForce ? 'نیروی فعال حقوق‌بگیر' : 'صرفاً سهامدار'}]`).join('\n') || 'عضوی ثبت نشده'}
 
 وضعیت ارزش افزوده، گزارش‌های فصلی و سامانه مودیان:
 - تعداد کل صورتحساب‌های ثبت‌شده: ${(vatInvoices || []).filter(i => i.year === selectedYear).length} فقره
-${(vatInvoices || []).filter(i => i.year === selectedYear).map(i => `- صورتحساب ${i.periodType === 'seasonal' ? `فصل ${i.season}` : `ماه ${i.month}`} (${i.invoiceNumber}): تعداد ${i.totalQuantity.toLocaleString('fa-IR')} نوبت، خالص ${i.totalGrossAmount.toLocaleString('fa-IR')} ریال، ارزش افزوده ۱۰٪ ${i.totalVatAmount.toLocaleString('fa-IR')} ریال، جمع نهایی ${i.finalAmount.toLocaleString('fa-IR')} ریال`).join('\n') || 'صورتحسابی ثبت نشده'}
+${(vatInvoices || []).filter(i => i.year === selectedYear).map(i => `- صورتحساب ${i.periodType === 'seasonal' ? `فصل ${i.season}` : `ماه ${i.month}`} (${i.invoiceNumber || 'نامشخص'}): تعداد ${safeFmt(i.totalQuantity)} نوبت، خالص ${safeFmt(i.totalGrossAmount)} ریال، ارزش افزوده ۱۰٪ ${safeFmt(i.totalVatAmount)} ریال، جمع نهایی ${safeFmt(i.finalAmount)} ریال`).join('\n') || 'صورتحسابی ثبت نشده'}
 
 تعرفه‌های مصوب خدمات باسینا و سوابق تغییرات کارمزد:
-${(serviceTariffs || []).map(t => `- خدمت ${t.title}: کارمزد مصوب فعلی ${t.currentPrice.toLocaleString('fa-IR')} ریال (سابقه تغییر نرخ: ${(t.priceHistory || []).map(h => `${h.price.toLocaleString('fa-IR')} ریال از ${h.effectiveDate}`).join(' ← ')})`).join('\n') || 'تعرفه‌ای ثبت نشده'}
+${(serviceTariffs || []).map(t => `- خدمت ${t.title}: کارمزد مصوب فعلی ${safeFmt(t.currentPrice)} ریال (سابقه تغییر نرخ: ${(t.priceHistory || []).map(h => `${safeFmt(h.price)} ریال از ${h.effectiveDate}`).join(' ← ')})`).join('\n') || 'تعرفه‌ای ثبت نشده'}
 `;
+    } catch (e: any) {
+      console.warn('Error compiling financial context:', e);
+      return `خلاصه مالی شرکت ${companyName} - سال مالی ${selectedYear}`;
+    }
   };
 
   // Dynamic, Query-Specific Financial Analytics Engine
@@ -384,22 +394,22 @@ ${monthTxs.slice(0, 6).map((t) => `- **${t.title}** (${t.dateString}): ${t.type 
     // 0. Questions about VAT / Value Added Tax / Seasonal / Tariffs
     if (q.includes('ارزش افزوده') || q.includes('مودیان') || q.includes('فصلی') || q.includes('فصل') || q.includes('تعرفه') || q.includes('کارمزد') || q.includes('صورتحساب') || q.includes('فاکتور')) {
       const yearInvoices = (vatInvoices || []).filter(inv => inv.year === selectedYear);
-      const totalGross = yearInvoices.reduce((s, inv) => s + inv.totalGrossAmount, 0);
-      const totalVat = yearInvoices.reduce((s, inv) => s + inv.totalVatAmount, 0);
-      const totalFinal = yearInvoices.reduce((s, inv) => s + inv.finalAmount, 0);
-      const totalQty = yearInvoices.reduce((s, inv) => s + inv.totalQuantity, 0);
+      const totalGross = yearInvoices.reduce((s, inv) => s + (inv.totalGrossAmount || 0), 0);
+      const totalVat = yearInvoices.reduce((s, inv) => s + (inv.totalVatAmount || 0), 0);
+      const totalFinal = yearInvoices.reduce((s, inv) => s + (inv.finalAmount || 0), 0);
+      const totalQty = yearInvoices.reduce((s, inv) => s + (inv.totalQuantity || 0), 0);
 
       return `### 🧾 تحلیل جامع صورتحساب‌های ارزش افزوده و تعرفه کارمزد خدمات باسینا (سال ${toPersianDigits(selectedYear)})
 
 **۱. خلاصه گزارش فصلی ارزش افزوده (گزارش فروش ۳ ماهه):**
 - **تعداد کل صورتحساب‌های ثبت‌شده:** ${toPersianDigits(yearInvoices.length)} فقره
-- **مجموع نوبت‌ها و تراکنش‌های صادره:** ${toPersianDigits(totalQty.toLocaleString('fa-IR'))} نوبت
+- **مجموع نوبت‌ها و تراکنش‌های صادره:** ${toPersianDigits(safeFmt(totalQty))} نوبت
 - **مبلغ خالص فروش خدمات (پایه مالیاتی):** ${formatCurrency(totalGross, currencyMode)}
 - **مالیات بر ارزش افزوده (۱۰٪):** ${formatCurrency(totalVat, currencyMode)}
 - **مجموع ناخالص با ارزش افزوده (قابل تسویه با مودیان):** ${formatCurrency(totalFinal, currencyMode)}
 
 **۲. صورتحساب‌های ثبت‌شده به تفکیک دوره‌ها:**
-${yearInvoices.map((inv) => `* **${inv.periodType === 'seasonal' ? `فصل ${inv.season}` : `ماه ${inv.month}`}** (شماره ${inv.invoiceNumber}): تعداد ${toPersianDigits(inv.totalQuantity.toLocaleString('fa-IR'))} نوبت به مبلغ خالص ${formatCurrency(inv.totalGrossAmount, currencyMode)} و ارزش افزوده ${formatCurrency(inv.totalVatAmount, currencyMode)} (جمع نهایی: ${formatCurrency(inv.finalAmount, currencyMode)})`).join('\n') || '- هنوز صورتحساب فصلی برای این سال ثبت نشده است.'}
+${yearInvoices.map((inv) => `* **${inv.periodType === 'seasonal' ? `فصل ${inv.season}` : `ماه ${inv.month}`}** (شماره ${inv.invoiceNumber}): تعداد ${toPersianDigits(safeFmt(inv.totalQuantity))} نوبت به مبلغ خالص ${formatCurrency(inv.totalGrossAmount || 0, currencyMode)} و ارزش افزوده ${formatCurrency(inv.totalVatAmount || 0, currencyMode)} (جمع نهایی: ${formatCurrency(inv.finalAmount || 0, currencyMode)})`).join('\n') || '- هنوز صورتحساب فصلی برای این سال ثبت نشده است.'}
 
 **۳. وضعیت تعرفه متغیر خدمات و کارمزدها:**
 ${(serviceTariffs || []).map(t => {
@@ -600,13 +610,13 @@ ${topInc.map((t, idx) => `${idx + 1}. **${t.title}**: ${formatCurrency(t.amount,
     if (!customPrompt) setInputPrompt('');
     setIsLoading(true);
 
-    const systemContext = compileFinancialContext();
-
     // Abort controller with 15s timeout to prevent hanging UI
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
+      const systemContext = compileFinancialContext();
+
       // Call server proxy route with chat history
       const response = await fetch('/api/gemini/analyze', {
         method: 'POST',
