@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Sidebar,
   TopHeader,
-  MobileBottomNav
+  MobileBottomNav,
+  TAB_META
 } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { TransactionsView } from './components/TransactionsView';
@@ -38,10 +39,113 @@ import { updateDocumentFavicon } from './components/CompanyLogo';
 
 import { Building2, Loader2, DatabaseBackup, Download, AlertCircle, X, CloudUpload, Cloud, CloudOff } from 'lucide-react';
 
+const VALID_TABS: ActiveTab[] = [
+  'dashboard',
+  'transactions',
+  'journal',
+  'general-ledger',
+  'vat-reports',
+  'salary-matrix',
+  'bank-accounts',
+  'ai-assistant',
+  'employees',
+  'loans',
+  'members',
+  'fiscal-years',
+  'users',
+];
+
+/**
+ * بازیابی منوی فعال اولیه از روی URL Hash یا پارامتر یا LocalStorage
+ * تا هنگام رفرش (F5) یا باز کردن مجدد، کاربر دقیقاً در همان صفحه بماند
+ */
+const getInitialActiveTab = (): ActiveTab => {
+  if (typeof window !== 'undefined') {
+    // ۱. بررسی هش آدرس مرورگر (مانند #journal یا #/journal)
+    const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
+    if (rawHash && VALID_TABS.includes(rawHash as ActiveTab)) {
+      return rawHash as ActiveTab;
+    }
+
+    // ۲. بررسی پارامتر جستجو (مانند ?tab=journal یا ?view=journal)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const queryTab = params.get('tab') || params.get('view') || params.get('menu');
+      if (queryTab && VALID_TABS.includes(queryTab as ActiveTab)) {
+        return queryTab as ActiveTab;
+      }
+    } catch {}
+
+    // ۳. بررسی حافظه ماندگار مرورگر (LocalStorage)
+    try {
+      const saved = localStorage.getItem('ayandeh_active_tab') || localStorage.getItem('ayandeh_active_menu');
+      if (saved && VALID_TABS.includes(saved as ActiveTab)) {
+        return saved as ActiveTab;
+      }
+    } catch {}
+  }
+
+  return 'dashboard';
+};
+
 export default function App() {
   const [companyName] = useState<string>(INITIAL_COMPANY_NAME);
   const [currencyMode, setCurrencyMode] = useState<CurrencyMode>('rial');
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [activeTab, setActiveTabState] = useState<ActiveTab>(getInitialActiveTab);
+
+  // تابع ناوبری مستقل بین صفحات با ماندگاری کامل در URL Hash و LocalStorage
+  const setActiveTab = (newTab: ActiveTab) => {
+    setActiveTabState(newTab);
+    try {
+      localStorage.setItem('ayandeh_active_tab', newTab);
+      localStorage.setItem('ayandeh_active_menu', newTab);
+      if (typeof window !== 'undefined' && window.location.hash !== `#${newTab}`) {
+        window.history.replaceState(null, '', `#${newTab}`);
+      }
+    } catch {}
+  };
+
+  // همگام‌سازی بلادرنگ با رویدادهای تغییر مسیر مرورگر (Back/Forward یا تغییر دستی URL)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
+      if (rawHash && VALID_TABS.includes(rawHash as ActiveTab)) {
+        setActiveTabState(rawHash as ActiveTab);
+        try {
+          localStorage.setItem('ayandeh_active_tab', rawHash);
+          localStorage.setItem('ayandeh_active_menu', rawHash);
+        } catch {}
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    window.addEventListener('popstate', handleHashChange);
+
+    // تثبیت اولیه آدرس هش در نوار آدرس مرورگر
+    const initial = getInitialActiveTab();
+    if (initial && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('ayandeh_active_tab', initial);
+        localStorage.setItem('ayandeh_active_menu', initial);
+        if (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/') {
+          window.history.replaceState(null, '', `#${initial}`);
+        }
+      } catch {}
+    }
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('popstate', handleHashChange);
+    };
+  }, []);
+
+  // به‌روزرسانی عنوان برگه مرورگر متناسب با هر منو
+  useEffect(() => {
+    const meta = TAB_META[activeTab];
+    if (meta && typeof document !== 'undefined') {
+      document.title = `${meta.title} | ${companyName}`;
+    }
+  }, [activeTab, companyName]);
 
   // اعلان‌های توست
   const [toastMessage, setToastMessage] = useState<string | null>(null);

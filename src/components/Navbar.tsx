@@ -179,10 +179,12 @@ export const Sidebar: React.FC<NavigationProps> = ({
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
-            <button
+            <a
               key={tab.id}
+              href={`#${tab.id}`}
               id={`tab-btn-${tab.id}`}
-              onClick={() => {
+              onClick={(e) => {
+                e.preventDefault();
                 setActiveTab(tab.id);
                 setIsMobileOpen(false);
               }}
@@ -201,7 +203,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
                 <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
               </div>
               <span className="text-sm font-medium">{tab.label}</span>
-            </button>
+            </a>
           );
         })}
       </nav>
@@ -592,26 +594,34 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 text-white flex items-center justify-around px-2 py-1.5 shadow-2xl safe-area-bottom">
       {/* 1. Dashboard */}
-      <button
-        onClick={() => setActiveTab('dashboard')}
+      <a
+        href="#dashboard"
+        onClick={(e) => {
+          e.preventDefault();
+          setActiveTab('dashboard');
+        }}
         className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors cursor-pointer ${
           activeTab === 'dashboard' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
         }`}
       >
         <BarChart3 className="w-5 h-5 mb-0.5" />
         <span className="text-[10px]">داشبورد</span>
-      </button>
+      </a>
 
       {/* 2. Transactions */}
-      <button
-        onClick={() => setActiveTab('transactions')}
+      <a
+        href="#transactions"
+        onClick={(e) => {
+          e.preventDefault();
+          setActiveTab('transactions');
+        }}
         className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors cursor-pointer ${
           activeTab === 'transactions' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
         }`}
       >
         <ReceiptText className="w-5 h-5 mb-0.5" />
         <span className="text-[10px]">اسناد</span>
-      </button>
+      </a>
 
       {/* 3. Center FAB: New Transaction */}
       {canCreateTransactions && (
@@ -629,26 +639,34 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       )}
 
       {/* 4. Bank Accounts */}
-      <button
-        onClick={() => setActiveTab('bank-accounts')}
+      <a
+        href="#bank-accounts"
+        onClick={(e) => {
+          e.preventDefault();
+          setActiveTab('bank-accounts');
+        }}
         className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors cursor-pointer ${
           activeTab === 'bank-accounts' ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'
         }`}
       >
         <Landmark className="w-5 h-5 mb-0.5" />
         <span className="text-[10px]">بانک‌ها</span>
-      </button>
+      </a>
 
       {/* 5. AI Assistant */}
-      <button
-        onClick={() => setActiveTab('ai-assistant')}
+      <a
+        href="#ai-assistant"
+        onClick={(e) => {
+          e.preventDefault();
+          setActiveTab('ai-assistant');
+        }}
         className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors cursor-pointer ${
           activeTab === 'ai-assistant' ? 'text-indigo-400 font-bold' : 'text-slate-400 hover:text-indigo-300'
         }`}
       >
         <Sparkles className="w-5 h-5 mb-0.5 text-indigo-400" />
         <span className="text-[10px]">هوش‌مصنوعی</span>
-      </button>
+      </a>
     </div>
   );
 };

@@ -80,7 +80,20 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
   canExport = true,
 }) => {
   // Sub-tab: 'staff' (Employees Matrix) or 'members' (Company Members Salary & Withdrawals)
-  const [payrollSubTab, setPayrollSubTab] = useState<'staff' | 'members'>('staff');
+  const [payrollSubTab, setPayrollSubTabState] = useState<'staff' | 'members'>(() => {
+    try {
+      const saved = localStorage.getItem('ayandeh_salary_subtab');
+      if (saved === 'members' || saved === 'staff') return saved;
+    } catch {}
+    return 'staff';
+  });
+
+  const setPayrollSubTab = (tab: 'staff' | 'members') => {
+    setPayrollSubTabState(tab);
+    try {
+      localStorage.setItem('ayandeh_salary_subtab', tab);
+    } catch {}
+  };
 
   // تابع تجمیع حقوق هر کارمند در هر ماه از دو منبع ماتریس و اسناد مالی ثبت‌شده در دفتر کل
   const getEmployeeMonthData = useCallback((empId: string, monthNum: PersianMonthNumber) => {

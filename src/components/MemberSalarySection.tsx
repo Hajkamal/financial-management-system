@@ -65,7 +65,20 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
   onNavigateToMembers,
 }) => {
   // Sub-view toggle: 'matrix' (monthly spreadsheet) vs 'ledger' (transaction list)
-  const [viewMode, setViewMode] = useState<'matrix' | 'ledger'>('matrix');
+  const [viewMode, setViewModeState] = useState<'matrix' | 'ledger'>(() => {
+    try {
+      const saved = localStorage.getItem('ayandeh_member_salary_viewmode');
+      if (saved === 'ledger' || saved === 'matrix') return saved;
+    } catch {}
+    return 'matrix';
+  });
+
+  const setViewMode = (mode: 'matrix' | 'ledger') => {
+    setViewModeState(mode);
+    try {
+      localStorage.setItem('ayandeh_member_salary_viewmode', mode);
+    } catch {}
+  };
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
