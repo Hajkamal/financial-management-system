@@ -464,6 +464,7 @@ export default function App() {
           }}
           onExportExcel={() => setIsExportModalOpen(true)}
           onOpenBackupModal={() => setIsBackupModalOpen(true)}
+          onOpenMenuReorder={() => window.dispatchEvent(new Event('ayandeh_open_menu_reorder'))}
           userEmail={user.email}
           onLogout={handleLogout}
           onOpenChangePassword={() => setIsChangePasswordOpen(true)}

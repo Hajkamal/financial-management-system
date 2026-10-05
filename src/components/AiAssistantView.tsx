@@ -47,6 +47,7 @@ import {
   EXPENSE_CATEGORY_CONFIG,
   BASINA_SUBCATEGORY_CONFIG
 } from '../utils/formatters';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface AiAssistantViewProps {
   transactions: FinancialTransaction[];
@@ -73,27 +74,27 @@ interface ChatMessage {
   isQuickReport?: boolean;
 }
 
-const PRESET_PROMPTS = [
+const getPresetPrompts = (selectedYear: number) => [
   {
     id: 'executive_summary',
     icon: BarChart3,
-    title: 'خلاصه وضعیت مالی سال ۱۴۰۵',
+    title: `خلاصه وضعیت مالی سال ${toPersianDigits(selectedYear)}`,
     desc: 'سودآوری کل، تراز نقدینگی و نمای کلی عملکرد شرکت',
-    prompt: 'یک گزارش جامع و خلاصه وضعیت اجرایی از تراز مالی سال ۱۴۰۵ شرکت، شامل مجموع درآمدها، هزینه‌ها، سود خالص و تحلیل وضعیت کلی به تفکیک ارائه کن.',
+    prompt: `یک گزارش جامع و خلاصه وضعیت اجرایی از تراز مالی سال ${toPersianDigits(selectedYear)} شرکت، شامل مجموع درآمدها، هزینه‌ها، سود خالص و تحلیل وضعیت کلی به تفکیک ارائه کن.`,
   },
   {
     id: 'revenue_analysis',
     icon: TrendingUp,
     title: 'تحلیل درآمدها و منابع سودآوری باسینا',
     desc: 'بررسی درآمد نوبت‌دهی، تفسیر آزمایش هوش مصنوعی و درگاه‌ها',
-    prompt: 'درآمدهای ثبت‌شده سال ۱۴۰۵ را به تفکیک بخش‌ها (فروش باسینا، خدمات هوش مصنوعی، واریزی‌ها و جذب سرمایه) به همراه درصد سهم هرکدام تحلیل و بررسی کن.',
+    prompt: `درآمدهای ثبت‌شده سال ${toPersianDigits(selectedYear)} را به تفکیک بخش‌ها (فروش باسینا، خدمات هوش مصنوعی، واریزی‌ها و جذب سرمایه) به همراه درصد سهم هرکدام تحلیل و بررسی کن.`,
   },
   {
     id: 'expense_audit',
     icon: TrendingDown,
     title: 'بررسی هزینه‌ها و فرصت‌های صرفه‌جویی',
     desc: 'شناسایی پرخرج‌ترین سرفصل‌ها (سرور، مارکتینگ، کارمزدها)',
-    prompt: 'بزرگترین هزینه‌های شرکت در سال ۱۴۰۵ را لیست کن و راهکارهایی عملی برای بهینه‌سازی هزینه‌های زیرساخت سرور و امور جاری پیشنهاد بده.',
+    prompt: `بزرگترین هزینه‌های شرکت در سال ${toPersianDigits(selectedYear)} را لیست کن و راهکارهایی عملی برای بهینه‌سازی هزینه‌های زیرساخت سرور و امور جاری پیشنهاد بده.`,
   },
   {
     id: 'payroll_audit',
@@ -287,7 +288,21 @@ ${loansList.join('\n') || 'تسهیلاتی ثبت نشده'}
 وضعیت نیروی انسانی و حقوق و دستمزد:
 - تعداد کارمندان فعال: ${activeEmployees.length} نفر
 - مجموع حقوق پایه ماهانه پرسنل: ${totalBaseSalary.toLocaleString('fa-IR')} ریال (${(totalBaseSalary / 10).toLocaleString('fa-IR')} تومان)
-${activeEmployees.map((e) => `- ${e.name} (${e.role}): حقوق ماهانه ${e.baseSalary.toLocaleString('fa-IR')} ریال [وضعیت: ${e.status}]`).join('\n')}
+${activeEmployees.map((e) => `- ${e.name} (${e.role}): حقوق ماهانه پایه ${e.baseSalary.toLocaleString('fa-IR')} ریال [وضعیت: ${e.status}]`).join('\n')}
+
+ماتریس حقوق و دستمزد ماهانه پرسنل (سال ${selectedYear}):
+${employees.map(emp => {
+  const empCells = salaryMatrix.filter(m => m.employeeId === emp.id && m.year === selectedYear);
+  const paidMonths = empCells.map(c => {
+    const mName = PERSIAN_MONTHS.find(pm => pm.num === c.month)?.name || c.month;
+    return `${mName}: پایه ${c.baseAmount.toLocaleString('fa-IR')} ریال${c.bonusAmount ? ` + پاداش ${c.bonusAmount.toLocaleString('fa-IR')} ریال` : ''} [وضعیت: ${c.isPaid ? 'پرداخت‌شده' : 'ثبت‌شده'}]`;
+  });
+  return `- ${emp.name} (${emp.role}): پایه مصوب ${emp.baseSalary.toLocaleString('fa-IR')} ریال | جزئیات ماه‌ها: ${paidMonths.join(' | ') || 'سندی ثبت نشده'}`;
+}).join('\n')}
+
+وضعیت سهامداران و اعضای هیئت مدیره:
+- تعداد اعضا و سهامداران: ${members.length} نفر
+${members.map((m) => `- ${m.name} (${m.role}): سهم‌الشرکه ${m.sharePercentage}٪ [وضعیت: ${m.isWorkingForce ? 'نیروی فعال حقوق‌بگیر' : 'صرفاً سهامدار'}]`).join('\n') || 'عضوی ثبت نشده'}
 
 وضعیت ارزش افزوده، گزارش‌های فصلی و سامانه مودیان:
 - تعداد کل صورتحساب‌های ثبت‌شده: ${(vatInvoices || []).filter(i => i.year === selectedYear).length} فقره
@@ -307,6 +322,64 @@ ${(serviceTariffs || []).map(t => `- خدمت ${t.title}: کارمزد مصوب 
     const totalExpense = yearTransactions.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
     const netProfit = totalIncome - totalExpense;
     const profitRate = totalIncome > 0 ? ((netProfit / totalIncome) * 100).toFixed(1) : '0';
+
+    // ۱. بررسی اختصاصی درباره فرد یا کارمند خاص
+    const matchedEmployee = employees.find((e) => q.includes(e.name.toLowerCase()) || q.includes(e.name.split(' ')[0].toLowerCase()));
+    if (matchedEmployee) {
+      const empCells = salaryMatrix.filter((m) => m.employeeId === matchedEmployee.id && m.year === selectedYear);
+      const totalPaid = empCells.reduce((sum, c) => sum + (c.baseAmount || 0) + (c.bonusAmount || 0), 0);
+      const paidMonths = empCells.filter((c) => c.baseAmount > 0).map((c) => {
+        const mName = PERSIAN_MONTHS.find((pm) => pm.num === c.month)?.name || c.month;
+        return `- **ماه ${mName}:** حقوق پایه **${formatCurrency(c.baseAmount, currencyMode)}**${c.bonusAmount ? ` + پاداش **${formatCurrency(c.bonusAmount, currencyMode)}**` : ''} (${c.isPaid ? 'پرداخت‌شده' : 'ثبت‌شده'})`;
+      });
+      return `### 👤 جزئیات حقوق و پرونده مالی **${matchedEmployee.name}** (سال ${toPersianDigits(selectedYear)})
+
+- **سمت:** **${matchedEmployee.role}**
+- **حقوق پایه ماهانه مصوب:** **${formatCurrency(matchedEmployee.baseSalary, currencyMode)}**
+- **مجموع پرداختی‌های ثبت‌شده سال ${toPersianDigits(selectedYear)}:** **${formatCurrency(totalPaid, currencyMode)}**
+- **وضعیت همکاری:** **${matchedEmployee.status === 'active' ? 'فعال' : 'غیرفعال'}**
+
+**ریز دریافتی‌های ماهانه:**
+${paidMonths.join('\n') || '- هنوز سندی برای این شخص در سال جاری ثبت نشده است.'}`;
+    }
+
+    // ۲. بررسی اختصاصی درباره سهامدار یا شریک خاص
+    const matchedMember = members.find((m) => q.includes(m.name.toLowerCase()) || q.includes(m.name.split(' ')[0].toLowerCase()));
+    if (matchedMember) {
+      const memTxs = yearTransactions.filter((t) => t.relatedMemberId === matchedMember.id);
+      const totalMemberPaid = memTxs.reduce((s, t) => s + t.amount, 0);
+      return `### 🤝 پرونده سهامداری و مالی **${matchedMember.name}** (سال ${toPersianDigits(selectedYear)})
+
+- **سمت سازمانی:** **${matchedMember.role}**
+- **درصد سهم‌الشرکه:** **%${toPersianDigits(matchedMember.sharePercentage)}**
+- **وضعیت فعالیت:** **${matchedMember.isWorkingForce ? 'نیروی فعال حقوق‌بگیر' : 'صرفاً سهامدار'}**
+- **مجموع اسناد مرتبط در سال جاری:** **${formatCurrency(totalMemberPaid, currencyMode)}** (${toPersianDigits(memTxs.length)} سند)
+
+**اسناد مرتبط:**
+${memTxs.map((t) => `- **${t.title}** (${t.dateString}): **${formatCurrency(t.amount, currencyMode)}**`).join('\n') || '- سندی در سال جاری ثبت نشده است.'}`;
+    }
+
+    // ۳. بررسی اختصاصی درباره ماه مشخص
+    const matchedMonth = PERSIAN_MONTHS.find((m) => q.includes(m.name));
+    if (matchedMonth) {
+      const monthTxs = yearTransactions.filter((tx) => tx.month === matchedMonth.num);
+      const mIncome = monthTxs.filter((tx) => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
+      const mExpense = monthTxs.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
+      const mBalance = mIncome - mExpense;
+      const mSalaries = salaryMatrix.filter((c) => c.month === matchedMonth.num && c.year === selectedYear);
+      const totalSalaryMonth = mSalaries.reduce((s, c) => s + (c.baseAmount || 0) + (c.bonusAmount || 0), 0);
+
+      return `### 📅 گزارش مالی و تراز **ماه ${matchedMonth.name}** (سال ${toPersianDigits(selectedYear)})
+
+- **مجموع درآمدها:** **${formatCurrency(mIncome, currencyMode)}**
+- **مجموع کل هزینه‌ها:** **${formatCurrency(mExpense, currencyMode)}**
+- **تراز خالص نهایی:** **${formatCurrency(mBalance, currencyMode)}** (${mBalance >= 0 ? '🟢 تراز مثبت' : '🔴 تراز منفی'})
+- **مجموع حقوق ماه ${matchedMonth.name}:** **${formatCurrency(totalSalaryMonth, currencyMode)}**
+- **تعداد کل اسناد ماه:** **${toPersianDigits(monthTxs.length)} مورد**
+
+**مهم‌ترین اسناد ثبت‌شده در ${matchedMonth.name}:**
+${monthTxs.slice(0, 6).map((t) => `- **${t.title}** (${t.dateString}): ${t.type === 'income' ? 'درآمد +' : 'هزینه -'}**${formatCurrency(t.amount, currencyMode)}** [${t.category}]`).join('\n') || '- سندی در این ماه ثبت نشده است.'}`;
+    }
 
     // 0. Questions about VAT / Value Added Tax / Seasonal / Tariffs
     if (q.includes('ارزش افزوده') || q.includes('مودیان') || q.includes('فصلی') || q.includes('فصل') || q.includes('تعرفه') || q.includes('کارمزد') || q.includes('صورتحساب') || q.includes('فاکتور')) {
@@ -479,26 +552,6 @@ ${sortedExpenses.slice(0, 5).map(([cat, amt], idx) => {
 ۴. **بهره‌گیری از معافیت‌های دانش‌بنیان:** استفاده از معافیت‌های مالیاتی و تخفیفات بیمه برای پروژه‌های هوش مصنوعی سلامت باسینا.`;
     }
 
-    // 6. Specific Month questions (e.g. فروردین, اردیبهشت, ...)
-    const matchedMonth = PERSIAN_MONTHS.find((m) => q.includes(m.name));
-    if (matchedMonth) {
-      const monthTxs = yearTransactions.filter((tx) => tx.month === matchedMonth.num);
-      const mIncome = monthTxs.filter((tx) => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
-      const mExpense = monthTxs.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
-      const mBalance = mIncome - mExpense;
-
-      return `### 📅 گزارش تحلیلی مالی ماه ${matchedMonth.name} سال ${toPersianDigits(selectedYear)}
-
-**شاخص‌های ماه ${matchedMonth.name}:**
-- **مجموع درآمدها:** ${formatCurrency(mIncome, currencyMode)}
-- **مجموع هزینه‌ها:** ${formatCurrency(mExpense, currencyMode)}
-- **تراز مالی ماه:** **${formatCurrency(mBalance, currencyMode)}** (${mBalance >= 0 ? '🟢 تراز مثبت و سودآور' : '🔴 تراز منفی'})
-- **تعداد اسناد ثبت‌شده:** ${toPersianDigits(monthTxs.length)} مورد
-
-**اسناد مهم این ماه:**
-${monthTxs.slice(0, 5).map((t) => `- ${t.title} (${t.dateString}): ${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount, currencyMode)}`).join('\n') || 'سندی در این ماه ثبت نشده است.'}`;
-    }
-
     // 7. Questions about Top / Largest Transactions
     if (q.includes('بزرگترین') || q.includes('سنگین ترین') || q.includes('سنگین‌ترین') || q.includes('بیشترین') || q.includes('عمده')) {
       const topExp = [...yearTransactions.filter((tx) => tx.type === 'expense')].sort((a, b) => b.amount - a.amount).slice(0, 5);
@@ -657,7 +710,7 @@ ${topInc.map((t, idx) => `${idx + 1}. **${t.title}**: ${formatCurrency(t.amount,
           <h2 className="text-xs font-bold text-slate-700">پرسش‌ها و گزارش‌های فوری (با یک کلیک):</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {PRESET_PROMPTS.map((item) => {
+          {getPresetPrompts(selectedYear).map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -730,10 +783,8 @@ ${topInc.map((t, idx) => `${idx + 1}. **${t.title}**: ${formatCurrency(t.amount,
                     </button>
                   )}
 
-                  {/* Message Content rendered cleanly with preserved linebreaks */}
-                  <div className="whitespace-pre-wrap font-sans text-xs">
-                    {msg.text}
-                  </div>
+                  {/* Message Content rendered with rich markdown (bold, lists, headings) */}
+                  <MarkdownRenderer content={msg.text} isUser={isUser} />
 
                   <span
                     className={`block text-[10px] mt-2 pt-1 border-t ${

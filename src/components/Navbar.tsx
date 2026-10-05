@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Building2, 
   BarChart3, 
@@ -22,10 +22,12 @@ import {
   ShieldCheck,
   FileCheck2,
   BookOpen,
-  BookOpenCheck
+  BookOpenCheck,
+  SlidersHorizontal
 } from 'lucide-react';
 import { ActiveTab, CurrencyMode, FiscalYear, AppUser } from '../types';
 import { CompanyLogo } from './CompanyLogo';
+import { MenuReorderModal, NavTabItem } from './MenuReorderModal';
 
 interface NavigationProps {
   companyName: string;
@@ -60,6 +62,36 @@ export const NAV_TABS = [
   { id: 'fiscal-years' as ActiveTab, label: 'سال‌های مالی', icon: CalendarCheck },
   { id: 'users' as ActiveTab, label: 'مدیریت کاربران', icon: ShieldCheck },
 ];
+
+/**
+ * بازیابی ترتیب سفارشی منوها از حافظه مرورگر یا استفاده از ترتیب پیش‌فرض
+ */
+export const getStoredMenuTabs = (): NavTabItem[] => {
+  if (typeof window === 'undefined') return NAV_TABS;
+  try {
+    const saved = localStorage.getItem('ayandeh_menu_order');
+    if (saved) {
+      const ids: ActiveTab[] = JSON.parse(saved);
+      if (Array.isArray(ids) && ids.length > 0) {
+        const ordered: NavTabItem[] = [];
+        ids.forEach(id => {
+          const found = NAV_TABS.find(t => t.id === id);
+          if (found && !ordered.some(o => o.id === id)) {
+            ordered.push(found);
+          }
+        });
+        // افزودن منوهای جدیدی که احیاناً در لیست ذخیره شده نیستند
+        NAV_TABS.forEach(t => {
+          if (!ordered.some(o => o.id === t.id)) {
+            ordered.push(t);
+          }
+        });
+        return ordered;
+      }
+    }
+  } catch {}
+  return NAV_TABS;
+};
 
 export const TAB_META: Record<ActiveTab, { title: string; subtitle: string }> = {
   'dashboard': {
@@ -137,6 +169,39 @@ export const Sidebar: React.FC<NavigationProps> = ({
   currentUser,
 }) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [orderedTabs, setOrderedTabs] = useState<NavTabItem[]>(getStoredMenuTabs);
+  const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOrderChange = () => {
+      setOrderedTabs(getStoredMenuTabs());
+    };
+    const handleOpenReorder = () => {
+      setIsReorderModalOpen(true);
+    };
+    window.addEventListener('ayandeh_menu_order_changed', handleOrderChange);
+    window.addEventListener('ayandeh_open_menu_reorder', handleOpenReorder);
+    return () => {
+      window.removeEventListener('ayandeh_menu_order_changed', handleOrderChange);
+      window.removeEventListener('ayandeh_open_menu_reorder', handleOpenReorder);
+    };
+  }, []);
+
+  const handleSaveOrder = (newTabs: NavTabItem[]) => {
+    try {
+      localStorage.setItem('ayandeh_menu_order', JSON.stringify(newTabs.map(t => t.id)));
+      window.dispatchEvent(new Event('ayandeh_menu_order_changed'));
+    } catch {}
+    setOrderedTabs(newTabs);
+  };
+
+  const handleResetOrder = () => {
+    try {
+      localStorage.removeItem('ayandeh_menu_order');
+      window.dispatchEvent(new Event('ayandeh_menu_order_changed'));
+    } catch {}
+    setOrderedTabs(NAV_TABS);
+  };
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
@@ -168,9 +233,23 @@ export const Sidebar: React.FC<NavigationProps> = ({
         </div>
       )}
 
+      {/* Navigation Header with Custom Reorder Button */}
+      <div className="px-4 pt-3 pb-1 flex items-center justify-between text-[11px] text-slate-400">
+        <span className="font-semibold text-slate-400">منوهای سامانه</span>
+        <button
+          type="button"
+          onClick={() => setIsReorderModalOpen(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-950 text-indigo-300 hover:text-indigo-200 border border-slate-700/70 hover:border-indigo-500/50 transition-colors text-[10px] font-bold cursor-pointer shadow-2xs"
+          title="تغییر چینش و ترتیب منوها"
+        >
+          <SlidersHorizontal className="w-3 h-3 text-indigo-400" />
+          <span>تغییر ترتیب</span>
+        </button>
+      </div>
+
       {/* Navigation List */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {NAV_TABS.filter((tab) => {
+      <nav className="flex-1 p-4 pt-1 space-y-2 overflow-y-auto">
+        {orderedTabs.filter((tab) => {
           if (tab.id === 'users') {
             return currentUser ? currentUser.permissions.canManageUsers : true;
           }
@@ -334,6 +413,16 @@ export const Sidebar: React.FC<NavigationProps> = ({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          {/* Quick Menu Reorder Button on Mobile */}
+          <button
+            onClick={() => window.dispatchEvent(new Event('ayandeh_open_menu_reorder'))}
+            className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer active:scale-95"
+            title="تغییر ترتیب منوها"
+            aria-label="تغییر ترتیب منوها"
+          >
+            <SlidersHorizontal className="w-4 h-4 text-indigo-400" />
+          </button>
+
           {/* Quick Backup Modal Button on Mobile */}
           {(currentUser?.permissions.canBackupRestore ?? true) && (
             <button
@@ -404,6 +493,15 @@ export const Sidebar: React.FC<NavigationProps> = ({
       <aside className="hidden md:flex w-64 bg-slate-900 text-white flex-col border-l border-slate-800 shrink-0 sticky top-0 h-screen overflow-hidden">
         {sidebarContent}
       </aside>
+
+      {/* Modal for Menu Reordering */}
+      <MenuReorderModal
+        isOpen={isReorderModalOpen}
+        onClose={() => setIsReorderModalOpen(false)}
+        tabs={orderedTabs}
+        onSaveOrder={handleSaveOrder}
+        onResetOrder={handleResetOrder}
+      />
     </>
   );
 };
@@ -423,6 +521,7 @@ interface TopHeaderProps {
   onOpenChangePassword?: () => void;
   fiscalYears?: FiscalYear[];
   currentUser?: AppUser | null;
+  onOpenMenuReorder?: () => void;
 }
 
 /**
@@ -443,6 +542,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenChangePassword,
   fiscalYears,
   currentUser,
+  onOpenMenuReorder,
 }) => {
   const currentTabMeta = TAB_META[activeTab] || {
     title: 'سامانه مدیریت مالی',
@@ -477,6 +577,24 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
+        {/* Menu Reorder Button */}
+        <button
+          id="menu-reorder-header-btn"
+          onClick={() => {
+            if (onOpenMenuReorder) {
+              onOpenMenuReorder();
+            } else {
+              window.dispatchEvent(new Event('ayandeh_open_menu_reorder'));
+            }
+          }}
+          className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 border border-indigo-200 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 rounded-lg font-bold text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 active:scale-95"
+          title="شخصی‌سازی و تغییر ترتیب دلخواه منوها"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
+          <span className="hidden sm:inline">ترتیب منوها</span>
+          <span className="sm:hidden">ترتیب</span>
+        </button>
+
         {/* Excel Export Button */}
         {(currentUser?.permissions.canExportExcel ?? true) && (
           <button
