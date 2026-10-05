@@ -95,10 +95,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         );
       }
 
-      // متن عادی: پاکسازی هرگونه ستاره یا آندرلاین سرگردان احتمالی
+      // متن عادی: پاکسازی هرگونه ستاره سرگردان احتمالی
       const sanitizedText = part
         .replace(/\*\*/g, '')
-        .replace(/(?<!\w)\*(?!\w)/g, '');
+        .replace(/\*/g, '');
 
       return <React.Fragment key={index}>{sanitizedText}</React.Fragment>;
     });

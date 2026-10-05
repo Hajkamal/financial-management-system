@@ -602,11 +602,16 @@ ${topInc.map((t, idx) => `${idx + 1}. **${t.title}**: ${formatCurrency(t.amount,
 
     const systemContext = compileFinancialContext();
 
+    // Abort controller with 15s timeout to prevent hanging UI
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
       // Call server proxy route with chat history
       const response = await fetch('/api/gemini/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           prompt: textToSend,
           systemContext,
@@ -616,6 +621,8 @@ ${topInc.map((t, idx) => `${idx + 1}. **${t.title}**: ${formatCurrency(t.amount,
           })),
         }),
       });
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const data = await response.json();
@@ -645,8 +652,9 @@ ${topInc.map((t, idx) => `${idx + 1}. **${t.title}**: ${formatCurrency(t.amount,
           timestamp: 'هم‌اکنون',
         },
       ]);
-    } catch (err) {
-      console.warn('AI analysis fallback activated:', err);
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      console.warn('AI analysis fallback activated:', err?.name === 'AbortError' ? 'Timeout' : err?.message || err);
       const dynamicReport = generateDynamicFinancialAnalysis(textToSend);
       setMessages((prev) => [
         ...prev,

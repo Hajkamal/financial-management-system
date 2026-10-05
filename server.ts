@@ -89,41 +89,82 @@ ${systemContext || 'اطلاعاتی ارائه نشده است.'}
       'gemini-flash-latest',
     ];
 
-    // Format conversation history for Gemini SDK if provided
+    // Format conversation history for Gemini SDK (ensuring strict user-start and alternating roles)
     let contents: any = prompt;
     if (Array.isArray(history) && history.length > 0) {
-      const formattedHistory = history
+      const rawTurns = history
         .filter((msg: any) => msg && msg.text && msg.sender)
-        .slice(-6) // recent turns
+        .slice(-6)
         .map((msg: any) => ({
           role: msg.sender === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.text }],
-        }));
-      contents = [...formattedHistory, { role: 'user', parts: [{ text: prompt }] }];
+          parts: [{ text: String(msg.text).trim() }],
+        }))
+        .filter((turn: any) => turn.parts[0].text.length > 0);
+
+      // Multi-turn conversation must begin with a 'user' turn
+      while (rawTurns.length > 0 && rawTurns[0].role !== 'user') {
+        rawTurns.shift();
+      }
+
+      // Merge any consecutive turns with the same role
+      const sanitizedTurns: any[] = [];
+      for (const turn of rawTurns) {
+        if (sanitizedTurns.length === 0 || sanitizedTurns[sanitizedTurns.length - 1].role !== turn.role) {
+          sanitizedTurns.push(turn);
+        } else {
+          sanitizedTurns[sanitizedTurns.length - 1].parts[0].text += '\n' + turn.parts[0].text;
+        }
+      }
+
+      // Append current user prompt
+      if (sanitizedTurns.length > 0) {
+        if (sanitizedTurns[sanitizedTurns.length - 1].role === 'user') {
+          sanitizedTurns[sanitizedTurns.length - 1].parts[0].text += '\n' + prompt;
+          contents = sanitizedTurns;
+        } else {
+          contents = [...sanitizedTurns, { role: 'user', parts: [{ text: prompt }] }];
+        }
+      } else {
+        contents = prompt;
+      }
     }
 
     let lastError: any = null;
     let generatedText: string | null = null;
 
     for (const model of candidateModels) {
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents,
-          config: {
-            systemInstruction,
-            temperature: 0.5,
-          },
-        });
+      // Allow up to 2 attempts per model with quick backoff for transient 503 demand spikes
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const response = await ai.models.generateContent({
+            model,
+            contents,
+            config: {
+              systemInstruction,
+              temperature: 0.4,
+            },
+          });
 
-        if (response && response.text) {
-          generatedText = response.text;
-          break;
+          if (response && response.text) {
+            generatedText = response.text;
+            break;
+          }
+        } catch (err: any) {
+          lastError = err;
+          const errMsg = String(err?.message || '');
+          const is503 = err?.status === 503 || errMsg.includes('503') || errMsg.includes('demand');
+          console.warn(`Model ${model} attempt ${attempt + 1} returned error:`, err?.status || errMsg.slice(0, 100));
+          if (is503 && attempt === 0) {
+            // Short 600ms backoff before 1 retry on 503
+            await new Promise((r) => setTimeout(r, 600));
+            continue;
+          }
+          break; // Move to next candidate model
         }
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`Model ${model} returned error:`, err?.status || err?.message || err);
-        // Continue to next model in cascade
+      }
+
+      if (generatedText) {
+        break;
       }
     }
 
