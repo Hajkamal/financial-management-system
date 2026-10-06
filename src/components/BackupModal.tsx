@@ -751,7 +751,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       <ConfirmDeleteModal
         isOpen={confirmResetOpen}
         title="بازنشانی اطلاعات به مقادیر اولیه"
-        confirmButtonText="بله، بازنشانی شود"
+        confirmText="بله، بازنشانی شود"
         warningText="آیا از بازنشانی داده‌ها به اطلاعات اولیه مطمئن هستید؟ کلیه تراکنش‌ها، اسناد و تغییرات دستی وارد شده پاک خواهد شد و ماتریس نمونه اولیه بارگذاری می‌شود."
         onConfirm={() => {
           onResetToDefaults();
@@ -765,7 +765,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       <ConfirmDeleteModal
         isOpen={confirmPurgeOpen}
         title="پاکسازی کامل اطلاعات سال ۱۴۰۴"
-        confirmButtonText="بله، پاکسازی و تثبیت ۱۴۰۵"
+        confirmText="بله، پاکسازی و تثبیت ۱۴۰۵"
         warningText="کلیه تراکنش‌ها، ردیف‌های ماتریس حقوق و کش سال ۱۴۰۴ در این مرورگر پاک خواهد شد و سال مالی ۱۴۰۵ تثبیت می‌شود. آیا موافقید؟"
         onConfirm={() => {
           if (onPurge1404) onPurge1404();
@@ -779,7 +779,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       <ConfirmDeleteModal
         isOpen={confirmCleanSlateOpen}
         title="آماده‌سازی ورود داده‌های واقعی (حذف تراکنش‌های تستی)"
-        confirmButtonText="بله، پاکسازی اسناد تستی"
+        confirmText="بله، پاکسازی اسناد تستی"
         warningText="آیا از پاکسازی کلیه تراکنش‌ها و اسناد تستی مطمئن هستید؟ اطلاعات حساب‌های کاربری، مشخصات پرسنل و حساب‌های بانکی حفظ می‌شوند تا بتوانید اسناد مالی واقعی شرکت را از ابتدا ثبت نمایید."
         onConfirm={() => {
           if (onClearDemoTransactions) onClearDemoTransactions();

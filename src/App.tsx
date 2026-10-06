@@ -1,28 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { 
   Sidebar,
   TopHeader,
   MobileBottomNav,
   TAB_META
 } from './components/Navbar';
-import { DashboardView } from './components/DashboardView';
-import { TransactionsView } from './components/TransactionsView';
-import { SalaryMatrixView } from './components/SalaryMatrixView';
-import { EmployeesView } from './components/EmployeesView';
-import { MembersView } from './components/MembersView';
-import { LoansView } from './components/LoansView';
-import { FiscalYearsView } from './components/FiscalYearsView';
-import { UsersView } from './components/UsersView';
-import { BankAccountsView } from './components/BankAccountsView';
-import { AiAssistantView } from './components/AiAssistantView';
-import { VatReportsView } from './components/VatReportsView';
-import { ExportExcelModal } from './components/ExportExcelModal';
-import { TransactionModal } from './components/TransactionModal';
-import { BackupModal } from './components/BackupModal';
-import { ChangePasswordModal } from './components/ChangePasswordModal';
+const DashboardView = lazy(() => import('./components/DashboardView').then(module => ({ default: module.DashboardView })));
+const TransactionsView = lazy(() => import('./components/TransactionsView').then(module => ({ default: module.TransactionsView })));
+const SalaryMatrixView = lazy(() => import('./components/SalaryMatrixView').then(module => ({ default: module.SalaryMatrixView })));
+const EmployeesView = lazy(() => import('./components/EmployeesView').then(module => ({ default: module.EmployeesView })));
+const MembersView = lazy(() => import('./components/MembersView').then(module => ({ default: module.MembersView })));
+const LoansView = lazy(() => import('./components/LoansView').then(module => ({ default: module.LoansView })));
+const FiscalYearsView = lazy(() => import('./components/FiscalYearsView').then(module => ({ default: module.FiscalYearsView })));
+const UsersView = lazy(() => import('./components/UsersView').then(module => ({ default: module.UsersView })));
+const BankAccountsView = lazy(() => import('./components/BankAccountsView').then(module => ({ default: module.BankAccountsView })));
+const AiAssistantView = lazy(() => import('./components/AiAssistantView').then(module => ({ default: module.AiAssistantView })));
+const VatReportsView = lazy(() => import('./components/VatReportsView').then(module => ({ default: module.VatReportsView })));
+const ExportExcelModal = lazy(() => import('./components/ExportExcelModal').then(module => ({ default: module.ExportExcelModal })));
+const TransactionModal = lazy(() => import('./components/TransactionModal').then(module => ({ default: module.TransactionModal })));
+const BackupModal = lazy(() => import('./components/BackupModal').then(module => ({ default: module.BackupModal })));
+const ChangePasswordModal = lazy(() => import('./components/ChangePasswordModal').then(module => ({ default: module.ChangePasswordModal })));
 import { AuthScreen } from './components/AuthScreen';
-import { JournalView } from './components/JournalView';
-import { GeneralLedgerView } from './components/GeneralLedgerView';
+const JournalView = lazy(() => import('./components/JournalView').then(module => ({ default: module.JournalView })));
+const GeneralLedgerView = lazy(() => import('./components/GeneralLedgerView').then(module => ({ default: module.GeneralLedgerView })));
 
 import { 
   ActiveTab, 
@@ -522,6 +522,8 @@ export default function App() {
 
         {/* ناحیه محتوای تب‌ها */}
         <main className="flex-1 p-3 sm:p-6 lg:p-8 pb-28 md:pb-8 flex flex-col gap-5 sm:gap-6 overflow-y-auto">
+          <Suspense fallback={<div className="flex items-center justify-center p-12 text-slate-400"><Loader2 className="w-8 h-8 animate-spin" /></div>}>
+
           {activeTab === 'dashboard' && (
             <DashboardView
               transactions={transactions}
@@ -614,6 +616,7 @@ export default function App() {
               currentUser={currentAppUser}
             />
           )}
+
 
           {activeTab === 'ai-assistant' && (
             <AiAssistantView
@@ -733,6 +736,8 @@ export default function App() {
               onNavigateToJournal={() => setActiveTab('journal')}
             />
           )}
+
+          </Suspense>
         </main>
       </div>
 

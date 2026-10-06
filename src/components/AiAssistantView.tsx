@@ -301,7 +301,7 @@ ${employees.map(emp => {
   const empCells = salaryMatrix.filter(m => m.employeeId === emp.id && m.year === selectedYear);
   const paidMonths = empCells.map(c => {
     const mName = PERSIAN_MONTHS.find(pm => pm.num === c.month)?.name || c.month;
-    return `${mName}: پایه ${safeFmt(c.baseAmount)} ریال${c.bonusAmount ? ` + پاداش ${safeFmt(c.bonusAmount)} ریال` : ''} [وضعیت: ${c.isPaid ? 'پرداخت‌شده' : 'ثبت‌شده'}]`;
+    return `${mName}: پایه ${safeFmt(c.amount)} ریال${c.bonus ? ` + پاداش ${safeFmt(c.bonus)} ریال` : ''} [وضعیت: ${c.status ? 'پرداخت‌شده' : 'ثبت‌شده'}]`;
   });
   return `- ${emp.name} (${emp.role}): پایه مصوب ${safeFmt(emp.baseSalary)} ریال | جزئیات ماه‌ها: ${paidMonths.join(' | ') || 'سندی ثبت نشده'}`;
 }).join('\n')}
@@ -337,10 +337,10 @@ ${(serviceTariffs || []).map(t => `- خدمت ${t.title}: کارمزد مصوب 
     const matchedEmployee = employees.find((e) => q.includes(e.name.toLowerCase()) || q.includes(e.name.split(' ')[0].toLowerCase()));
     if (matchedEmployee) {
       const empCells = salaryMatrix.filter((m) => m.employeeId === matchedEmployee.id && m.year === selectedYear);
-      const totalPaid = empCells.reduce((sum, c) => sum + (c.baseAmount || 0) + (c.bonusAmount || 0), 0);
-      const paidMonths = empCells.filter((c) => c.baseAmount > 0).map((c) => {
+      const totalPaid = empCells.reduce((sum, c) => sum + (c.amount || 0) + (c.bonus || 0), 0);
+      const paidMonths = empCells.filter((c) => c.amount > 0).map((c) => {
         const mName = PERSIAN_MONTHS.find((pm) => pm.num === c.month)?.name || c.month;
-        return `- **ماه ${mName}:** حقوق پایه **${formatCurrency(c.baseAmount, currencyMode)}**${c.bonusAmount ? ` + پاداش **${formatCurrency(c.bonusAmount, currencyMode)}**` : ''} (${c.isPaid ? 'پرداخت‌شده' : 'ثبت‌شده'})`;
+        return `- **ماه ${mName}:** حقوق پایه **${formatCurrency(c.amount, currencyMode)}**${c.bonus ? ` + پاداش **${formatCurrency(c.bonus, currencyMode)}**` : ''} (${c.status ? 'پرداخت‌شده' : 'ثبت‌شده'})`;
       });
       return `### 👤 جزئیات حقوق و پرونده مالی **${matchedEmployee.name}** (سال ${toPersianDigits(selectedYear)})
 
@@ -377,7 +377,7 @@ ${memTxs.map((t) => `- **${t.title}** (${t.dateString}): **${formatCurrency(t.am
       const mExpense = monthTxs.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
       const mBalance = mIncome - mExpense;
       const mSalaries = salaryMatrix.filter((c) => c.month === matchedMonth.num && c.year === selectedYear);
-      const totalSalaryMonth = mSalaries.reduce((s, c) => s + (c.baseAmount || 0) + (c.bonusAmount || 0), 0);
+      const totalSalaryMonth = mSalaries.reduce((s, c) => s + (c.amount || 0) + (c.bonus || 0), 0);
 
       return `### 📅 گزارش مالی و تراز **ماه ${matchedMonth.name}** (سال ${toPersianDigits(selectedYear)})
 

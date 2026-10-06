@@ -732,7 +732,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     });
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase?.removeChannel(channel);
     };
   }, [isCloudConnected]);
 
@@ -842,7 +842,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
               newMatrix[cellIndex] = {
                 ...newMatrix[cellIndex],
                 amount: totalMonthSalary,
-                status: totalMonthSalary > 0 ? 'paid' : 'zero'
+                status: (totalMonthSalary > 0 ? 'paid' : 'zero') as 'paid' | 'pending' | 'zero'
               };
               hasMatrixUpdates = true;
             }
@@ -853,7 +853,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
               year: selectedYear,
               month: m as PersianMonthNumber,
               amount: totalMonthSalary,
-              status: totalMonthSalary > 0 ? 'paid' : 'zero'
+              status: (totalMonthSalary > 0 ? 'paid' : 'zero') as 'paid' | 'pending' | 'zero'
             });
             hasMatrixUpdates = true;
           }
@@ -923,7 +923,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
           savedCell = {
             ...updatedSm[smIndex],
             amount: totalMonthSalary,
-            status: totalMonthSalary > 0 ? 'paid' : 'zero',
+            status: (totalMonthSalary > 0 ? 'paid' : 'zero') as 'paid' | 'pending' | 'zero',
           };
           updatedSm[smIndex] = savedCell;
         } else {
@@ -933,7 +933,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
             year: salYear,
             month: salMonth,
             amount: totalMonthSalary,
-            status: totalMonthSalary > 0 ? 'paid' : 'zero',
+            status: (totalMonthSalary > 0 ? 'paid' : 'zero') as 'paid' | 'pending' | 'zero',
           };
           updatedSm = [...prev, savedCell];
         }
@@ -983,7 +983,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
             const savedCell = {
               ...updatedSm[smIndex],
               amount: totalMonthSalary,
-              status: totalMonthSalary > 0 ? 'paid' : 'zero',
+              status: (totalMonthSalary > 0 ? 'paid' : 'zero') as 'paid' | 'pending' | 'zero',
             };
             updatedSm[smIndex] = savedCell;
             writeLocal('ayandeh_salary_matrix', updatedSm);
@@ -1452,7 +1452,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   // ==========================
   const handleAddUser = async (userData: Omit<AppUser, 'id' | 'createdAt'>) => {
     const cleanEmail = normalizeEmail(userData.email);
-    const plainPwd = normalizePassword(userData.password) || '123456';
+    const plainPwd = normalizePassword(userData.password || '') || '123456';
     const cleanPhone = userData.phone ? toEnglishDigits(userData.phone).trim() : undefined;
 
     const exists = users.some(u => normalizeEmail(u.email) === cleanEmail);
