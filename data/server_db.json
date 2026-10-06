@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "lastUpdated": "2026-10-06T08:24:12.657Z",
+  "lastUpdated": "2026-10-06T09:10:22.184Z",
   "selectedYear": 1405,
   "users": [
     {
@@ -80,6 +80,23 @@
     }
   ],
   "transactions": [
+    {
+      "id": "tx-1791276463447",
+      "type": "expense",
+      "category": "infrastructure",
+      "subCategory": "domain_tools",
+      "amount": 137000000,
+      "year": 1405,
+      "month": 7,
+      "day": 14,
+      "dateString": "1405/07/14",
+      "title": "شارژ کانت اوپن روتر",
+      "description": "پرداخت از حساب شرکت به کارت شرکت بعد انتقال به بلو وحید جهت خرید تتر و انجام شارز",
+      "recipientOrPayer": "اوپن روتر",
+      "createdBy": "vahidkamali03@gmail.com",
+      "createdByName": "وحید کمالی",
+      "createdAt": "1405/07/14 - 12:17"
+    },
     {
       "id": "tx-1790873681326",
       "type": "expense",
@@ -4704,7 +4721,8 @@
       "label": "حقوق کارمندان",
       "color": "text-rose-700",
       "badgeBg": "bg-rose-100 text-rose-800 border-rose-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "secretary_commission",
@@ -4712,7 +4730,8 @@
       "label": "کارمزد ماهانه منشی‌ها",
       "color": "text-pink-700",
       "badgeBg": "bg-pink-100 text-pink-800 border-pink-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "doctors_payout",
@@ -4720,7 +4739,8 @@
       "label": "پرداختی پزشکان",
       "color": "text-cyan-700",
       "badgeBg": "bg-cyan-100 text-cyan-800 border-cyan-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "marketing_alizadeh",
@@ -4728,7 +4748,8 @@
       "label": "پرداخت تیم مارکتینگ علیزاده",
       "color": "text-orange-700",
       "badgeBg": "bg-orange-100 text-orange-800 border-orange-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "infrastructure",
@@ -4753,6 +4774,14 @@
         {
           "id": "domain_tools",
           "name": "دامنه‌ها و ابزارهای توسعه"
+        },
+        {
+          "id": "sub_1790577141486",
+          "name": "sub_1790577141486"
+        },
+        {
+          "id": "appointment",
+          "name": "appointment"
         }
       ]
     },
@@ -4762,7 +4791,8 @@
       "label": "هزینه بیمه کارمندان",
       "color": "text-amber-700",
       "badgeBg": "bg-amber-100 text-amber-800 border-amber-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "shareholder_payout",
@@ -4770,7 +4800,8 @@
       "label": "پرداختی به اعضا و شرکا",
       "color": "text-violet-700",
       "badgeBg": "bg-violet-100 text-violet-800 border-violet-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "loan_installment",
@@ -4778,7 +4809,17 @@
       "label": "بدهی و اقساط تسهیلات",
       "color": "text-red-700",
       "badgeBg": "bg-red-100 text-red-800 border-red-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": [
+        {
+          "id": "sub_1791022135768",
+          "name": "sub_1791022135768"
+        },
+        {
+          "id": "sub_1791192285965",
+          "name": "sub_1791192285965"
+        }
+      ]
     },
     {
       "id": "guarantee_deposit",
@@ -4786,7 +4827,8 @@
       "label": "واریز سپرده حسن انجام تعهدات / پیش‌پرداخت قرارداد",
       "color": "text-indigo-700",
       "badgeBg": "bg-indigo-100 text-indigo-800 border-indigo-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "office_site",
@@ -4811,6 +4853,10 @@
         {
           "id": "internet_tel",
           "name": "اینترنت و تلفن"
+        },
+        {
+          "id": "blubank_zarei",
+          "name": "شارژ کارت بلو سکینه زارعی - شرکت"
         }
       ]
     },
@@ -4818,8 +4864,8 @@
       "id": "ads_basina",
       "type": "expense",
       "label": "تبلیغات باسینا",
-      "color": "text-blue-700",
-      "badgeBg": "bg-blue-100 text-blue-800 border-blue-300",
+      "color": "text-rose-700",
+      "badgeBg": "bg-rose-100 text-rose-800 border-rose-300",
       "isCustom": false,
       "subCategories": [
         {
@@ -4845,6 +4891,10 @@
         {
           "id": "sms_campaign",
           "name": "کمپین پیامکی تبلیغاتی"
+        },
+        {
+          "id": "reportage",
+          "name": "رپورتاژ"
         }
       ]
     },
@@ -4884,7 +4934,8 @@
       "label": "فروش سپید",
       "color": "text-teal-700",
       "badgeBg": "bg-teal-100 text-teal-800 border-teal-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "shareholder_deposit",
@@ -4892,7 +4943,8 @@
       "label": "واریزی سهامداران",
       "color": "text-blue-700",
       "badgeBg": "bg-blue-100 text-blue-800 border-blue-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "capital_raise",
@@ -4900,7 +4952,8 @@
       "label": "جذب سرمایه",
       "color": "text-indigo-700",
       "badgeBg": "bg-indigo-100 text-indigo-800 border-indigo-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "zarinpal_gateway",
@@ -4908,7 +4961,8 @@
       "label": "درگاه پرداخت زرین‌پال",
       "color": "text-amber-700",
       "badgeBg": "bg-amber-100 text-amber-800 border-amber-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "guarantee_refund",
@@ -4916,7 +4970,8 @@
       "label": "استرداد سپرده حسن انجام تعهدات / پیش‌پرداخت",
       "color": "text-sky-700",
       "badgeBg": "bg-sky-100 text-sky-800 border-sky-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     },
     {
       "id": "other_income",
@@ -4924,7 +4979,8 @@
       "label": "سایر درآمدها",
       "color": "text-slate-700",
       "badgeBg": "bg-slate-100 text-slate-800 border-slate-300",
-      "isCustom": false
+      "isCustom": false,
+      "subCategories": []
     }
   ],
   "companyLogo": null

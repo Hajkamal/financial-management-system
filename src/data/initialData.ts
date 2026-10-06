@@ -109,6 +109,7 @@ export const INITIAL_CUSTOM_CATEGORIES: CustomCategoryDefinition[] = [
       { id: 'office_supplies', name: 'لوازم التحریر و اقلام مصرفی' },
       { id: 'cleaning_tea', name: 'پذیرایی و نظافت' },
       { id: 'internet_tel', name: 'اینترنت و تلفن' },
+      { id: 'blubank_zarei', name: 'شارژ کارت بلو سکینه زارعی - شرکت' },
     ],
   },
   {
@@ -125,6 +126,7 @@ export const INITIAL_CUSTOM_CATEGORIES: CustomCategoryDefinition[] = [
       { id: 'yektanet', name: 'یکتانت' },
       { id: 'social_ads', name: 'تبلیغات اینستاگرام و شبکه‌های اجتماعی' },
       { id: 'sms_campaign', name: 'کمپین پیامکی تبلیغاتی' },
+      { id: 'reportage', name: 'رپورتاژ' },
     ],
   },
 

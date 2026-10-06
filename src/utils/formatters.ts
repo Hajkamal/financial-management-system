@@ -319,6 +319,7 @@ export const ADS_BASINA_SUBCATEGORY_CONFIG: Record<string, string> = {
   yektanet: 'یکتانت',
   social_ads: 'تبلیغات اینستاگرام و شبکه‌های اجتماعی',
   sms_campaign: 'کمپین پیامکی تبلیغاتی',
+  reportage: 'رپورتاژ',
 };
 
 export const OFFICE_SITE_SUBCATEGORY_CONFIG: Record<string, string> = {
@@ -326,6 +327,7 @@ export const OFFICE_SITE_SUBCATEGORY_CONFIG: Record<string, string> = {
   office_supplies: 'لوازم التحریر و اقلام مصرفی',
   cleaning_tea: 'پذیرایی و نظافت',
   internet_tel: 'اینترنت و تلفن',
+  blubank_zarei: 'شارژ کارت بلو سکینه زارعی - شرکت',
 };
 
 /**
