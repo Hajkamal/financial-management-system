@@ -35,11 +35,20 @@ export interface ServerFullData {
   companyLogo?: string | null;
 }
 
+
+const getHeaders = () => {
+  const token = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SERVER_API_TOKEN) || 'ayandeh-secret-token-1405';
+  return {
+    'Content-Type': 'application/json',
+    'x-api-token': token,
+  };
+};
+
 export const serverApi = {
   // دریافت تمامی داده‌ها از دیتابیس سرور
   async getFinancialData(): Promise<ServerFullData | null> {
     try {
-      const res = await fetch('/api/financial-data');
+      const res = await fetch('/api/financial-data', { headers: getHeaders() });
       if (!res.ok) return null;
       const json = await res.json();
       return json.data || null;
@@ -54,7 +63,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/transaction', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(tx),
       });
       return res.ok;
@@ -67,7 +76,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/transactions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify({ transactions }),
       });
       return res.ok;
@@ -79,7 +88,7 @@ export const serverApi = {
   async deleteTransaction(id: string): Promise<boolean> {
     try {
       const res = await fetch(`/api/financial-data/transaction/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
+        method: 'DELETE', headers: getHeaders(),
       });
       return res.ok;
     } catch {
@@ -92,7 +101,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/employee', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(emp),
       });
       return res.ok;
@@ -104,7 +113,7 @@ export const serverApi = {
   async deleteEmployee(id: string): Promise<boolean> {
     try {
       const res = await fetch(`/api/financial-data/employee/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
+        method: 'DELETE', headers: getHeaders(),
       });
       return res.ok;
     } catch {
@@ -117,7 +126,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/salary-cell', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(item),
       });
       return res.ok;
@@ -130,7 +139,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/salary-matrix-batch', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify({ items }),
       });
       return res.ok;
@@ -144,7 +153,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/member', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(member),
       });
       return res.ok;
@@ -156,7 +165,7 @@ export const serverApi = {
   async deleteMember(id: string): Promise<boolean> {
     try {
       const res = await fetch(`/api/financial-data/member/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
+        method: 'DELETE', headers: getHeaders(),
       });
       return res.ok;
     } catch {
@@ -169,7 +178,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/loan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(loan),
       });
       return res.ok;
@@ -181,7 +190,7 @@ export const serverApi = {
   async deleteLoan(id: string): Promise<boolean> {
     try {
       const res = await fetch(`/api/financial-data/loan/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
+        method: 'DELETE', headers: getHeaders(),
       });
       return res.ok;
     } catch {
@@ -194,7 +203,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/bank-account', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(acc),
       });
       return res.ok;
@@ -206,7 +215,7 @@ export const serverApi = {
   async deleteBankAccount(id: string): Promise<boolean> {
     try {
       const res = await fetch(`/api/financial-data/bank-account/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
+        method: 'DELETE', headers: getHeaders(),
       });
       return res.ok;
     } catch {
@@ -219,7 +228,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/vat-invoice', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(inv),
       });
       return res.ok;
@@ -231,7 +240,7 @@ export const serverApi = {
   async deleteVatInvoice(id: string): Promise<boolean> {
     try {
       const res = await fetch(`/api/financial-data/vat-invoice/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
+        method: 'DELETE', headers: getHeaders(),
       });
       return res.ok;
     } catch {
@@ -244,7 +253,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/service-tariff', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(tariff),
       });
       return res.ok;
@@ -258,7 +267,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/fiscal-year', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(fy),
       });
       return res.ok;
@@ -270,7 +279,7 @@ export const serverApi = {
   async deleteFiscalYear(year: number): Promise<boolean> {
     try {
       const res = await fetch(`/api/financial-data/fiscal-year/${year}`, {
-        method: 'DELETE',
+        method: 'DELETE', headers: getHeaders(),
       });
       return res.ok;
     } catch {
@@ -283,7 +292,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(user),
       });
       return res.ok;
@@ -295,7 +304,7 @@ export const serverApi = {
   async deleteUser(id: string): Promise<boolean> {
     try {
       const res = await fetch(`/api/financial-data/user/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
+        method: 'DELETE', headers: getHeaders(),
       });
       return res.ok;
     } catch {
@@ -308,7 +317,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/auth/change-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify({ userId, newPasswordHash }),
       });
       return res.ok;
@@ -320,7 +329,7 @@ export const serverApi = {
   // بازنشانی کامل در سرور
   async resetData(): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/reset', { method: 'POST' });
+      const res = await fetch('/api/financial-data/reset', { method: 'POST', headers: getHeaders() });
       return res.ok;
     } catch {
       return false;
@@ -332,7 +341,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/restore', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(backup),
       });
       if (!res.ok) {
@@ -356,7 +365,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/custom-categories', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify({ customCategories }),
       });
       return res.ok;
@@ -370,7 +379,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/company-logo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify({ companyLogo }),
       });
       return res.ok;
@@ -384,7 +393,7 @@ export const serverApi = {
     try {
       const res = await fetch('/api/financial-data/push-all', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => ({}));

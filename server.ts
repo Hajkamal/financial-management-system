@@ -27,6 +27,26 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Security: Simple Token Middleware for API
+const SERVER_API_TOKEN = process.env.SERVER_API_TOKEN || 'ayandeh-secret-token-1405';
+
+app.use('/api/financial-data', (req, res, next) => {
+  const token = req.headers['x-api-token'];
+  if (req.method !== 'OPTIONS' && token !== SERVER_API_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized. Invalid API Token.' });
+  }
+  next();
+});
+
+app.use('/api/auth/change-password', (req, res, next) => {
+  const token = req.headers['x-api-token'];
+  if (req.method !== 'OPTIONS' && token !== SERVER_API_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized. Invalid API Token.' });
+  }
+  next();
+});
+
+
 // Graceful JSON error handling middleware
 app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err instanceof SyntaxError && 'status' in err && err.status === 400) {

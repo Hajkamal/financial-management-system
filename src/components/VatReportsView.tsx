@@ -111,7 +111,7 @@ interface VatReportsViewProps {
   invoices: VatInvoice[];
   serviceTariffs: ServiceTariff[];
   selectedYear: number;
-  currencyMode: CurrencyMode;
+  currencyMode?: CurrencyMode;
   companyName: string;
   onSaveInvoice: (invoice: VatInvoice) => void;
   onDeleteInvoice: (id: string) => void;
@@ -317,7 +317,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
     const remainder = finalAmount - (part * 2);
 
     const initialAlloc: VatMonthlyAllocation[] = months.map((mNum, idx) => ({
-      month: mNum,
+      month: mNum as PersianMonthNumber,
       monthName: PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`,
       amount: idx === 2 ? remainder : part,
       quantity: Math.floor(initialQuantity / 3),
@@ -439,7 +439,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
       const mName = PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`;
       const inv = monthInvoices.find(i => i.month === mNum);
       return {
-        month: mNum,
+        month: mNum as PersianMonthNumber,
         monthName: mName,
         amount: inv ? inv.finalAmount : 0,
         grossAmount: inv ? inv.totalGrossAmount : 0,
@@ -1486,7 +1486,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
         <InvoiceEditorModal
           invoice={editingInvoice}
           serviceTariffs={serviceTariffs}
-          currencyMode={currencyMode}
+
           selectedYear={selectedYear}
           onClose={() => {
             setIsInvoiceModalOpen(false);
@@ -1523,7 +1523,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
                 <AmountInput
                   value={newPriceValue}
                   onChange={setNewPriceValue}
-                  currencyMode={currencyMode}
+
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
                 />
               </div>
@@ -1576,9 +1576,10 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
  * Full-featured Invoice Editor Modal with Multiple Dynamic Item Rows
  */
 interface InvoiceEditorModalProps {
+
   invoice: VatInvoice;
   serviceTariffs: ServiceTariff[];
-  currencyMode: CurrencyMode;
+  currencyMode?: CurrencyMode;
   selectedYear: number;
   onClose: () => void;
   onSave: (invoice: VatInvoice) => void;
@@ -1606,7 +1607,7 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
     const remainder = formData.finalAmount - (part * 2);
     const defaultMonths = SEASON_MONTHS[formData.season || 'بهار'] || [1, 2, 3];
     return defaultMonths.map((mNum, idx) => ({
-      month: mNum,
+      month: mNum as PersianMonthNumber,
       monthName: PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`,
       amount: idx === 2 ? remainder : part
     }));
@@ -1620,7 +1621,7 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
     const part = Math.floor(formData.finalAmount / 3);
     const remainder = formData.finalAmount - (part * 2);
     const equalized: VatMonthlyAllocation[] = seasonMonths.map((mNum, idx) => ({
-      month: mNum,
+      month: mNum as PersianMonthNumber,
       monthName: PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`,
       amount: idx === 2 ? remainder : part
     }));
@@ -1630,7 +1631,7 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
   const handleUpdateAllocationAmount = (idx: number, mNum: PersianMonthNumber, mName: string, amount: number) => {
     const updated = [...allocations];
     updated[idx] = {
-      month: mNum,
+      month: mNum as PersianMonthNumber,
       monthName: mName,
       amount
     };
@@ -1680,7 +1681,7 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
       const part = Math.floor(finalAmount / 3);
       const remainder = finalAmount - (part * 2);
       setAllocations(seasonMonths.map((mNum, idx) => ({
-        month: mNum,
+        month: mNum as PersianMonthNumber,
         monthName: PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`,
         amount: idx === 2 ? remainder : part
       })));
@@ -1933,7 +1934,7 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
                         <AmountInput
                           value={it.unitPrice}
                           onChange={(val) => handleUpdateItemField(idx, 'unitPrice', val)}
-                          currencyMode={currencyMode}
+
                           className="w-full p-1.5 bg-white border border-slate-200 rounded font-bold text-left"
                         />
                       </td>
@@ -1941,7 +1942,7 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
                         <AmountInput
                           value={it.discount}
                           onChange={(val) => handleUpdateItemField(idx, 'discount', val)}
-                          currencyMode={currencyMode}
+
                           className="w-full p-1.5 bg-white border border-slate-200 rounded text-left text-slate-500"
                         />
                       </td>
@@ -2010,7 +2011,7 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
                 {seasonMonths.map((mNum, idx) => {
                   const mName = PERSIAN_MONTHS.find(m => m.num === mNum)?.name || `ماه ${mNum}`;
                   const alloc = allocations[idx] || {
-                    month: mNum,
+                    month: mNum as PersianMonthNumber,
                     monthName: mName,
                     amount: 0
                   };
@@ -2026,8 +2027,8 @@ const InvoiceEditorModal: React.FC<InvoiceEditorModalProps> = ({
                       </div>
                       <AmountInput
                         value={alloc.amount}
-                        onChange={(val) => handleUpdateAllocationAmount(idx, mNum, mName, val)}
-                        currencyMode={currencyMode}
+                        onChange={(val) => handleUpdateAllocationAmount(idx, mNum as PersianMonthNumber, mName, val)}
+
                         className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-blue-900"
                       />
                     </div>

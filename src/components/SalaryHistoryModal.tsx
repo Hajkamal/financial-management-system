@@ -389,7 +389,7 @@ export const SalaryHistoryModal: React.FC<SalaryHistoryModalProps> = ({
               <div className="relative border-r-2 border-blue-200 mr-3 pr-4 space-y-4">
                 {historyList.map((item, index) => {
                   const targetSalary = item.amount ?? item.newSalary ?? 0;
-                  const prevSalary = item.previousSalary ?? item.previousAmount ?? 0;
+                  const prevSalary = item.previousSalary ?? item.amount ?? 0;
                   const isIncrease = targetSalary >= prevSalary;
                   const diffAmount = targetSalary - prevSalary;
                   const itemTax = calculateSalaryTax1405(targetSalary, employee.hasInsurance);

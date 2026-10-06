@@ -526,7 +526,7 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
                   label="مانده افتتاحیه اولیه (ریال - اختیاری):"
                   value={formOpeningBalance}
                   onChange={setFormOpeningBalance}
-                  currencyMode={currencyMode}
+
                   placeholder="0"
                 />
               </div>
@@ -631,7 +631,7 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
                   label="مانده افتتاحیه (ریال):"
                   value={formOpeningBalance}
                   onChange={setFormOpeningBalance}
-                  currencyMode={currencyMode}
+
                 />
               </div>
 
