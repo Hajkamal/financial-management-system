@@ -54,51 +54,6 @@ export const sanitizeFiscalYearsList = (list: any): FiscalYear[] => {
   return cleaned;
 };
 
-/** ادغام و به‌روزرسانی خودکار دسته‌بندی‌های پایه ضروری (مثل تبلیغات باسینا و زیردسته سوپرمارکت) */
-export const mergeWithDefaultCategories = (local: any[]): CustomCategoryDefinition[] => {
-  if (!Array.isArray(local) || local.length === 0) {
-    return INITIAL_CUSTOM_CATEGORIES;
-  }
-
-  let result = [...local];
-
-  // ۱. اطمینان از وجود دسته‌بندی «تبلیغات باسینا» با زیردسته «کافه بازار»
-  const hasAdsBasina = result.some(c => 
-    c.id === 'ads_basina' || 
-    c.label?.includes('تبلیغات باسینا') || 
-    c.label?.includes('تبلیغات')
-  );
-  if (!hasAdsBasina) {
-    const defaultAds = INITIAL_CUSTOM_CATEGORIES.find(c => c.id === 'ads_basina');
-    if (defaultAds) result.push(defaultAds);
-  } else {
-    result = result.map(c => {
-      if (c.id === 'ads_basina' || c.label?.includes('تبلیغات باسینا')) {
-        const subs = Array.isArray(c.subCategories) ? [...c.subCategories] : [];
-        if (!subs.some(s => s.name?.includes('کافه بازار') || s.id === 'cafe_bazaar')) {
-          subs.unshift({ id: 'cafe_bazaar', name: 'کافه بازار' });
-        }
-        return { ...c, subCategories: subs };
-      }
-      return c;
-    });
-  }
-
-  // ۲. اطمینان از وجود زیردسته «سوپرمارکت» در «هزینه‌های سایت و اداری»
-  result = result.map(c => {
-    if (c.id === 'office_site' || c.label?.includes('سایت و اداری')) {
-      const subs = Array.isArray(c.subCategories) ? [...c.subCategories] : [];
-      if (!subs.some(s => s.name?.includes('سوپرمارکت') || s.id === 'supermarket')) {
-        subs.unshift({ id: 'supermarket', name: 'سوپرمارکت' });
-      }
-      return { ...c, subCategories: subs };
-    }
-    return c;
-  });
-
-  return result;
-};
-
 /**
  * تابع همگام‌سازی و ادغام کامل، بدون اتلاف داده، میان آرایه‌های دسته‌بندی و تمامی زیرمجموعه‌ها
  * (Lossless bidirectional reconciliation of customCategories and subcategory structures)
@@ -110,7 +65,7 @@ export const reconcileCustomCategories = (
 ): CustomCategoryDefinition[] => {
   const mergedMap = new Map<string, CustomCategoryDefinition>();
 
-  // ۱. مقداردهی اولیه با دسته‌بندی‌های پایه و پیش‌فرض سامانه
+  // ۱. مقداردهی اولیه با تمامی دسته‌بندی‌های پایه و پیش‌فرض رسمی سامانه
   INITIAL_CUSTOM_CATEGORIES.forEach(cat => {
     mergedMap.set(cat.id, {
       ...cat,
@@ -144,14 +99,14 @@ export const reconcileCustomCategories = (
         // ادغام تمامی زیردسته‌ها به صورت یکتا و بدون از بین رفتن موارد موجود
         const subMap = new Map<string, CategorySubItem>();
 
-        // ابتدا زیردسته‌های موجود قبلی
+        // ابتدا زیردسته‌های موجود قبلی (شامل پیش‌فرض‌های رسمی سامانه)
         (existing.subCategories || []).forEach(sub => {
           if (sub && sub.id) {
             subMap.set(sub.id, { ...sub });
           }
         });
 
-        // سپس اضافه کردن و ادغام زیردسته‌های جدید
+        // سپس اضافه کردن و ادغام زیردسته‌های جدید / سفارشی
         (item.subCategories || []).forEach(sub => {
           if (!sub || !sub.id) return;
 
@@ -178,15 +133,15 @@ export const reconcileCustomCategories = (
 
         mergedMap.set(existingKey, {
           ...existing,
-          label: item.label || existing.label,
+          label: existing.isCustom ? (item.label || existing.label) : existing.label,
           type: item.type || existing.type,
           color: item.color || existing.color,
           badgeBg: item.badgeBg || existing.badgeBg,
-          isCustom: existing.isCustom && item.isCustom,
+          isCustom: existing.isCustom,
           subCategories: Array.from(subMap.values())
         });
       } else {
-        // دسته کاملاً جدید سفارشی
+        // دسته کاملاً جدید سفارشی تعریف‌شده توسط کاربر
         mergedMap.set(item.id, {
           ...item,
           subCategories: Array.isArray(item.subCategories) ? item.subCategories.map(s => ({ ...s })) : []
@@ -226,9 +181,12 @@ export const reconcileCustomCategories = (
     });
   }
 
-  // ۳. بازبینی و تایید وجود دسته‌های ضروری اولیه
-  const allMerged = Array.from(mergedMap.values());
-  return mergeWithDefaultCategories(allMerged);
+  return Array.from(mergedMap.values());
+};
+
+/** ادغام و به‌روزرسانی خودکار تمامی دسته‌بندی‌های پایه ضروری */
+export const mergeWithDefaultCategories = (local: any[]): CustomCategoryDefinition[] => {
+  return reconcileCustomCategories(Array.isArray(local) ? local : [], [], []);
 };
 
 /**
@@ -1857,7 +1815,16 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   const handleResetCategoriesToDefaults = () => {
     setCustomCategories(INITIAL_CUSTOM_CATEGORIES);
     writeLocal('ayandeh_custom_categories', INITIAL_CUSTOM_CATEGORIES);
-    onShowToast('ساختار دسته‌بندی‌ها به حالت اولیه بازنشانی شد.');
+    serverApi.saveCustomCategories(INITIAL_CUSTOM_CATEGORIES).catch(() => {});
+    onShowToast('ساختار دسته‌بندی‌ها به حالت اولیه پیش‌فرض سامانه بازنشانی شد.');
+  };
+
+  const handleReconcileCategoriesWithSystemDefaults = () => {
+    const reconciled = reconcileCustomCategories(customCategories, [], transactions);
+    setCustomCategories(reconciled);
+    writeLocal('ayandeh_custom_categories', reconciled);
+    serverApi.saveCustomCategories(reconciled).catch(() => {});
+    onShowToast('تمامی دسته‌بندی‌ها و زیردسته‌های رسمی با موفقیت با نسخه اصلی سامانه هماهنگ و یکپارچه شدند.');
   };
 
   // ==========================
@@ -2131,6 +2098,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     handleUpdateSubCategory,
     handleDeleteSubCategory,
     handleResetCategoriesToDefaults,
+    handleReconcileCategoriesWithSystemDefaults,
     handleRestoreData,
     handleResetToDefaults,
     handlePurge1404,

@@ -62,6 +62,7 @@ interface BackupModalProps {
     customCategories?: CustomCategoryDefinition[];
   }) => void;
   onResetToDefaults: () => void;
+  onReconcileCategories?: () => void;
   onPurge1404?: () => void;
   onClearDemoTransactions?: () => void;
   onShowToast?: (msg: string) => void;
@@ -85,6 +86,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   customCategories,
   onRestoreData,
   onResetToDefaults,
+  onReconcileCategories,
   onPurge1404,
   onClearDemoTransactions,
   onShowToast,
@@ -650,6 +652,29 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           {/* TAB 4: PURGE 1404 & DEFAULTS */}
           {activeTab === 'purge' && (
             <div className="space-y-4">
+              {/* Reconcile Categories with System Defaults */}
+              <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/70 space-y-2">
+                <div className="flex items-center gap-2 text-emerald-950 font-bold text-sm">
+                  <RotateCcw className="w-5 h-5 text-emerald-600" />
+                  <span>یکپارچه‌سازی و هماهنگی کامل دسته‌بندی‌ها با نسخه رسمی</span>
+                </div>
+                <p className="text-slate-700 text-xs leading-relaxed">
+                  اگر در این مرورگر یا نسخه ورسل بعضی دسته‌بندی‌های پایه (مانند فروش سپید، باسینا، زیرساخت، زرین‌پال یا مودیان) نمایش داده نمی‌شود، با کلیک روی این دکمه تمامی ۱۸ سرفصل مالی و زیردسته‌های رسمی بدون حذف هیچ‌یک از دسته‌بندی‌های سفارشی یا تراکنش‌های شما ادغام و هماهنگ می‌شوند.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onReconcileCategories) {
+                      onReconcileCategories();
+                    }
+                  }}
+                  className="mt-1 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>هماهنگ‌سازی و به‌روزرسانی دسته‌بندی‌ها (بدون حذف داده‌ها)</span>
+                </button>
+              </div>
+
               {/* Clean Slate for Real Data Entry without GitHub leak */}
               <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/70 space-y-2">
                 <div className="flex items-center gap-2 text-indigo-950 font-bold text-sm">

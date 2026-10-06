@@ -77,6 +77,7 @@ interface TransactionModalProps {
   onUpdateSubCategory?: (categoryId: string, subCategoryId: string, newName: string) => void;
   onDeleteSubCategory?: (categoryId: string, subCategoryId: string) => void;
   onResetCategoriesToDefaults?: () => void;
+  onReconcileCategoriesWithSystemDefaults?: () => void;
 }
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
@@ -100,6 +101,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onUpdateSubCategory,
   onDeleteSubCategory,
   onResetCategoriesToDefaults,
+  onReconcileCategoriesWithSystemDefaults,
 }) => {
   const today = getTodayJalali();
   const [type, setType] = useState<TransactionType>(editingTransaction ? editingTransaction.type : 'expense');
@@ -1343,6 +1345,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           onUpdateSubCategory={onUpdateSubCategory || (() => {})}
           onDeleteSubCategory={onDeleteSubCategory || (() => {})}
           onResetToDefaults={onResetCategoriesToDefaults || (() => {})}
+          onReconcileWithDefaults={onReconcileCategoriesWithSystemDefaults || (() => {})}
           initialType={type}
           initialSelectedCategoryId={category}
         />

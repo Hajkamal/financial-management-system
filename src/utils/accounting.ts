@@ -101,6 +101,7 @@ const EXPENSE_ACCOUNT_MAP: Record<ExpenseCategory, { debitCode: string; creditCo
   loan_installment:     { debitCode: '5301', creditCode: '1102' },
   guarantee_deposit:    { debitCode: '5204', creditCode: '1102' },
   office_site:          { debitCode: '5203', creditCode: '1102' },
+  ads_basina:           { debitCode: '5201', creditCode: '1102' },
 };
 
 /** پیدا کردن تعریف حساب با کد */

@@ -27,6 +27,7 @@ export type ExpenseCategory =
   | 'loan_installment'      // بدهی های شرکت / تسهیلات پرداختی
   | 'guarantee_deposit'     // واریز سپرده حسن انجام تعهدات قراردادها / پیش‌پرداخت‌ها در تراز مالی
   | 'office_site'           // هزینه های سایت و امور جاری
+  | 'ads_basina'            // تبلیغات باسینا
   | string;                 // دسته‌بندی‌های سفارشی تعریف شده توسط کاربر
 
 export type InfrastructureSubCategory =

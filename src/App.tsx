@@ -207,6 +207,7 @@ export default function App() {
     handleUpdateSubCategory,
     handleDeleteSubCategory,
     handleResetCategoriesToDefaults,
+    handleReconcileCategoriesWithSystemDefaults,
     handleRestoreData,
     handleResetToDefaults,
     handlePurge1404,
@@ -775,6 +776,7 @@ export default function App() {
         onUpdateSubCategory={handleUpdateSubCategory}
         onDeleteSubCategory={handleDeleteSubCategory}
         onResetCategoriesToDefaults={handleResetCategoriesToDefaults}
+        onReconcileCategoriesWithSystemDefaults={handleReconcileCategoriesWithSystemDefaults}
       />
 
       {/* مودال پشتیبان‌گیری و بازیابی */}
@@ -796,6 +798,7 @@ export default function App() {
         customCategories={customCategories}
         onRestoreData={handleRestoreData}
         onResetToDefaults={handleResetToDefaults}
+        onReconcileCategories={handleReconcileCategoriesWithSystemDefaults}
         onPurge1404={handlePurge1404}
         onClearDemoTransactions={handleClearDemoTransactions}
         onShowToast={showToast}

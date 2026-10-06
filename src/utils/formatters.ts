@@ -298,40 +298,78 @@ export const EXPENSE_CATEGORY_CONFIG: Record<ExpenseCategory, { label: string; c
     color: 'text-slate-700',
     badgeBg: 'bg-slate-100 text-slate-800 border-slate-300',
   },
+  ads_basina: {
+    label: 'تبلیغات باسینا',
+    color: 'text-blue-700',
+    badgeBg: 'bg-blue-100 text-blue-800 border-blue-300',
+  },
 };
 
-export const INFRASTRUCTURE_SUBCATEGORY_CONFIG: Record<InfrastructureSubCategory, string> = {
+export const INFRASTRUCTURE_SUBCATEGORY_CONFIG: Record<string, string> = {
   server: 'سرور و هاستینگ (ابر آروان/Hetzner)',
   sms: 'سامانه پیامک (کاوه‌نگار)',
   ai_tokens: 'اشتراک و توکن‌های هوش مصنوعی (OpenAI / Gemini)',
   domain_tools: 'دامنه‌ها و ابزارهای توسعه',
 };
 
+export const ADS_BASINA_SUBCATEGORY_CONFIG: Record<string, string> = {
+  cafe_bazaar: 'کافه بازار',
+  myket: 'مایکت',
+  google_ads: 'گوگل ادز',
+  yektanet: 'یکتانت',
+  social_ads: 'تبلیغات اینستاگرام و شبکه‌های اجتماعی',
+  sms_campaign: 'کمپین پیامکی تبلیغاتی',
+};
+
+export const OFFICE_SITE_SUBCATEGORY_CONFIG: Record<string, string> = {
+  supermarket: 'سوپرمارکت',
+  office_supplies: 'لوازم التحریر و اقلام مصرفی',
+  cleaning_tea: 'پذیرایی و نظافت',
+  internet_tel: 'اینترنت و تلفن',
+};
+
 /**
  * دریافت مشخصات دسته‌بندی با پشتیبانی کامل از دسته‌های سفارشی
  */
 export function getCategoryDefinition(
-  type: 'income' | 'expense',
+  type: 'income' | 'expense' | string,
   categoryId: string,
   customCategories: CustomCategoryDefinition[] = INITIAL_CUSTOM_CATEGORIES
 ): { label: string; color: string; badgeBg: string } {
-  // اول جستجو در دسته‌های سفارشی/پویا
-  const found = customCategories.find(c => c.type === type && c.id === categoryId);
-  if (found) {
+  if (!categoryId) {
     return {
-      label: found.label,
-      color: found.color || (type === 'income' ? 'text-emerald-700' : 'text-rose-700'),
-      badgeBg: found.badgeBg || (type === 'income' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300'),
+      label: 'نامشخص',
+      color: 'text-slate-700',
+      badgeBg: 'bg-slate-100 text-slate-800 border-slate-200',
     };
   }
 
-  // سپس جستجو در کانفیگ‌های ثابت
-  if (type === 'income') {
-    const defaultCfg = INCOME_CATEGORY_CONFIG[categoryId as IncomeCategory];
-    if (defaultCfg) return defaultCfg;
-  } else {
-    const defaultCfg = EXPENSE_CATEGORY_CONFIG[categoryId as ExpenseCategory];
-    if (defaultCfg) return defaultCfg;
+  // اول جستجو در دسته‌های سفارشی/پویا
+  const found = customCategories.find(c => c.id === categoryId && (c.type === type || !type))
+    || customCategories.find(c => c.id === categoryId);
+  if (found) {
+    return {
+      label: found.label,
+      color: found.color || (found.type === 'income' ? 'text-emerald-700' : 'text-rose-700'),
+      badgeBg: found.badgeBg || (found.type === 'income' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300'),
+    };
+  }
+
+  // سپس جستجو در کانفیگ‌های هزینه‌ها
+  const expenseCfg = EXPENSE_CATEGORY_CONFIG[categoryId as ExpenseCategory];
+  if (expenseCfg) return expenseCfg;
+
+  // سپس جستجو در کانفیگ‌های درآمدها
+  const incomeCfg = INCOME_CATEGORY_CONFIG[categoryId as IncomeCategory];
+  if (incomeCfg) return incomeCfg;
+
+  // تطابق مستقیم نام‌های خاص
+  if (categoryId === 'ads_basina') {
+    return {
+      label: 'تبلیغات باسینا',
+      color: 'text-blue-700',
+      badgeBg: 'bg-blue-100 text-blue-800 border-blue-300',
+    };
   }
 
   return {
@@ -359,11 +397,23 @@ export function getSubCategoryLabel(
   }
 
   // ۲. جستجو در ثابت‌های پیش‌فرض
-  if (categoryId === 'infrastructure' && INFRASTRUCTURE_SUBCATEGORY_CONFIG[subCategoryId as InfrastructureSubCategory]) {
-    return INFRASTRUCTURE_SUBCATEGORY_CONFIG[subCategoryId as InfrastructureSubCategory];
+  if (categoryId === 'infrastructure' && INFRASTRUCTURE_SUBCATEGORY_CONFIG[subCategoryId]) {
+    return INFRASTRUCTURE_SUBCATEGORY_CONFIG[subCategoryId];
   }
   if (categoryId === 'sale_basina' && BASINA_SUBCATEGORY_CONFIG[subCategoryId as BasinaSubCategory]) {
     return BASINA_SUBCATEGORY_CONFIG[subCategoryId as BasinaSubCategory];
+  }
+  if (categoryId === 'ads_basina' && ADS_BASINA_SUBCATEGORY_CONFIG[subCategoryId]) {
+    return ADS_BASINA_SUBCATEGORY_CONFIG[subCategoryId];
+  }
+  if (categoryId === 'office_site' && OFFICE_SITE_SUBCATEGORY_CONFIG[subCategoryId]) {
+    return OFFICE_SITE_SUBCATEGORY_CONFIG[subCategoryId];
+  }
+
+  // ۳. جستجو در تمامی زیردسته‌های تمام کتگوری‌ها
+  for (const cat of customCategories) {
+    const s = cat.subCategories?.find(sub => sub.id === subCategoryId);
+    if (s) return s.name;
   }
 
   return subCategoryId;

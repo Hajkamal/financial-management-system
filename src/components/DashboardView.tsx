@@ -31,12 +31,11 @@ import { AdvancedFinancialReporter } from './AdvancedFinancialReporter';
 import { 
   PERSIAN_MONTHS, 
   formatCurrency, 
-  INCOME_CATEGORY_CONFIG, 
-  EXPENSE_CATEGORY_CONFIG,
-  BASINA_SUBCATEGORY_CONFIG,
-  INFRASTRUCTURE_SUBCATEGORY_CONFIG,
+  getCategoryDefinition,
+  getSubCategoryLabel,
   toPersianDigits
 } from '../utils/formatters';
+import { CustomCategoryDefinition } from '../types';
 
 interface DashboardViewProps {
   transactions: FinancialTransaction[];
@@ -47,6 +46,7 @@ interface DashboardViewProps {
   onNavigateToSalaryMatrix: () => void;
   companyName?: string;
   onShowToast?: (msg: string) => void;
+  customCategories?: CustomCategoryDefinition[];
 }
 
 type PeriodFilter = 'all' | 'q1' | 'q2' | 'q3' | 'q4' | 'custom_month';
@@ -60,6 +60,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateToSalaryMatrix,
   companyName = 'آینده نگاران خلاق',
   onShowToast,
+  customCategories = [],
 }) => {
   const [period, setPeriod] = useState<PeriodFilter>('all');
   const [selectedMonth, setSelectedMonth] = useState<PersianMonthNumber>(1);
@@ -108,12 +109,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }, 0);
 
     // Income breakdown by category
-    const incomeByCategory: Record<string, { label: string; amount: number }> = {};
+    const incomeByCategory: Record<string, { label: string; amount: number; color?: string; badgeBg?: string }> = {};
     filteredTxs.filter(t => t.type === 'income').forEach(t => {
       const key = t.category;
-      const label = INCOME_CATEGORY_CONFIG[t.category as IncomeCategory]?.label || t.category;
+      const catDef = getCategoryDefinition('income', t.category, customCategories);
+      const label = catDef.label;
       if (!incomeByCategory[key]) {
-        incomeByCategory[key] = { label, amount: 0 };
+        incomeByCategory[key] = { label, amount: 0, color: catDef.color, badgeBg: catDef.badgeBg };
       }
       incomeByCategory[key].amount += t.amount;
     });
@@ -126,12 +128,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     });
 
     // Expense breakdown by category
-    const expenseByCategory: Record<string, { label: string; amount: number }> = {};
+    const expenseByCategory: Record<string, { label: string; amount: number; color?: string; badgeBg?: string }> = {};
     filteredTxs.filter(t => t.type === 'expense').forEach(t => {
       const key = t.category;
-      const label = EXPENSE_CATEGORY_CONFIG[t.category as ExpenseCategory]?.label || t.category;
+      const catDef = getCategoryDefinition('expense', t.category, customCategories);
+      const label = catDef.label;
       if (!expenseByCategory[key]) {
-        expenseByCategory[key] = { label, amount: 0 };
+        expenseByCategory[key] = { label, amount: 0, color: catDef.color, badgeBg: catDef.badgeBg };
       }
       expenseByCategory[key].amount += t.amount;
     });
@@ -141,6 +144,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     filteredTxs.filter(t => t.type === 'expense' && t.category === 'infrastructure').forEach(t => {
       const sub = t.subCategory || 'server';
       infraSubTotals[sub] = (infraSubTotals[sub] || 0) + t.amount;
+    });
+
+    // Ads Basina subcategories
+    const adsSubTotals: Record<string, number> = {};
+    filteredTxs.filter(t => t.type === 'expense' && t.category === 'ads_basina').forEach(t => {
+      const sub = t.subCategory || 'cafe_bazaar';
+      adsSubTotals[sub] = (adsSubTotals[sub] || 0) + t.amount;
+    });
+
+    // Office & Site subcategories
+    const officeSubTotals: Record<string, number> = {};
+    filteredTxs.filter(t => t.type === 'expense' && t.category === 'office_site').forEach(t => {
+      const sub = t.subCategory || 'office_supplies';
+      officeSubTotals[sub] = (officeSubTotals[sub] || 0) + t.amount;
     });
 
     // VAT / Modian recognized revenue in period (فروش خالص قبل از مالیات)
@@ -185,9 +202,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       incomeByCategory: Object.values(incomeByCategory),
       expenseByCategory: Object.values(expenseByCategory),
       basinaSubTotals,
-      infraSubTotals
+      infraSubTotals,
+      adsSubTotals,
+      officeSubTotals,
     };
-  }, [filteredTxs, loans]);
+  }, [filteredTxs, loans, customCategories]);
 
   // Monthly breakdown for the entire year
   const monthlyBreakdown = useMemo(() => {
@@ -725,7 +744,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   {Object.entries(stats.basinaSubTotals).map(([subKey, amount]) => (
                     <div key={subKey} className="bg-white p-2.5 rounded-lg border border-emerald-200/70 flex items-center justify-between">
                       <span className="text-slate-600 block text-[11px] font-medium">
-                        {BASINA_SUBCATEGORY_CONFIG[subKey as keyof typeof BASINA_SUBCATEGORY_CONFIG] || subKey}
+                        {getSubCategoryLabel('sale_basina', subKey, customCategories)}
                       </span>
                       <span className="font-bold text-emerald-800">
                         {formatCurrency(Number(amount), currencyMode)}
@@ -786,9 +805,51 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   {Object.entries(stats.infraSubTotals).map(([subKey, amount]) => (
                     <div key={subKey} className="bg-white p-2.5 rounded-lg border border-purple-200/70 flex items-center justify-between">
                       <span className="text-slate-600 block text-[11px] font-medium">
-                        {INFRASTRUCTURE_SUBCATEGORY_CONFIG[subKey as keyof typeof INFRASTRUCTURE_SUBCATEGORY_CONFIG] || subKey}
+                        {getSubCategoryLabel('infrastructure', subKey, customCategories)}
                       </span>
                       <span className="font-bold text-purple-800">
+                        {formatCurrency(Number(amount), currencyMode)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sub-breakdown for Ads Basina (تبلیغات باسینا: بازار، مایکت، ...) */}
+            {Object.keys(stats.adsSubTotals).length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-100 bg-blue-50/40 p-3.5 rounded-xl border border-blue-100">
+                <span className="text-xs font-bold text-blue-900 block mb-2">
+                  تفکیک هزینه‌های تبلیغات و کمپین‌ها (کافه بازار، مایکت، گوگل، پیامک):
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {Object.entries(stats.adsSubTotals).map(([subKey, amount]) => (
+                    <div key={subKey} className="bg-white p-2.5 rounded-lg border border-blue-200/70 flex items-center justify-between">
+                      <span className="text-slate-600 block text-[11px] font-medium">
+                        {getSubCategoryLabel('ads_basina', subKey, customCategories)}
+                      </span>
+                      <span className="font-bold text-blue-800">
+                        {formatCurrency(Number(amount), currencyMode)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sub-breakdown for Office & Site (سایت و اداری: سوپرمارکت، لوازم، ...) */}
+            {Object.keys(stats.officeSubTotals).length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-100 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200">
+                <span className="text-xs font-bold text-slate-800 block mb-2">
+                  تفکیک هزینه‌های جاری دفتر و سایت (سوپرمارکت، اقلام مصرفی، اینترنت):
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {Object.entries(stats.officeSubTotals).map(([subKey, amount]) => (
+                    <div key={subKey} className="bg-white p-2.5 rounded-lg border border-slate-200 flex items-center justify-between">
+                      <span className="text-slate-600 block text-[11px] font-medium">
+                        {getSubCategoryLabel('office_site', subKey, customCategories)}
+                      </span>
+                      <span className="font-bold text-slate-900">
                         {formatCurrency(Number(amount), currencyMode)}
                       </span>
                     </div>

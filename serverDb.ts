@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { INITIAL_CUSTOM_CATEGORIES } from './src/data/initialData';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -86,7 +87,7 @@ function getDefaultDb(): ServerDatabase {
     bankAccounts: [],
     vatInvoices: [],
     serviceTariffs: [],
-    customCategories: [],
+    customCategories: INITIAL_CUSTOM_CATEGORIES,
     companyLogo: null,
   };
 }
@@ -104,6 +105,36 @@ export function loadDatabase(): ServerDatabase {
     if (fs.existsSync(DB_FILE)) {
       const content = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(content);
+      
+      // Reconcile customCategories to ensure all system categories exist
+      const storedCategories = Array.isArray(parsed.customCategories) ? parsed.customCategories : [];
+      const mergedMap = new Map<string, any>();
+      INITIAL_CUSTOM_CATEGORIES.forEach(cat => {
+        mergedMap.set(cat.id, {
+          ...cat,
+          subCategories: Array.isArray(cat.subCategories) ? cat.subCategories.map(s => ({ ...s })) : []
+        });
+      });
+      storedCategories.forEach((item: any) => {
+        if (!item || !item.id) return;
+        if (mergedMap.has(item.id)) {
+          const existing = mergedMap.get(item.id)!;
+          const subMap = new Map<string, any>();
+          (existing.subCategories || []).forEach((s: any) => subMap.set(s.id, s));
+          (item.subCategories || []).forEach((s: any) => {
+            if (s && s.id) subMap.set(s.id, s);
+          });
+          mergedMap.set(item.id, {
+            ...existing,
+            ...item,
+            subCategories: Array.from(subMap.values()),
+          });
+        } else {
+          mergedMap.set(item.id, item);
+        }
+      });
+      const finalCustomCategories = Array.from(mergedMap.values());
+
       // Validate schema has all arrays
       inMemoryDb = {
         version: parsed.version || 1,
@@ -119,7 +150,7 @@ export function loadDatabase(): ServerDatabase {
         bankAccounts: Array.isArray(parsed.bankAccounts) ? parsed.bankAccounts : [],
         vatInvoices: Array.isArray(parsed.vatInvoices) ? parsed.vatInvoices : [],
         serviceTariffs: Array.isArray(parsed.serviceTariffs) ? parsed.serviceTariffs : [],
-        customCategories: Array.isArray(parsed.customCategories) ? parsed.customCategories : [],
+        customCategories: finalCustomCategories,
         companyLogo: parsed.companyLogo || null,
       };
       return inMemoryDb;
@@ -171,6 +202,8 @@ export function resetDatabaseToClean(): ServerDatabase {
     bankAccounts: [],
     vatInvoices: [],
     serviceTariffs: [],
+    customCategories: INITIAL_CUSTOM_CATEGORIES,
+    companyLogo: currentDb.companyLogo || null,
   };
 
   saveDatabase(freshDb);

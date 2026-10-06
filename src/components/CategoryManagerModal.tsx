@@ -30,6 +30,7 @@ interface CategoryManagerModalProps {
   onUpdateSubCategory: (categoryId: string, subCategoryId: string, newName: string) => void;
   onDeleteSubCategory: (categoryId: string, subCategoryId: string) => void;
   onResetToDefaults: () => void;
+  onReconcileWithDefaults?: () => void;
   initialType?: TransactionType;
   initialSelectedCategoryId?: string;
 }
@@ -45,6 +46,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   onUpdateSubCategory,
   onDeleteSubCategory,
   onResetToDefaults,
+  onReconcileWithDefaults,
   initialType = 'expense',
   initialSelectedCategoryId
 }) => {
@@ -500,15 +502,29 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between pt-3 border-t border-slate-100 shrink-0">
-          <button
-            type="button"
-            onClick={onResetToDefaults}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors font-semibold"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>بازنشانی به ساختار پیش‌فرض سامانه</span>
-          </button>
+        <div className="flex items-center justify-between pt-3 border-t border-slate-100 shrink-0 gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            {onReconcileWithDefaults && (
+              <button
+                type="button"
+                onClick={onReconcileWithDefaults}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors font-bold"
+                title="اضافه کردن دسته‌ها و زیردسته‌های رسمی سامانه بدون حذف دسته‌های شخصی شما"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                <span>هماهنگ‌سازی با نسخه رسمی</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onResetToDefaults}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors font-semibold"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>بازنشانی به پیش‌فرض</span>
+            </button>
+          </div>
 
           <button
             type="button"
