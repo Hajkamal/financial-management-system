@@ -14,7 +14,8 @@ import {
   ServiceTariff,
   FiscalYear,
   AppUser,
-  CustomCategoryDefinition
+  CustomCategoryDefinition,
+  SyncAuditLog
 } from '../types';
 
 export interface ServerFullData {
@@ -33,16 +34,40 @@ export interface ServerFullData {
   serviceTariffs: ServiceTariff[];
   customCategories?: CustomCategoryDefinition[];
   companyLogo?: string | null;
+  syncLogs?: SyncAuditLog[];
 }
 
+let currentUserContext: { fullName?: string; email?: string; roleTitle?: string; role?: string } | null = null;
+
+export const setCurrentUserContext = (user: AppUser | null) => {
+  if (user) {
+    currentUserContext = {
+      fullName: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+      email: user.email,
+      roleTitle: user.roleTitle || user.role,
+      role: user.role,
+    };
+  } else {
+    currentUserContext = null;
+  }
+};
 
 const getHeaders = () => {
   const token = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SERVER_API_TOKEN) || 'ayandeh-secret-token-1405';
-  return {
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-api-token': token,
+    'x-device-info': isMobile ? 'گوشی تلفن همراه' : 'رایانه / دسکتاپ',
   };
+  if (currentUserContext) {
+    if (currentUserContext.fullName) headers['x-user-name'] = encodeURIComponent(currentUserContext.fullName);
+    if (currentUserContext.email) headers['x-user-email'] = currentUserContext.email;
+    if (currentUserContext.roleTitle) headers['x-user-role'] = encodeURIComponent(currentUserContext.roleTitle);
+  }
+  return headers;
 };
+
 
 export const serverApi = {
   // دریافت تمامی داده‌ها از دیتابیس سرور
@@ -401,5 +426,46 @@ export const serverApi = {
     } catch (err: any) {
       return { ok: false, message: err?.message || 'خطا در برقراری ارتباط با سرور' };
     }
+  },
+
+  // دریافت تاریخچه و لاگ‌های همگام‌سازی سرور
+  async getSyncLogs(): Promise<SyncAuditLog[]> {
+    try {
+      const res = await fetch('/api/financial-data/sync-logs', { headers: getHeaders() });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json.logs) ? json.logs : [];
+    } catch (err) {
+      console.warn('Failed to fetch sync logs from server:', err);
+      return [];
+    }
+  },
+
+  // ثبت دستی رویداد همگام‌سازی در سرور (مانند دریافت یا بارگیری داده‌ها توسط کاربر)
+  async logSyncAction(log: Partial<SyncAuditLog>): Promise<boolean> {
+    try {
+      const res = await fetch('/api/financial-data/sync-log', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(log),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  // پاکسازی لاگ‌های تاریخچه همگام‌سازی (مدیر ارشد)
+  async clearSyncLogs(): Promise<boolean> {
+    try {
+      const res = await fetch('/api/financial-data/sync-logs', {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 };
+

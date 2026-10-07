@@ -253,3 +253,33 @@ export function sortTransactionsByDate(
   return [...txs].sort((a, b) => compareTransactionsByDate(a, b, order));
 }
 
+/**
+ * Formats a Date object or ISO string into a Persian date-time string: ۱۴۰۵/۰۱/۱۵ - ۱۲:۳۴:۵۶
+ */
+export function formatJalaliDateTime(dateOrIso?: string | Date): string {
+  const d = dateOrIso ? new Date(dateOrIso) : new Date();
+  if (isNaN(d.getTime())) return '';
+  try {
+    const formatter = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(d);
+    const year = parts.find(p => p.type === 'year')?.value || '1405';
+    const month = parts.find(p => p.type === 'month')?.value || '01';
+    const day = parts.find(p => p.type === 'day')?.value || '01';
+    const hour = parts.find(p => p.type === 'hour')?.value || '00';
+    const minute = parts.find(p => p.type === 'minute')?.value || '00';
+    const second = parts.find(p => p.type === 'second')?.value || '00';
+
+    return toPersianDigits(`${year}/${month}/${day} - ${hour}:${minute}:${second}`);
+  } catch {
+    return toPersianDigits(d.toISOString().replace('T', ' ').substring(0, 19));
+  }
+}
+

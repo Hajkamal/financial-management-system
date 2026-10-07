@@ -492,4 +492,49 @@ export interface ServiceTariff {
   notes?: string;
 }
 
+export type SyncActionType =
+  | 'push_all'
+  | 'restore'
+  | 'reset'
+  | 'transaction_save'
+  | 'transaction_delete'
+  | 'employee_save'
+  | 'employee_delete'
+  | 'salary_save'
+  | 'salary_matrix_batch'
+  | 'member_save'
+  | 'member_delete'
+  | 'loan_save'
+  | 'loan_delete'
+  | 'bank_account_save'
+  | 'bank_account_delete'
+  | 'vat_invoice_save'
+  | 'vat_invoice_delete'
+  | 'service_tariff_save'
+  | 'custom_categories_save'
+  | 'company_logo_save'
+  | 'fiscal_year_save'
+  | 'fiscal_year_delete'
+  | 'user_save'
+  | 'user_delete'
+  | 'change_password'
+  | 'sync_fetch'
+  | 'reconcile_categories';
+
+export interface SyncAuditLog {
+  id: string;
+  timestamp: string;               // ISO 8601 (2026-10-07T...)
+  persianDate: string;             // e.g. "۱۴۰۵/۰۱/۱۵ - ۱۲:۳۴:۵۶"
+  direction: 'upload' | 'download'; // ارسال به سرور یا دریافت از سرور
+  actionType: SyncActionType;
+  actionLabel: string;             // e.g. "ارسال کلیه اطلاعات به سرور", "ذخیره تراکنش مالی", ...
+  userName: string;                // نام کاربر عامل
+  userEmail: string;               // ایمیل کاربر
+  userRole: string;                // عنوان نقش کاربر (مثلاً مدیر کل سامانه)
+  entityCount?: number;            // تعداد رکوردهای تحت تاثیر
+  details?: string;                // توضیحات تکمیلی
+  status: 'success' | 'failed';    // وضعیت همگام‌سازی
+  deviceInfo?: string;             // مرورگر / سیستم‌عامل
+}
+
 

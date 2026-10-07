@@ -35,29 +35,49 @@ import {
 } from '../utils/permissions';
 import { toPersianDigits, toEnglishDigits, normalizeEmail, normalizePassword } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import { SyncHistoryViewer } from './SyncHistoryViewer';
+import { SyncAuditLog } from '../types';
 
 interface UsersViewProps {
   users: AppUser[];
   currentUser: AppUser;
+  syncLogs?: SyncAuditLog[];
+  isLoadingSyncLogs?: boolean;
+  onRefreshSyncLogs?: () => void;
+  onClearSyncLogs?: () => void;
+  onTriggerPush?: () => Promise<{ success: boolean; message: string }>;
+  onTriggerPull?: () => Promise<boolean>;
+  isCloudConnected?: boolean;
   onAddUser: (user: Omit<AppUser, 'id' | 'createdAt'>) => void;
   onUpdateUser: (id: string, updates: Partial<AppUser>) => void;
   onDeleteUser: (id: string) => void;
   onSwitchUser: (user: AppUser) => void;
   onShowToast: (msg: string) => void;
+  initialSubTab?: 'users' | 'sync-history';
 }
 
 export const UsersView: React.FC<UsersViewProps> = ({
   users,
   currentUser,
+  syncLogs = [],
+  isLoadingSyncLogs = false,
+  onRefreshSyncLogs = () => {},
+  onClearSyncLogs,
+  onTriggerPush,
+  onTriggerPull,
+  isCloudConnected = true,
   onAddUser,
   onUpdateUser,
   onDeleteUser,
   onSwitchUser,
   onShowToast,
+  initialSubTab = 'users',
 }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'users' | 'sync-history'>(initialSubTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'inactive'>('all');
+
 
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -167,8 +187,61 @@ export const UsersView: React.FC<UsersViewProps> = ({
   return (
     <div className="space-y-6" id="users-view-container">
       
-      {/* Top Banner with Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* Sub-Tab Navigation */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-200/80 rounded-2xl w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('users')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            activeSubTab === 'users'
+              ? 'bg-white text-blue-700 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>مدیریت کاربران و دسترسی‌ها</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-mono">
+            {toPersianDigits(users.length)}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveSubTab('sync-history');
+            onRefreshSyncLogs();
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            activeSubTab === 'sync-history'
+              ? 'bg-white text-blue-700 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-500" />
+          <span>تاریخچه تغییرات و وضعیت همگام‌سازی سرور</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-blue-50 text-blue-700 font-mono">
+            {toPersianDigits(syncLogs.length)}
+          </span>
+        </button>
+      </div>
+
+      {activeSubTab === 'sync-history' ? (
+        <SyncHistoryViewer
+          syncLogs={syncLogs}
+          isLoading={isLoadingSyncLogs}
+          currentUser={currentUser}
+          onRefreshLogs={onRefreshSyncLogs}
+          onClearLogs={onClearSyncLogs}
+          onTriggerPush={onTriggerPush}
+          onTriggerPull={onTriggerPull}
+          onShowToast={onShowToast}
+          isCloudConnected={isCloudConnected}
+        />
+      ) : (
+        <>
+          {/* Top Banner with Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+
         
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
@@ -557,8 +630,11 @@ export const UsersView: React.FC<UsersViewProps> = ({
           );
         })}
       </div>
+      </>
+      )}
 
       {/* Add / Edit User Modal */}
+
       {isModalOpen && (
         <UserModal
           isOpen={isModalOpen}

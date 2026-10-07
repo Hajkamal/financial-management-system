@@ -24,17 +24,19 @@ import {
   Info,
   BadgePercent
 } from 'lucide-react';
-import { Employee, CurrencyMode, SalaryMatrixItem, SalaryHistoryItem } from '../types';
+import { Employee, CurrencyMode, SalaryMatrixItem, SalaryHistoryItem, FinancialTransaction } from '../types';
 import { formatCurrency, toPersianDigits, exportEmployeesToExcel } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { AmountInput } from './AmountInput';
 import { SalaryHistoryModal } from './SalaryHistoryModal';
 import { SalaryTaxCalculatorModal } from './SalaryTaxCalculatorModal';
 import { calculateSalaryTax1405 } from '../utils/salaryTaxCalculator';
+import { PersonPaymentHistoryModal, PersonTarget } from './PersonPaymentHistoryModal';
 
 interface EmployeesViewProps {
   employees: Employee[];
   salaryMatrix: SalaryMatrixItem[];
+  transactions?: FinancialTransaction[];
   selectedYear: number;
   currencyMode: CurrencyMode;
   onSaveEmployee: (employee: Employee) => void;
@@ -57,6 +59,7 @@ const COMMON_REASONS = [
 export const EmployeesView: React.FC<EmployeesViewProps> = ({
   employees = [],
   salaryMatrix = [],
+  transactions = [],
   selectedYear,
   currencyMode,
   onSaveEmployee,
@@ -71,8 +74,9 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [deletingEmp, setDeletingEmp] = useState<{ id: string; name: string } | null>(null);
 
-  // Modals for Salary History and 1405 Tax Calculator
+  // Modals for Salary History, Person Full Receipts/Payments, and 1405 Tax Calculator
   const [historyModalEmployee, setHistoryModalEmployee] = useState<Employee | null>(null);
+  const [selectedPersonForHistory, setSelectedPersonForHistory] = useState<PersonTarget | null>(null);
   const [isTaxCalcOpen, setIsTaxCalcOpen] = useState(false);
   const [taxCalcInitialSalary, setTaxCalcInitialSalary] = useState(250_000_000);
 
@@ -579,17 +583,35 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      onClick={() => setSelectedPersonForHistory({
+                        id: emp.id,
+                        name: emp.name,
+                        type: 'employee',
+                        role: emp.role,
+                        baseSalary: emp.baseSalary,
+                        hasInsurance: emp.hasInsurance,
+                        phone: emp.phone,
+                        nationalId: emp.nationalId,
+                        notes: emp.notes,
+                      })}
+                      className="text-xs text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded-lg font-bold cursor-pointer transition-colors"
+                      title="مشاهده گردش حساب و ریز دریافتی‌ها و پرداختی‌های این کارمند"
+                    >
+                      گردش حساب و پرداختی‌ها 🔍
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setHistoryModalEmployee(emp)}
                       className="text-xs text-indigo-600 hover:text-indigo-800 font-bold cursor-pointer"
                     >
-                      تاریخچه حقوق
+                      سوابق احکام
                     </button>
                     {canEdit && (
                       <button
                         onClick={() => handleOpenEdit(emp)}
-                        className="text-xs text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
+                        className="text-xs text-slate-600 hover:text-slate-900 font-bold cursor-pointer"
                       >
-                        ویرایش حکم
+                        ویرایش
                       </button>
                     )}
                   </div>
@@ -938,6 +960,18 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           }
         }}
         onCancel={() => setDeletingEmp(null)}
+      />
+
+      {/* Person Full Payment History & Receipts Modal */}
+      <PersonPaymentHistoryModal
+        isOpen={Boolean(selectedPersonForHistory)}
+        onClose={() => setSelectedPersonForHistory(null)}
+        person={selectedPersonForHistory}
+        transactions={transactions}
+        salaryMatrix={salaryMatrix}
+        selectedYear={selectedYear}
+        currencyMode={currencyMode}
+        onShowToast={onShowToast}
       />
 
     </div>

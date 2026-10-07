@@ -35,9 +35,11 @@ import { generateBackupFilename } from './utils/formatters';
 import { useAuthManager } from './hooks/useAuthManager';
 import { useFinancialData } from './hooks/useFinancialData';
 import { SupabaseDataService } from './lib/supabaseDataService';
+import { setCurrentUserContext } from './lib/serverApi';
 import { updateDocumentFavicon } from './components/CompanyLogo';
 
-import { Building2, Loader2, DatabaseBackup, Download, AlertCircle, X, CloudUpload, Cloud, CloudOff } from 'lucide-react';
+import { Building2, Loader2, DatabaseBackup, Download, AlertCircle, X, CloudUpload, Cloud, CloudOff, History } from 'lucide-react';
+
 
 const VALID_TABS: ActiveTab[] = [
   'dashboard',
@@ -216,6 +218,11 @@ export default function App() {
     handlePullAllDataFromServer,
     isCloudLoading,
     isCloudConnected,
+    syncLogs,
+    isLoadingSyncLogs,
+    fetchSyncLogs,
+    handleClearSyncLogs,
+    handleLogSyncEvent,
   } = useFinancialData({
     currencyMode,
     onShowToast: showToast,
@@ -236,6 +243,12 @@ export default function App() {
     users,
     onShowToast: showToast,
   });
+
+  // ارسال هویت کاربر فعال به سرور برای ثبت در لاگ تاریخچه تغییرات
+  useEffect(() => {
+    setCurrentUserContext(currentAppUser);
+  }, [currentAppUser]);
+
 
   // مدیریت وضعیت مودال‌ها
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
@@ -448,8 +461,21 @@ export default function App() {
               <Cloud className="w-3.5 h-3.5 text-sky-400 shrink-0" />
               <span>دریافت از سرور</span>
             </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('users');
+                fetchSyncLogs();
+              }}
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition cursor-pointer active:scale-95"
+              title="مشاهده تاریخچه ارسال/دریافت‌ها و وضعیت همگام‌سازی سرور"
+            >
+              <History className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>تاریخچه تغییرات</span>
+            </button>
           </div>
         </div>
+
 
         {/* هدر بالای صفحه */}
         <TopHeader
@@ -641,6 +667,7 @@ export default function App() {
             <EmployeesView
               employees={employees}
               salaryMatrix={salaryMatrix}
+              transactions={transactions}
               selectedYear={selectedYear}
               currencyMode={currencyMode}
               onSaveEmployee={handleSaveEmployee}
@@ -710,6 +737,13 @@ export default function App() {
             <UsersView
               users={users}
               currentUser={currentAppUser}
+              syncLogs={syncLogs}
+              isLoadingSyncLogs={isLoadingSyncLogs}
+              onRefreshSyncLogs={fetchSyncLogs}
+              onClearSyncLogs={handleClearSyncLogs}
+              onTriggerPush={handlePushAllDataToServer}
+              onTriggerPull={handlePullAllDataFromServer}
+              isCloudConnected={isCloudConnected}
               onAddUser={handleAddUser}
               onUpdateUser={handleUpdateUser}
               onDeleteUser={handleDeleteUser}
@@ -717,6 +751,7 @@ export default function App() {
               onShowToast={showToast}
             />
           )}
+
 
           {activeTab === 'journal' && (
             <JournalView

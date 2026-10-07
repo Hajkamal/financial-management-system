@@ -32,6 +32,7 @@ import {
 } from '../utils/formatters';
 import { AmountInput } from './AmountInput';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import { PersonTarget } from './PersonPaymentHistoryModal';
 
 interface MemberSalarySectionProps {
   members: CompanyMember[];
@@ -53,6 +54,7 @@ interface MemberSalarySectionProps {
   }) => void;
   onDeleteTransaction: (id: string) => void;
   onNavigateToMembers?: () => void;
+  onOpenPersonHistory?: (person: PersonTarget) => void;
 }
 
 export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
@@ -63,7 +65,9 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
   onAddMemberPayoutTransaction,
   onDeleteTransaction,
   onNavigateToMembers,
+  onOpenPersonHistory,
 }) => {
+
   // Sub-view toggle: 'matrix' (monthly spreadsheet) vs 'ledger' (transaction list)
   const [viewMode, setViewModeState] = useState<'matrix' | 'ledger'>(() => {
     try {
@@ -420,9 +424,29 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                 <tr className="bg-slate-900 text-white font-bold border-b border-slate-800">
                   <th className="p-3.5 w-28 text-center border-l border-slate-800">ماه / اعضا</th>
                   {members.map(mem => (
-                    <th key={mem.id} className="p-3.5 text-center border-l border-slate-800 min-w-[170px]">
+                    <th 
+                      key={mem.id} 
+                      onClick={() => {
+                        if (onOpenPersonHistory) {
+                          onOpenPersonHistory({
+                            id: mem.id,
+                            name: mem.name,
+                            type: 'member',
+                            role: mem.role,
+                            sharePercentage: mem.sharePercentage,
+                            phone: mem.phone,
+                            nationalId: mem.nationalId,
+                            notes: mem.notes,
+                          });
+                        }
+                      }}
+                      className="p-3.5 text-center border-l border-slate-800 min-w-[170px] cursor-pointer group hover:bg-slate-800 transition-colors"
+                      title={`کلیک برای مشاهده کامل تاریخچه دریافتی و پرداختی‌های ${mem.name}`}
+                    >
                       <div className="flex flex-col items-center">
-                        <span className="font-extrabold text-sm text-white">{mem.name}</span>
+                        <span className="font-extrabold text-sm text-white group-hover:text-indigo-300 transition-colors underline decoration-dotted decoration-slate-600 underline-offset-4">
+                          {mem.name}
+                        </span>
                         <div className="flex items-center gap-1 mt-0.5">
                           {mem.isWorkingForce ? (
                             <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-semibold border border-emerald-500/30">
@@ -434,9 +458,13 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                             </span>
                           )}
                         </div>
+                        <span className="text-[9px] text-indigo-300 mt-1 opacity-0 group-hover:opacity-100 transition-opacity bg-indigo-950/80 px-2 py-0.5 rounded">
+                          مشاهده تاریخچه مالی 🔍
+                        </span>
                       </div>
                     </th>
                   ))}
+
                   <th className="p-3.5 w-36 text-center bg-slate-950 font-extrabold text-indigo-300">
                     مجموع کل ماه
                   </th>
@@ -676,7 +704,28 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                           {tx.dateString}
                         </td>
                         <td className="p-3">
-                          <div className="font-bold text-slate-900">{displayName}</div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onOpenPersonHistory) {
+                                onOpenPersonHistory({
+                                  id: mem?.id || tx.relatedMemberId || tx.id,
+                                  name: displayName,
+                                  type: 'member',
+                                  role: mem?.role,
+                                  sharePercentage: mem?.sharePercentage,
+                                  phone: mem?.phone,
+                                  nationalId: mem?.nationalId,
+                                  notes: mem?.notes,
+                                });
+                              }
+                            }}
+                            className="font-bold text-slate-900 hover:text-indigo-600 transition-colors text-right cursor-pointer flex items-center gap-1 group"
+                            title="مشاهده گردش حساب و تاریخچه مالی این عضو"
+                          >
+                            <span>{displayName}</span>
+                            <span className="text-[10px] text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity">🔍</span>
+                          </button>
                           {mem && (
                             <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
                               <span>{mem.role}</span>
@@ -688,6 +737,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                             </div>
                           )}
                         </td>
+
                         <td className="p-3">
                           {isSalary ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">

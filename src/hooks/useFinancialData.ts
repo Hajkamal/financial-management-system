@@ -15,7 +15,8 @@ import {
   MemberPayoutType,
   SEASON_MONTHS,
   CustomCategoryDefinition,
-  CategorySubItem
+  CategorySubItem,
+  SyncAuditLog
 } from '../types';
 import { 
   INITIAL_YEAR, 
@@ -447,9 +448,54 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     return merged;
   });
 
+  // ۱۲. تاریخچه و لاگ‌های همگام‌سازی و تغییرات
+  const [syncLogs, setSyncLogs] = useState<SyncAuditLog[]>(() => 
+    readLocal('ayandeh_sync_logs', [])
+  );
+  const [isLoadingSyncLogs, setIsLoadingSyncLogs] = useState(false);
+
+  // واکشی مجدد لاگ‌های تاریخچه تغییرات از سرور
+  const fetchSyncLogs = useCallback(async () => {
+    setIsLoadingSyncLogs(true);
+    try {
+      const logs = await serverApi.getSyncLogs();
+      if (Array.isArray(logs)) {
+        setSyncLogs(logs);
+        writeLocal('ayandeh_sync_logs', logs);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch sync logs:', e);
+    } finally {
+      setIsLoadingSyncLogs(false);
+    }
+  }, []);
+
+  // پاکسازی تاریخچه تغییرات
+  const handleClearSyncLogs = useCallback(async () => {
+    const ok = await serverApi.clearSyncLogs();
+    if (ok) {
+      setSyncLogs([]);
+      writeLocal('ayandeh_sync_logs', []);
+      onShowToast('تاریخچه تغییرات با موفقیت پاکسازی شد.');
+    } else {
+      onShowToast('خطا در پاکسازی تاریخچه تغییرات.');
+    }
+  }, [onShowToast]);
+
+  // ثبت دستی رویداد همگام‌سازی
+  const handleLogSyncEvent = useCallback(async (log: Partial<SyncAuditLog>) => {
+    try {
+      await serverApi.logSyncAction(log);
+      fetchSyncLogs();
+    } catch (e) {
+      console.warn('Failed to log sync event:', e);
+    }
+  }, [fetchSyncLogs]);
+
   // =====================================================
   // ⚡ بارگذاری و همگام‌سازی بلادرنگ از دیتابیس متمرکز ابری (Supabase + Server)
   // =====================================================
+
   const lastServerSyncTime = useRef<string>('');
 
   const syncDataFromServer = useCallback(async (isInitial = false) => {
@@ -613,9 +659,15 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
             } catch {}
           }
 
+          if (Array.isArray(serverData.syncLogs) && serverData.syncLogs.length > 0) {
+            setSyncLogs(serverData.syncLogs);
+            writeLocal('ayandeh_sync_logs', serverData.syncLogs);
+          }
+
           setIsCloudConnected(true);
         }
       }
+
 
       if (isInitial) {
         console.info('✅ دیتابیس ابری با موفقیت در این مرورگر بارگذاری و همگام شد.');
@@ -2057,12 +2109,18 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     serviceTariffs,
     customCategories,
     
-    // وضعیت ابری
+    // وضعیت ابری و تاریخچه همگام‌سازی
     isCloudLoading,
     isCloudConnected,
+    syncLogs,
+    isLoadingSyncLogs,
+    fetchSyncLogs,
+    handleClearSyncLogs,
+    handleLogSyncEvent,
     
     // متدها
     handleSaveTransaction,
+
     handleDeleteTransaction,
     handleClearDemoTransactions,
     handleSaveEmployee,

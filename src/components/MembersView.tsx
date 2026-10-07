@@ -29,6 +29,7 @@ import {
 } from '../utils/formatters';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { AmountInput } from './AmountInput';
+import { PersonPaymentHistoryModal, PersonTarget } from './PersonPaymentHistoryModal';
 
 interface MembersViewProps {
   members: CompanyMember[];
@@ -66,6 +67,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
 }) => {
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<CompanyMember | null>(null);
+  const [selectedPersonForHistory, setSelectedPersonForHistory] = useState<PersonTarget | null>(null);
 
   // Form states for member edit
   const [name, setName] = useState('');
@@ -366,18 +368,36 @@ export const MembersView: React.FC<MembersViewProps> = ({
                 </div>
               </div>
 
-              {/* Action Button */}
-              {canEdit && (
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end">
+              {/* Action Buttons */}
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPersonForHistory({
+                    id: member.id,
+                    name: member.name,
+                    type: 'member',
+                    role: member.role,
+                    sharePercentage: member.sharePercentage,
+                    phone: member.phone,
+                    nationalId: member.nationalId,
+                    notes: member.notes,
+                  })}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors cursor-pointer"
+                  title="مشاهده گردش حساب و ریز دریافتی‌ها و برداشت‌های این عضو"
+                >
+                  <span>گردش حساب و تاریخچه 🔍</span>
+                </button>
+
+                {canEdit && (
                   <button
                     onClick={() => handleOpenPayoutModal(member)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded-lg transition-colors cursor-pointer"
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded-lg transition-colors cursor-pointer"
                   >
                     <ArrowUpRight className="w-3.5 h-3.5" />
-                    <span>ثبت واریز یا برداشت جدید</span>
+                    <span>واریز / برداشت</span>
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           );
         })}
@@ -629,6 +649,17 @@ export const MembersView: React.FC<MembersViewProps> = ({
           }
         }}
         onCancel={() => setDeletingMember(null)}
+      />
+
+      {/* Person Full Payment History & Receipts Modal */}
+      <PersonPaymentHistoryModal
+        isOpen={Boolean(selectedPersonForHistory)}
+        onClose={() => setSelectedPersonForHistory(null)}
+        person={selectedPersonForHistory}
+        transactions={transactions}
+        selectedYear={selectedYear}
+        currencyMode={currencyMode}
+        onShowToast={onShowToast}
       />
 
     </div>

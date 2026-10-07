@@ -44,8 +44,10 @@ import {
 import { getCurrentJalaliDateTime, getTodayJalali } from '../utils/jalali';
 import { AmountInput } from './AmountInput';
 import { MemberSalarySection } from './MemberSalarySection';
+import { PersonPaymentHistoryModal, PersonTarget } from './PersonPaymentHistoryModal';
 
 interface SalaryMatrixViewProps {
+
   employees: Employee[];
   salaryMatrix: SalaryMatrixItem[];
   members: CompanyMember[];
@@ -122,8 +124,12 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
   // مودال همگام‌سازی دسته‌ای اسناد فاقد سند
   const [isBulkSyncModalOpen, setIsBulkSyncModalOpen] = useState(false);
 
+  // مودال تاریخچه کامل دریافتی‌ها و پرداختی‌های فرد (پرسنل یا اعضا)
+  const [selectedPersonForHistory, setSelectedPersonForHistory] = useState<PersonTarget | null>(null);
+
   /**
    * تابع تجمیع حقوق هر کارمند در هر ماه از دو منبع:
+
    * ۱. اسناد مالی ثبت‌شده در دفتر هزینه‌ها (با اولویت ماه کارکرد)
    * ۲. ردیف ذخیره شده در ماتریس حقوق
    */
@@ -526,8 +532,10 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
           onAddMemberPayoutTransaction={onAddMemberPayoutTransaction}
           onDeleteTransaction={onDeleteTransaction}
           onNavigateToMembers={onNavigateToMembers}
+          onOpenPersonHistory={setSelectedPersonForHistory}
         />
       ) : (
+
         <>
           {/* Top Header Card */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -678,9 +686,26 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
                         ماه / کارمندان
                       </th>
                       {employees.map(emp => (
-                        <th key={emp.id} className="p-3.5 text-center border-l border-slate-800 min-w-[150px] sm:min-w-[170px]">
+                        <th 
+                          key={emp.id} 
+                          onClick={() => setSelectedPersonForHistory({
+                            id: emp.id,
+                            name: emp.name,
+                            type: 'employee',
+                            role: emp.role,
+                            baseSalary: emp.baseSalary,
+                            hasInsurance: emp.hasInsurance,
+                            phone: emp.phone,
+                            nationalId: emp.nationalId,
+                            notes: emp.notes,
+                          })}
+                          className="p-3.5 text-center border-l border-slate-800 min-w-[150px] sm:min-w-[170px] cursor-pointer group hover:bg-slate-800 transition-colors"
+                          title={`کلیک برای مشاهده کامل تاریخچه دریافتی و پرداختی‌های ${emp.name}`}
+                        >
                           <div className="flex flex-col items-center">
-                            <span className="font-extrabold text-sm text-white">{emp.name}</span>
+                            <span className="font-extrabold text-sm text-white group-hover:text-blue-300 transition-colors underline decoration-dotted decoration-slate-600 underline-offset-4">
+                              {emp.name}
+                            </span>
                             <span className="text-[10px] sm:text-[11px] font-normal text-slate-400">
                               {emp.hasInsurance ? '(دارای بیمه)' : '(بدون بیمه)'} • {emp.role}
                             </span>
@@ -689,9 +714,13 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
                                 پایه: {formatCurrency(emp.baseSalary, currencyMode)}
                               </span>
                             )}
+                            <span className="text-[9px] text-blue-300 mt-1 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-950/80 px-2 py-0.5 rounded">
+                              مشاهده تاریخچه مالی 🔍
+                            </span>
                           </div>
                         </th>
                       ))}
+
                       <th className="p-3.5 w-32 sm:w-36 text-center bg-slate-950 font-extrabold text-emerald-400">
                         جمع کل ماه
                       </th>
@@ -869,11 +898,26 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
                         جمع کل سال
                       </td>
                       {employees.map(emp => (
-                        <td key={emp.id} className="p-3.5 text-center border-l border-slate-700 text-emerald-300">
-                          <span className="block text-sm font-black">
+                        <td 
+                          key={emp.id} 
+                          onClick={() => setSelectedPersonForHistory({
+                            id: emp.id,
+                            name: emp.name,
+                            type: 'employee',
+                            role: emp.role,
+                            baseSalary: emp.baseSalary,
+                            hasInsurance: emp.hasInsurance,
+                            phone: emp.phone,
+                            nationalId: emp.nationalId,
+                            notes: emp.notes,
+                          })}
+                          className="p-3.5 text-center border-l border-slate-700 text-emerald-300 cursor-pointer hover:bg-slate-700/80 transition-colors group"
+                          title={`کلیک برای مشاهده کامل تاریخچه دریافتی و پرداختی‌های ${emp.name}`}
+                        >
+                          <span className="block text-sm font-black group-hover:text-white transition-colors">
                             {formatCurrency(columnGrandTotals[emp.id] || 0, currencyMode)}
                           </span>
-                          <span className="text-[10px] text-slate-300 font-normal">کل دریافتی سال</span>
+                          <span className="text-[10px] text-slate-300 font-normal group-hover:underline">کل دریافتی سال 🔍</span>
                         </td>
                       ))}
                       <td className="p-3.5 text-center bg-slate-950 text-emerald-400 text-sm font-black">
@@ -903,9 +947,35 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
                       <ReceiptText className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-extrabold text-slate-900 text-base">
-                        مدیریت حقوق {employees.find(e => e.id === editingCell.employeeId)?.name}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-extrabold text-slate-900 text-base">
+                          مدیریت حقوق {employees.find(e => e.id === editingCell.employeeId)?.name}
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const emp = employees.find(e => e.id === editingCell.employeeId);
+                            if (emp) {
+                              setEditingCell(null);
+                              setSelectedPersonForHistory({
+                                id: emp.id,
+                                name: emp.name,
+                                type: 'employee',
+                                role: emp.role,
+                                baseSalary: emp.baseSalary,
+                                hasInsurance: emp.hasInsurance,
+                                phone: emp.phone,
+                                nationalId: emp.nationalId,
+                                notes: emp.notes,
+                              });
+                            }
+                          }}
+                          className="px-2 py-0.5 text-[10px] bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg font-bold transition-colors cursor-pointer"
+                          title="مشاهده پرونده و کلیه اسناد مالی پرداختی به این کارمند"
+                        >
+                          گردش حساب و تاریخچه مالی 🔍
+                        </button>
+                      </div>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {employees.find(e => e.id === editingCell.employeeId)?.role} • حقوق پایه مصوب:{' '}
                         <span className="font-bold text-slate-700 font-mono">
@@ -1379,6 +1449,24 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
           )}
         </>
       )}
+
+      {/* مودال جامع تاریخچه کامل دریافتی‌ها و پرداختی‌های فرد (پرسنل یا اعضای شرکت) */}
+      <PersonPaymentHistoryModal
+        isOpen={Boolean(selectedPersonForHistory)}
+        onClose={() => setSelectedPersonForHistory(null)}
+        person={selectedPersonForHistory}
+        transactions={transactions}
+        salaryMatrix={salaryMatrix}
+        selectedYear={selectedYear}
+        currencyMode={currencyMode}
+        onOpenNewTransactionForPerson={(p) => {
+          setSelectedPersonForHistory(null);
+          if (p.type === 'member') {
+            setPayrollSubTab('members');
+          }
+        }}
+        onShowToast={onShowToast}
+      />
 
     </div>
   );

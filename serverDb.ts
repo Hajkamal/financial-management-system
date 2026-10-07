@@ -70,6 +70,7 @@ export interface ServerDatabase {
   serviceTariffs: any[];
   customCategories?: any[];
   companyLogo?: string | null;
+  syncLogs?: any[];
 }
 
 function getDefaultDb(): ServerDatabase {
@@ -89,6 +90,7 @@ function getDefaultDb(): ServerDatabase {
     serviceTariffs: [],
     customCategories: INITIAL_CUSTOM_CATEGORIES,
     companyLogo: null,
+    syncLogs: [],
   };
 }
 
@@ -152,6 +154,7 @@ export function loadDatabase(): ServerDatabase {
         serviceTariffs: Array.isArray(parsed.serviceTariffs) ? parsed.serviceTariffs : [],
         customCategories: finalCustomCategories,
         companyLogo: parsed.companyLogo || null,
+        syncLogs: Array.isArray(parsed.syncLogs) ? parsed.syncLogs : [],
       };
       return inMemoryDb;
     }
@@ -204,6 +207,7 @@ export function resetDatabaseToClean(): ServerDatabase {
     serviceTariffs: [],
     customCategories: INITIAL_CUSTOM_CATEGORIES,
     companyLogo: currentDb.companyLogo || null,
+    syncLogs: Array.isArray(currentDb.syncLogs) ? currentDb.syncLogs : [],
   };
 
   saveDatabase(freshDb);
