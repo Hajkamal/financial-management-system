@@ -753,86 +753,102 @@ export default function App() {
       />
 
       {/* مودال ثبت و ویرایش تراکنش */}
-      <TransactionModal
-        key={editingTx ? editingTx.id : (isTxModalOpen ? 'new-tx-open' : 'tx-closed')}
-        isOpen={isTxModalOpen}
-        onClose={() => {
-          setIsTxModalOpen(false);
-          setEditingTx(null);
-        }}
-        onSave={handleSaveTransaction}
-        editingTransaction={editingTx}
-        selectedYear={selectedYear}
-        currencyMode={currencyMode}
-        employees={employees}
-        members={members}
-        loans={loans}
-        currentUser={currentAppUser}
-        transactions={transactions}
-        onEditTransaction={(tx) => {
-          setEditingTx(tx);
-          setIsTxModalOpen(true);
-        }}
-        customCategories={customCategories}
-        onAddCategory={handleAddCustomCategory}
-        onUpdateCategory={handleUpdateCustomCategory}
-        onDeleteCategory={handleDeleteCustomCategory}
-        onAddSubCategory={handleAddSubCategory}
-        onUpdateSubCategory={handleUpdateSubCategory}
-        onDeleteSubCategory={handleDeleteSubCategory}
-        onResetCategoriesToDefaults={handleResetCategoriesToDefaults}
-        onReconcileCategoriesWithSystemDefaults={handleReconcileCategoriesWithSystemDefaults}
-      />
+      {isTxModalOpen && (
+        <Suspense fallback={null}>
+          <TransactionModal
+            key={editingTx ? editingTx.id : 'new-tx-open'}
+            isOpen={isTxModalOpen}
+            onClose={() => {
+              setIsTxModalOpen(false);
+              setEditingTx(null);
+            }}
+            onSave={handleSaveTransaction}
+            editingTransaction={editingTx}
+            selectedYear={selectedYear}
+            currencyMode={currencyMode}
+            employees={employees}
+            members={members}
+            loans={loans}
+            currentUser={currentAppUser}
+            transactions={transactions}
+            onEditTransaction={(tx) => {
+              setEditingTx(tx);
+              setIsTxModalOpen(true);
+            }}
+            customCategories={customCategories}
+            onAddCategory={handleAddCustomCategory}
+            onUpdateCategory={handleUpdateCustomCategory}
+            onDeleteCategory={handleDeleteCustomCategory}
+            onAddSubCategory={handleAddSubCategory}
+            onUpdateSubCategory={handleUpdateSubCategory}
+            onDeleteSubCategory={handleDeleteSubCategory}
+            onResetCategoriesToDefaults={handleResetCategoriesToDefaults}
+            onReconcileCategoriesWithSystemDefaults={handleReconcileCategoriesWithSystemDefaults}
+          />
+        </Suspense>
+      )}
 
       {/* مودال پشتیبان‌گیری و بازیابی */}
-      <BackupModal
-        isOpen={isBackupModalOpen}
-        onClose={() => setIsBackupModalOpen(false)}
-        transactions={transactions}
-        employees={employees}
-        salaryMatrix={salaryMatrix}
-        members={members}
-        loans={loans}
-        companyName={companyName}
-        selectedYear={selectedYear}
-        fiscalYears={fiscalYears}
-        users={users}
-        bankAccounts={bankAccounts}
-        vatInvoices={vatInvoices}
-        serviceTariffs={serviceTariffs}
-        customCategories={customCategories}
-        onRestoreData={handleRestoreData}
-        onResetToDefaults={handleResetToDefaults}
-        onReconcileCategories={handleReconcileCategoriesWithSystemDefaults}
-        onPurge1404={handlePurge1404}
-        onClearDemoTransactions={handleClearDemoTransactions}
-        onShowToast={showToast}
-      />
+      {isBackupModalOpen && (
+        <Suspense fallback={null}>
+          <BackupModal
+            isOpen={isBackupModalOpen}
+            onClose={() => setIsBackupModalOpen(false)}
+            transactions={transactions}
+            employees={employees}
+            salaryMatrix={salaryMatrix}
+            members={members}
+            loans={loans}
+            companyName={companyName}
+            selectedYear={selectedYear}
+            fiscalYears={fiscalYears}
+            users={users}
+            bankAccounts={bankAccounts}
+            vatInvoices={vatInvoices}
+            serviceTariffs={serviceTariffs}
+            customCategories={customCategories}
+            onRestoreData={handleRestoreData}
+            onResetToDefaults={handleResetToDefaults}
+            onReconcileCategories={handleReconcileCategoriesWithSystemDefaults}
+            onPurge1404={handlePurge1404}
+            onClearDemoTransactions={handleClearDemoTransactions}
+            onShowToast={showToast}
+          />
+        </Suspense>
+      )}
 
       {/* مودال خروجی اکسل */}
-      <ExportExcelModal
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        companyName={companyName}
-        selectedYear={selectedYear}
-        fiscalYears={fiscalYears}
-        transactions={transactions}
-        employees={employees}
-        salaryMatrix={salaryMatrix}
-        members={members}
-        loans={loans}
-        onShowToast={showToast}
-      />
+      {isExportModalOpen && (
+        <Suspense fallback={null}>
+          <ExportExcelModal
+            isOpen={isExportModalOpen}
+            onClose={() => setIsExportModalOpen(false)}
+            companyName={companyName}
+            selectedYear={selectedYear}
+            fiscalYears={fiscalYears}
+            transactions={transactions}
+            employees={employees}
+            salaryMatrix={salaryMatrix}
+            members={members}
+            loans={loans}
+            onShowToast={showToast}
+          />
+        </Suspense>
+      )}
 
       {/* مودال تغییر کلمه عبور */}
-      <ChangePasswordModal
-        isOpen={isChangePasswordOpen}
-        onClose={() => setIsChangePasswordOpen(false)}
-        currentUser={currentAppUser}
-        onSavePassword={async (newPwd) => {
-          await handleChangePassword(currentAppUser.id, newPwd);
-        }}
-      />
+      {isChangePasswordOpen && (
+        <Suspense fallback={null}>
+          <ChangePasswordModal
+            isOpen={isChangePasswordOpen}
+            onClose={() => setIsChangePasswordOpen(false)}
+            currentUser={currentAppUser}
+            onSavePassword={async (newPwd) => {
+              await handleChangePassword(currentAppUser.id, newPwd);
+            }}
+          />
+        </Suspense>
+      )}
 
       {/* اعلان‌های Toast */}
       {toastMessage && (

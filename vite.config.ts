@@ -28,20 +28,17 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
+              if (id.includes('xlsx')) {
+                return 'excel';
+              }
               if (id.includes('recharts') || id.includes('d3-')) {
                 return 'charts';
               }
               if (id.includes('@supabase') || id.includes('@google')) {
                 return 'api-clients';
               }
-              if (id.includes('xlsx')) {
-                return 'excel';
-              }
-              if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
-                return 'react-vendor';
-              }
               if (id.includes('lucide-react')) {
-                  return 'icons';
+                return 'icons';
               }
               return 'vendor';
             }
