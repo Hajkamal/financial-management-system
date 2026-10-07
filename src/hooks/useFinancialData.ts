@@ -37,7 +37,8 @@ import {
   PERSIAN_MONTHS, 
   toEnglishDigits, 
   normalizeEmail, 
-  normalizePassword 
+  normalizePassword,
+  isSalaryTransaction
 } from '../utils/formatters';
 import { sortTransactionsByDate, getCurrentJalaliDateTime } from '../utils/jalali';
 import { hashPassword, isHashedPassword } from '../utils/crypto';
@@ -868,7 +869,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     }
   }, []);
 
-  // همگام‌سازی و انتقال خودکار اسناد مالی ثبت‌شده برای پرسنل به ماتریس حقوق (بر پایه ماه کارکرد حقوق)
+  // همگام‌سازی و انتقال خودکار اسناد مالی حقوق ثبت‌شده برای پرسنل به ماتریس حقوق (بر پایه ماه کارکرد حقوق)
+  // توجه: خریدهای شرکتی، تنخواه، هزینه‌های اداری یا تجهیزات ثبت‌شده با نام کارمند نباید به عنوان حقوق وارد ماتریس شوند
   useEffect(() => {
     if (employees.length === 0 || transactions.length === 0) return;
 
@@ -880,10 +882,14 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         const empMonthTxs = transactions.filter(t => {
           const targetYear = t.salaryYear || t.year;
           const targetMonth = t.salaryMonth || t.month;
+          const isPersonMatch = (t.relatedEmployeeId === emp.id || 
+            (t.recipientOrPayer && emp.name.trim().toLowerCase() === t.recipientOrPayer.trim().toLowerCase()) || 
+            (t.title && t.title.includes(emp.name)));
+
           return targetYear === selectedYear && 
             targetMonth === m && 
-            (t.relatedEmployeeId === emp.id || (t.recipientOrPayer && emp.name.trim().toLowerCase() === t.recipientOrPayer.trim().toLowerCase()) || (t.title && t.title.includes(emp.name))) &&
-            (t.category === 'salary' || t.relatedEmployeeId === emp.id || Boolean(t.title?.includes('حقوق')) || Boolean(t.description?.includes('حقوق')) || Boolean(t.title?.includes('دستمزد')));
+            isPersonMatch &&
+            isSalaryTransaction(t);
         });
 
         if (empMonthTxs.length > 0) {
@@ -939,29 +945,29 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     serverApi.saveTransaction(tx);
     SupabaseDataService.saveTransaction(tx);
 
-    // ⚡ همگام‌سازی مستقیم و بلادرنگ با ماتریس حقوق پرسنل (بر پایه ماه کارکرد حقوق)
+    // ⚡ همگام‌سازی مستقیم و بلادرنگ با ماتریس حقوق پرسنل (فقط در صورتی که سند بابت حقوق و دستمزد باشد)
     const targetEmpId = tx.relatedEmployeeId || employees.find(e => 
       (tx.recipientOrPayer && e.name.trim().toLowerCase() === tx.recipientOrPayer.trim().toLowerCase()) ||
       (tx.title && tx.title.includes(e.name.trim()))
     )?.id;
 
-    const isSalaryTx = tx.category === 'salary' || 
-      Boolean(tx.relatedEmployeeId) || 
-      Boolean(tx.title?.includes('حقوق')) || 
-      Boolean(tx.description?.includes('حقوق')) || 
-      Boolean(tx.title?.includes('دستمزد'));
+    const isSalary = isSalaryTransaction(tx);
 
-    if (targetEmpId && isSalaryTx) {
+    if (targetEmpId && isSalary) {
       const salYear = tx.salaryYear || tx.year;
       const salMonth = tx.salaryMonth || tx.month;
 
       const empMonthTxs = updated.filter(t => {
         const tYear = t.salaryYear || t.year;
         const tMonth = t.salaryMonth || t.month;
+        const isPersonMatch = (t.relatedEmployeeId === targetEmpId || 
+          (t.recipientOrPayer && employees.find(e => e.id === targetEmpId)?.name.trim().toLowerCase() === t.recipientOrPayer.trim().toLowerCase()) || 
+          (employees.find(e => e.id === targetEmpId)?.name && t.title?.includes(employees.find(e => e.id === targetEmpId)!.name)));
+
         return tYear === salYear && 
           tMonth === salMonth && 
-          (t.relatedEmployeeId === targetEmpId || (t.recipientOrPayer && employees.find(e => e.id === targetEmpId)?.name.trim().toLowerCase() === t.recipientOrPayer.trim().toLowerCase()) || (employees.find(e => e.id === targetEmpId)?.name && t.title?.includes(employees.find(e => e.id === targetEmpId)!.name))) &&
-          (t.category === 'salary' || t.relatedEmployeeId === targetEmpId || Boolean(t.title?.includes('حقوق')) || Boolean(t.description?.includes('حقوق')) || Boolean(t.title?.includes('دستمزد')));
+          isPersonMatch &&
+          isSalaryTransaction(t);
       });
       const totalMonthSalary = empMonthTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
 
@@ -1007,8 +1013,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     serverApi.deleteTransaction(id);
     SupabaseDataService.deleteTransaction(id);
 
-    // به‌روزرسانی مجدد ماتریس حقوق در صورت حذف سند مربوط به کارمند
-    if (txToDelete) {
+    // به‌روزرسانی مجدد ماتریس حقوق در صورت حذف سند مربوط به حقوق کارمند
+    if (txToDelete && isSalaryTransaction(txToDelete)) {
       const targetEmpId = txToDelete.relatedEmployeeId || employees.find(e => 
         (txToDelete.recipientOrPayer && e.name.trim().toLowerCase() === txToDelete.recipientOrPayer.trim().toLowerCase()) ||
         (txToDelete.title && txToDelete.title.includes(e.name.trim()))
@@ -1021,10 +1027,14 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         const empMonthTxs = updated.filter(t => {
           const tYear = t.salaryYear || t.year;
           const tMonth = t.salaryMonth || t.month;
+          const isPersonMatch = (t.relatedEmployeeId === targetEmpId || 
+            (t.recipientOrPayer && employees.find(e => e.id === targetEmpId)?.name.trim().toLowerCase() === t.recipientOrPayer.trim().toLowerCase()) || 
+            (employees.find(e => e.id === targetEmpId)?.name && t.title?.includes(employees.find(e => e.id === targetEmpId)!.name)));
+
           return tYear === salYear && 
             tMonth === salMonth && 
-            (t.relatedEmployeeId === targetEmpId || (t.recipientOrPayer && employees.find(e => e.id === targetEmpId)?.name.trim().toLowerCase() === t.recipientOrPayer.trim().toLowerCase()) || (employees.find(e => e.id === targetEmpId)?.name && t.title?.includes(employees.find(e => e.id === targetEmpId)!.name))) &&
-            (t.category === 'salary' || t.relatedEmployeeId === targetEmpId || Boolean(t.title?.includes('حقوق')) || Boolean(t.description?.includes('حقوق')) || Boolean(t.title?.includes('دستمزد')));
+            isPersonMatch &&
+            isSalaryTransaction(t);
         });
         const totalMonthSalary = empMonthTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
 

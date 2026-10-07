@@ -47,7 +47,9 @@ import {
   BASINA_SUBCATEGORY_CONFIG,
   INFRASTRUCTURE_SUBCATEGORY_CONFIG,
   getCategoryDefinition,
-  getSubCategoryLabel
+  getSubCategoryLabel,
+  isSalaryTransaction,
+  classifyPersonTransaction
 } from '../utils/formatters';
 import { INITIAL_CUSTOM_CATEGORIES } from '../data/initialData';
 import { AmountInput } from './AmountInput';
@@ -228,19 +230,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         : [])
   );
 
-  // بررسی آیا دسته یا سند جاری مربوط به حقوق، پرسنل یا برداشت اعضا و سهامداران است
+  // بررسی آیا دسته یا سند جاری مربوط به حقوق و دستمزد پرسنل یا حقوق کارکرد اعضا است
   const isSalaryCategory = (
     category === 'salary' || 
-    category === 'shareholder_payout' ||
-    category === 'shareholder_deposit' ||
-    Boolean(currentCategoryDef?.label?.includes('حقوق')) || 
-    Boolean(currentCategoryDef?.label?.includes('دستمزد')) ||
-    Boolean(currentCategoryDef?.label?.includes('پرسنل')) ||
-    Boolean(currentCategoryDef?.label?.includes('کارمند')) ||
-    Boolean(currentCategoryDef?.label?.includes('سهامدار')) ||
-    Boolean(currentCategoryDef?.label?.includes('عضو')) ||
-    Boolean(relatedEmployeeId) ||
-    Boolean(relatedMemberId)
+    (category === 'shareholder_payout' && memberPayoutType === 'salary') ||
+    Boolean(currentCategoryDef?.label?.includes('حقوق') && !currentCategoryDef?.label?.includes('خرید')) || 
+    Boolean(currentCategoryDef?.label?.includes('دستمزد'))
   );
 
   // کارمند انتخاب شده فعلی
@@ -481,9 +476,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       finalMemId ? members.find(m => m.id === finalMemId)?.name : undefined
     );
 
-    const memObj = finalMemId ? members.find(m => m.id === finalMemId) : undefined;
+    const isExplicitSalary = (
+      category === 'salary' || 
+      (category === 'shareholder_payout' && memberPayoutType === 'salary') ||
+      (cleanTitle.includes('حقوق') && !cleanTitle.includes('خرید') && !cleanTitle.includes('تنخواه'))
+    );
     const computedPayoutType: MemberPayoutType = memberPayoutType || (
-      memObj?.isWorkingForce || category === 'salary' || cleanTitle.includes('حقوق') 
+      isExplicitSalary 
         ? 'salary' 
         : 'profit_withdrawal'
     );
@@ -506,8 +505,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       memberPayoutType: finalMemId ? computedPayoutType : undefined,
       relatedEmployeeId: finalEmpId || undefined,
       relatedLoanId: category === 'loan_installment' ? relatedLoanId : undefined,
-      salaryMonth: (isSalaryCategory || finalEmpId || (finalMemId && computedPayoutType === 'salary')) ? salaryMonth : undefined,
-      salaryYear: (isSalaryCategory || finalEmpId || (finalMemId && computedPayoutType === 'salary')) ? (salaryYear || year) : undefined,
+      salaryMonth: isSalaryCategory ? salaryMonth : undefined,
+      salaryYear: isSalaryCategory ? (salaryYear || year) : undefined,
 
       createdBy: editingTransaction?.createdBy || currentUser?.email || 'vahidkamali03@gmail.com',
       createdByName: editingTransaction?.createdByName || currentUser?.fullName || 'وحید کمالی',

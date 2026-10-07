@@ -39,7 +39,9 @@ import {
   PERSIAN_MONTHS, 
   formatCurrency, 
   toPersianDigits, 
-  exportSalaryMatrixToExcel 
+  exportSalaryMatrixToExcel,
+  isSalaryTransaction,
+  classifyPersonTransaction
 } from '../utils/formatters';
 import { getCurrentJalaliDateTime, getTodayJalali } from '../utils/jalali';
 import { AmountInput } from './AmountInput';
@@ -140,6 +142,7 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
     );
 
     // اسناد مالی ثبت شده در دفتر هزینه‌ها/درآمدها برای این کارمند در این ماه (با اولویت ماه کارکرد حقوق)
+    // دقت شود: خریدهای شرکتی و تنخواه نباید به عنوان حقوق در ماتریس محاسبه شوند
     const empTxs = transactions.filter(t => {
       const targetYear = t.salaryYear || t.year;
       const targetMonth = t.salaryMonth || t.month;
@@ -153,14 +156,8 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
 
       if (!isDirectMatch && !isNameMatch) return false;
 
-      // سند باید مربوط به حقوق، پرسنل یا انتخاب کارمند باشد
-      const isSalaryCat = t.category === 'salary' || 
-        isDirectMatch || 
-        Boolean(t.title?.includes('حقوق')) || 
-        Boolean(t.description?.includes('حقوق')) ||
-        Boolean(t.title?.includes('دستمزد'));
-
-      return isSalaryCat;
+      // سند باید مربوط به حقوق و دستمزد کارکرد باشد
+      return isSalaryTransaction(t);
     });
 
     const txTotal = empTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);

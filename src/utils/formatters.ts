@@ -445,6 +445,89 @@ export function getFullCategoryDisplayName(
   return label;
 }
 
+/**
+ * بررسی اینکه آیا یک تراکنش مالی صرفاً بابت حقوق و دستمزد کارکرد است یا خیر
+ * (تراکنش‌های خرید برای شرکت، تنخواه، تجهیزات، سرور، هزینه‌های اداری، تبلیغات و بازپرداخت‌ها نباید در لیست و ماتریس حقوق محاسبه شوند)
+ */
+export function isSalaryTransaction(t: FinancialTransaction): boolean {
+  if (t.type !== 'expense') return false;
+
+  // اگر صراحتاً نوع پرداخت عضو برداشت سود باشد، حقوق نیست
+  if (t.memberPayoutType === 'profit_withdrawal') return false;
+
+  // اگر دسته‌بندی صراحتاً حقوق باشد
+  if (t.category === 'salary' || t.memberPayoutType === 'salary') {
+    return true;
+  }
+
+  // اگر دسته‌بندی هزینه‌های اداری، زیرساخت، تجهیزات، تبلیغات، مالیات، اقساط یا خرید باشد، قطعاً خرید/هزینه شرکتی است نه حقوق
+  const nonSalaryCategories = [
+    'office_site',
+    'infrastructure',
+    'equipment',
+    'ads_basina',
+    'tax',
+    'legal',
+    'loan_installment',
+    'purchase'
+  ];
+  if (nonSalaryCategories.includes(t.category)) {
+    return false;
+  }
+
+  const titleLower = (t.title || '').toLowerCase();
+  const descLower = (t.description || '').toLowerCase();
+
+  // کلمات کلیدی خرید، تنخواه، فاکتور، تجهیزات، ملزومات، هاست، سرور و ...
+  const purchaseKeywords = [
+    'خرید', 'تنخواه', 'فاکتور', 'تجهیزات', 'لوازم', 'ملزومات', 'هاست', 'سرور', 
+    'پذیرایی', 'اسنپ', 'بلیط', 'بنزین', 'تعمیر', 'سخت‌افزار', 'شارژ', 'اشتراک', 'بازپرداخت', 'دفتر'
+  ];
+  const isPurchase = purchaseKeywords.some(kw => titleLower.includes(kw) || descLower.includes(kw));
+  if (isPurchase) return false;
+
+  // در صورتی که دسته متفرقه باشد و عنوان صراحتاً دارای حقوق/دستمزد باشد
+  return titleLower.includes('حقوق') || titleLower.includes('دستمزد') || descLower.includes('حقوق');
+}
+
+/**
+ * طبقه‌بندی دقیق نوع سند مالی مرتبط با اشخاص:
+ * - 'salary': حقوق و دستمزد ماهانه کارکرد
+ * - 'company_purchase': خرید برای شرکت، تنخواه و بازپرداخت هزینه‌های انجام شده
+ * - 'profit_withdrawal': برداشت سود سهامداری
+ * - 'deposit': واریز وجه توسط شخص به حساب شرکت
+ * - 'other_expense': سایر هزینه‌ها
+ */
+export type PersonTransactionClassification = 
+  | 'salary' 
+  | 'company_purchase' 
+  | 'profit_withdrawal' 
+  | 'deposit' 
+  | 'other_expense';
+
+export function classifyPersonTransaction(t: FinancialTransaction): PersonTransactionClassification {
+  if (t.type === 'income') return 'deposit';
+
+  if (isSalaryTransaction(t)) return 'salary';
+
+  if (t.category === 'shareholder_payout' || t.memberPayoutType === 'profit_withdrawal') {
+    return 'profit_withdrawal';
+  }
+
+  const titleLower = (t.title || '').toLowerCase();
+  const descLower = (t.description || '').toLowerCase();
+  const purchaseKeywords = [
+    'خرید', 'تنخواه', 'فاکتور', 'تجهیزات', 'لوازم', 'ملزومات', 'هاست', 'سرور', 
+    'پذیرایی', 'اسنپ', 'بلیط', 'بنزین', 'تعمیر', 'سخت‌افزار', 'شارژ', 'اشتراک', 'بازپرداخت', 'دفتر', 'سایت'
+  ];
+  const isPurchase = purchaseKeywords.some(kw => titleLower.includes(kw) || descLower.includes(kw)) ||
+    ['office_site', 'infrastructure', 'equipment', 'ads_basina'].includes(t.category);
+
+  if (isPurchase) return 'company_purchase';
+
+  return 'other_expense';
+}
+
 // Helper to format transactions for Excel rows
 function mapTransactionsToExcelRows(
   transactions: FinancialTransaction[],
@@ -521,10 +604,13 @@ function prepareMembersRows(members: CompanyMember[], transactions: FinancialTra
       Boolean(t.title && t.title.toLowerCase().includes(m.name.trim().toLowerCase()))
     );
     const salaryPaid = memberTxs
-      .filter(t => t.memberPayoutType === 'salary' || t.category === 'salary' || Boolean(t.title?.includes('حقوق')) || (m.isWorkingForce && !t.memberPayoutType))
+      .filter(t => isSalaryTransaction(t))
       .reduce((acc, t) => acc + (t.type === 'expense' ? t.amount : -t.amount), 0);
     const profitWithdrawal = memberTxs
-      .filter(t => t.memberPayoutType === 'profit_withdrawal' || (t.category === 'shareholder_payout' && t.memberPayoutType !== 'salary' && !t.title?.includes('حقوق') && !m.isWorkingForce))
+      .filter(t => t.memberPayoutType === 'profit_withdrawal' || (t.category === 'shareholder_payout' && !isSalaryTransaction(t)))
+      .reduce((acc, t) => acc + (t.type === 'expense' ? t.amount : -t.amount), 0);
+    const companyPurchasesPaid = memberTxs
+      .filter(t => classifyPersonTransaction(t) === 'company_purchase')
       .reduce((acc, t) => acc + (t.type === 'expense' ? t.amount : -t.amount), 0);
 
     return {
@@ -535,8 +621,9 @@ function prepareMembersRows(members: CompanyMember[], transactions: FinancialTra
       'سِمَت': m.role,
       'حقوق کارکرد سال (ریال)': salaryPaid,
       'برداشت سود سال (ریال)': profitWithdrawal,
-      'مجموع دریافتی کل سال (ریال)': salaryPaid + profitWithdrawal,
-      'مجموع دریافتی کل سال (تومان)': Math.round((salaryPaid + profitWithdrawal) / 10),
+      'خرید برای شرکت و تنخواه (ریال)': companyPurchasesPaid,
+      'مجموع حقوق و برداشت سود (ریال)': salaryPaid + profitWithdrawal,
+      'مجموع حقوق و برداشت سود (تومان)': Math.round((salaryPaid + profitWithdrawal) / 10),
       'شماره شبا': m.iban || '-',
       'شماره تماس': m.phone || '-',
     };

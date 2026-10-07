@@ -28,7 +28,9 @@ import {
 import { 
   formatCurrency, 
   toPersianDigits, 
-  PERSIAN_MONTHS 
+  PERSIAN_MONTHS,
+  isSalaryTransaction,
+  classifyPersonTransaction
 } from '../utils/formatters';
 import { AmountInput } from './AmountInput';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
@@ -106,7 +108,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
   // Deletion Modal
   const [deletingTx, setDeletingTx] = useState<{ id: string; title: string } | null>(null);
 
-  // تابع کمکی جامع برای شناسایی عضو متناظر و نوع پرداخت (حقوق یا برداشت) برای هر تراکنش مالی
+  // تابع کمکی جامع برای شناسایی عضو متناظر و نوع پرداخت (حقوق، برداشت سود یا خرید) برای هر تراکنش مالی
   const getTxMemberInfo = useCallback((t: FinancialTransaction) => {
     let member = members.find(m => m.id === t.relatedMemberId);
     if (!member && t.recipientOrPayer) {
@@ -118,18 +120,21 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
       member = members.find(m => tit.includes(m.name.trim().toLowerCase()));
     }
 
+    // اگر سند مربوط به هیچ عضوی نیست و کتگوری برداشت سهامدار هم نیست
     if (!member && t.category !== 'shareholder_payout') {
       return null;
     }
 
-    const isExplicitSalary = t.memberPayoutType === 'salary' || 
-      t.category === 'salary' || 
-      Boolean(t.title?.includes('حقوق')) || 
-      Boolean(t.description?.includes('حقوق'));
+    const classification = classifyPersonTransaction(t);
+    
+    // اگر سند بابت خرید برای شرکت یا تنخواه است، جزو حقوق یا برداشت سهام نیست
+    if (classification === 'company_purchase') {
+      return null;
+    }
 
-    const payoutType: MemberPayoutType = isExplicitSalary 
-      ? 'salary' 
-      : (t.memberPayoutType || (member?.isWorkingForce ? 'salary' : 'profit_withdrawal'));
+    const payoutType: MemberPayoutType = isSalaryTransaction(t)
+      ? 'salary'
+      : (t.memberPayoutType === 'salary' ? 'salary' : 'profit_withdrawal');
 
     return {
       member,
