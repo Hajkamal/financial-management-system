@@ -870,7 +870,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   }, []);
 
   // همگام‌سازی و انتقال خودکار اسناد مالی حقوق ثبت‌شده برای پرسنل به ماتریس حقوق (بر پایه ماه کارکرد حقوق)
-  // توجه: خریدهای شرکتی، تنخواه، هزینه‌های اداری یا تجهیزات ثبت‌شده با نام کارمند نباید به عنوان حقوق وارد ماتریس شوند
+  // توجه: خریدهای شرکتی، تنخواه، هزینه‌های اداری یا تجهیزات ثبت‌شده با نام کارمند به هیچ وجه به عنوان حقوق وارد ماتریس نمی‌شوند
   useEffect(() => {
     if (employees.length === 0 || transactions.length === 0) return;
 
@@ -882,9 +882,11 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         const empMonthTxs = transactions.filter(t => {
           const targetYear = t.salaryYear || t.year;
           const targetMonth = t.salaryMonth || t.month;
-          const isPersonMatch = (t.relatedEmployeeId === emp.id || 
+          const isPersonMatch = (
+            t.relatedEmployeeId === emp.id || 
             (t.recipientOrPayer && emp.name.trim().toLowerCase() === t.recipientOrPayer.trim().toLowerCase()) || 
-            (t.title && t.title.includes(emp.name)));
+            (t.title && t.title.toLowerCase().includes(emp.name.trim().toLowerCase()) && (t.title.includes('حقوق') || t.title.includes('دستمزد')))
+          );
 
           return targetYear === selectedYear && 
             targetMonth === m && 
@@ -892,29 +894,27 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
             isSalaryTransaction(t);
         });
 
-        if (empMonthTxs.length > 0) {
-          const totalMonthSalary = empMonthTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
-          const cellIndex = newMatrix.findIndex(item => item.employeeId === emp.id && item.year === selectedYear && item.month === m);
-          if (cellIndex >= 0) {
-            if (newMatrix[cellIndex].amount !== totalMonthSalary) {
-              newMatrix[cellIndex] = {
-                ...newMatrix[cellIndex],
-                amount: totalMonthSalary,
-                status: (totalMonthSalary > 0 ? 'paid' : 'zero') as 'paid' | 'pending' | 'zero'
-              };
-              hasMatrixUpdates = true;
-            }
-          } else {
-            newMatrix.push({
-              id: `sm-${emp.id}-${selectedYear}-${m}`,
-              employeeId: emp.id,
-              year: selectedYear,
-              month: m as PersianMonthNumber,
+        const totalMonthSalary = empMonthTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
+        const cellIndex = newMatrix.findIndex(item => item.employeeId === emp.id && item.year === selectedYear && item.month === m);
+        if (cellIndex >= 0) {
+          if (newMatrix[cellIndex].amount !== totalMonthSalary) {
+            newMatrix[cellIndex] = {
+              ...newMatrix[cellIndex],
               amount: totalMonthSalary,
               status: (totalMonthSalary > 0 ? 'paid' : 'zero') as 'paid' | 'pending' | 'zero'
-            });
+            };
             hasMatrixUpdates = true;
           }
+        } else if (totalMonthSalary > 0) {
+          newMatrix.push({
+            id: `sm-${emp.id}-${selectedYear}-${m}`,
+            employeeId: emp.id,
+            year: selectedYear,
+            month: m as PersianMonthNumber,
+            amount: totalMonthSalary,
+            status: 'paid'
+          });
+          hasMatrixUpdates = true;
         }
       }
     });

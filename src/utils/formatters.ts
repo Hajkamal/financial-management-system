@@ -447,20 +447,36 @@ export function getFullCategoryDisplayName(
 
 /**
  * بررسی اینکه آیا یک تراکنش مالی صرفاً بابت حقوق و دستمزد کارکرد است یا خیر
- * (تراکنش‌های خرید برای شرکت، تنخواه، تجهیزات، سرور، هزینه‌های اداری، تبلیغات و بازپرداخت‌ها نباید در لیست و ماتریس حقوق محاسبه شوند)
+ * (در ماتریس حقوق اصلاً هزینه‌ای که برای خرید یا چیز دیگری است که توسط فرد انجام شده نباید بیاید.
+ * فقط موارد مربوط به حقوق و دستمزد ماهانه کارکرد پرسنل و اعضا باید استخراج شوند)
  */
 export function isSalaryTransaction(t: FinancialTransaction): boolean {
   if (t.type !== 'expense') return false;
 
-  // اگر صراحتاً نوع پرداخت عضو برداشت سود باشد، حقوق نیست
+  // ۱. اگر صراحتاً نوع پرداخت عضو برداشت سود سهامداری باشد، به هیچ وجه حقوق نیست
   if (t.memberPayoutType === 'profit_withdrawal') return false;
 
-  // اگر دسته‌بندی صراحتاً حقوق باشد
-  if (t.category === 'salary' || t.memberPayoutType === 'salary') {
-    return true;
+  const titleLower = (t.title || '').toLowerCase();
+  const descLower = (t.description || '').toLowerCase();
+  const subCatLower = (t.subCategory || '').toLowerCase();
+
+  // ۲. فیلتر جامع کلمات کلیدی مربوط به خرید برای شرکت، تنخواه، فاکتور، تجهیزات، سرور، هزینه‌های جاری و بازپرداخت
+  // هر سندی که دارای این مشخصات باشد، قطعا خرید یا هزینه برای شرکت است و نباید در ماتریس و لیست حقوق بیاید
+  const purchaseKeywords = [
+    'خرید', 'تنخواه', 'فاکتور', 'تجهیزات', 'لوازم', 'ملزومات', 'هاست', 'سرور', 'دامنه',
+    'پذیرایی', 'اسنپ', 'بلیط', 'بنزین', 'تعمیر', 'سخت‌افزار', 'شارژ', 'اشتراک', 'بازپرداخت',
+    'دفتر', 'سایت', 'تبلیغات', 'مارکتینگ', 'لپ‌تاپ', 'لپتاپ', 'سیستم', 'میز', 'صندلی',
+    'تجهیز', 'غذا', 'ناهار', 'شام', 'پزشک', 'منشی', 'کارمزد', 'سود سهام', 'سپرده', 'تسهیلات', 'وام', 'قسط'
+  ];
+  const isPurchaseOrReimbursement = purchaseKeywords.some(
+    kw => titleLower.includes(kw) || descLower.includes(kw) || subCatLower.includes(kw)
+  );
+
+  if (isPurchaseOrReimbursement) {
+    return false;
   }
 
-  // اگر دسته‌بندی هزینه‌های اداری، زیرساخت، تجهیزات، تبلیغات، مالیات، اقساط یا خرید باشد، قطعاً خرید/هزینه شرکتی است نه حقوق
+  // ۳. دسته‌بندی‌های قطعی غیرحقوق (هزینه‌های جاری، اداری، تجهیزات، تبلیغات، وام و...)
   const nonSalaryCategories = [
     'office_site',
     'infrastructure',
@@ -469,25 +485,60 @@ export function isSalaryTransaction(t: FinancialTransaction): boolean {
     'tax',
     'legal',
     'loan_installment',
+    'guarantee_deposit',
+    'secretary_commission',
+    'doctors_payout',
+    'marketing_alizadeh',
+    'insurance',
     'purchase'
   ];
   if (nonSalaryCategories.includes(t.category)) {
     return false;
   }
 
+  // ۴. دسته‌بندی باید صراحتاً حقوق ('salary') باشد یا پرداختی عضو با نوع حقوق ('salary')
+  if (t.category === 'salary' || (t.category === 'shareholder_payout' && t.memberPayoutType === 'salary')) {
+    return true;
+  }
+
+  // ۵. اگر دسته‌بندی برداشت اعضا است و عنوان صراحتاً حقوق/دستمزد کارکرد دارد
+  if (t.category === 'shareholder_payout') {
+    return titleLower.includes('حقوق') || titleLower.includes('دستمزد') || descLower.includes('حقوق');
+  }
+
+  // در سایر دسته‌ها، حقوق محسوب نمی‌شود
+  return false;
+}
+
+/**
+ * بررسی اینکه آیا یک تراکنش مالی، پرداختی به عضو بابت حقوق کارکرد یا برداشت سود است یا خیر
+ * (خریدهای شرکتی، تنخواه و هزینه‌های انجام شده توسط عضو نباید جزء پرداختی/برداشت‌های عضو شمرده شوند)
+ */
+export function isMemberPayoutTransaction(t: FinancialTransaction): boolean {
+  if (t.type !== 'expense') return false;
+
+  // دسته‌بندی حتماً باید shareholder_payout یا salary باشد
+  if (t.category !== 'shareholder_payout' && t.category !== 'salary') {
+    return false;
+  }
+
   const titleLower = (t.title || '').toLowerCase();
   const descLower = (t.description || '').toLowerCase();
+  const subCatLower = (t.subCategory || '').toLowerCase();
 
-  // کلمات کلیدی خرید، تنخواه، فاکتور، تجهیزات، ملزومات، هاست، سرور و ...
+  // فیلتر خریدها و هزینه‌های شرکتی انجام شده توسط عضو
   const purchaseKeywords = [
-    'خرید', 'تنخواه', 'فاکتور', 'تجهیزات', 'لوازم', 'ملزومات', 'هاست', 'سرور', 
-    'پذیرایی', 'اسنپ', 'بلیط', 'بنزین', 'تعمیر', 'سخت‌افزار', 'شارژ', 'اشتراک', 'بازپرداخت', 'دفتر'
+    'خرید', 'تنخواه', 'فاکتور', 'تجهیزات', 'لوازم', 'ملزومات', 'هاست', 'سرور', 'دامنه',
+    'پذیرایی', 'اسنپ', 'بلیط', 'بنزین', 'تعمیر', 'سخت‌افزار', 'شارژ', 'اشتراک', 'بازپرداخت',
+    'دفتر', 'سایت', 'تبلیغات', 'مارکتینگ', 'لپ‌تاپ', 'لپتاپ', 'سیستم'
   ];
-  const isPurchase = purchaseKeywords.some(kw => titleLower.includes(kw) || descLower.includes(kw));
+  const isPurchase = purchaseKeywords.some(
+    kw => titleLower.includes(kw) || descLower.includes(kw) || subCatLower.includes(kw)
+  );
+
   if (isPurchase) return false;
 
-  // در صورتی که دسته متفرقه باشد و عنوان صراحتاً دارای حقوق/دستمزد باشد
-  return titleLower.includes('حقوق') || titleLower.includes('دستمزد') || descLower.includes('حقوق');
+  return true;
 }
 
 /**
@@ -537,10 +588,20 @@ export function classifyPersonTransaction(t: FinancialTransaction): PersonTransa
   const titleLower = (t.title || '').toLowerCase();
   const descLower = (t.description || '').toLowerCase();
 
-  // اگر سند صراحتاً برداشت سود یا سهم سهامدار باشد
+  const purchaseKeywords = [
+    'خرید', 'تنخواه', 'فاکتور', 'تجهیزات', 'لوازم', 'ملزومات', 'هاست', 'سرور', 'دامنه',
+    'پذیرایی', 'اسنپ', 'بلیط', 'بنزین', 'تعمیر', 'سخت‌افزار', 'شارژ', 'اشتراک', 'بازپرداخت', 
+    'دفتر', 'سایت', 'تبلیغات', 'مارکتینگ', 'لپ‌تاپ', 'لپتاپ', 'سیستم'
+  ];
+  const isPurchase = purchaseKeywords.some(kw => titleLower.includes(kw) || descLower.includes(kw)) ||
+    ['office_site', 'infrastructure', 'equipment', 'ads_basina', 'purchase'].includes(t.category);
+
+  if (isPurchase) return 'company_purchase';
+
+  // اگر سند صراحتاً برداشت سود یا سهم سهامدار باشد و خرید نباشد
   if (
-    t.category === 'shareholder_payout' || 
     t.memberPayoutType === 'profit_withdrawal' ||
+    (t.category === 'shareholder_payout' && !isPurchase) ||
     titleLower.includes('برداشت') ||
     titleLower.includes('سود سهام') ||
     titleLower.includes('سود شرکا') ||
@@ -548,15 +609,6 @@ export function classifyPersonTransaction(t: FinancialTransaction): PersonTransa
   ) {
     return 'profit_withdrawal';
   }
-
-  const purchaseKeywords = [
-    'خرید', 'فاکتور', 'تجهیزات', 'لوازم', 'ملزومات', 'هاست', 'سرور', 
-    'پذیرایی', 'اسنپ', 'بلیط', 'بنزین', 'تعمیر', 'سخت‌افزار', 'شارژ', 'اشتراک', 'بازپرداخت', 'دفتر', 'سایت'
-  ];
-  const isPurchase = purchaseKeywords.some(kw => titleLower.includes(kw) || descLower.includes(kw)) ||
-    ['office_site', 'infrastructure', 'equipment', 'ads_basina'].includes(t.category);
-
-  if (isPurchase) return 'company_purchase';
 
   return 'other_expense';
 }
@@ -588,15 +640,32 @@ function mapTransactionsToExcelRows(
 }
 
 // Helper to prepare Salary Matrix data for a specific year
-function prepareSalaryMatrixRows(employees: Employee[], salaryMatrix: SalaryMatrixItem[], year: number) {
+function prepareSalaryMatrixRows(
+  employees: Employee[], 
+  salaryMatrix: SalaryMatrixItem[], 
+  year: number,
+  transactions: FinancialTransaction[] = []
+) {
   const matrixRows: Record<string, any>[] = [];
   PERSIAN_MONTHS.forEach(month => {
     const row: Record<string, any> = { 'ماه': month.name };
     let monthTotal = 0;
 
     employees.forEach(emp => {
+      // استخراج مستقیم از تراکنش‌های ثبت شده حقوق
+      const empTxs = transactions.filter(t => {
+        const targetYear = t.salaryYear || t.year;
+        const targetMonth = t.salaryMonth || t.month;
+        if (targetYear !== year || targetMonth !== month.num) return false;
+        const isMatch = t.relatedEmployeeId === emp.id || 
+          Boolean(t.recipientOrPayer && t.recipientOrPayer.trim().toLowerCase() === emp.name.trim().toLowerCase()) ||
+          Boolean(t.title && t.title.toLowerCase().includes(emp.name.trim().toLowerCase()) && (t.title.includes('حقوق') || t.title.includes('دستمزد')));
+        return isMatch && isSalaryTransaction(t);
+      });
+
+      const txTotal = empTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
       const cell = salaryMatrix.find(item => item.employeeId === emp.id && item.month === month.num && item.year === year);
-      const paid = cell ? cell.amount : 0;
+      const paid = empTxs.length > 0 ? txTotal : (cell ? cell.amount : 0);
       const bonus = cell?.bonus || 0;
       const totalCell = paid + bonus;
       const colName = emp.hasInsurance ? `${emp.name} (بیمه)` : emp.name;
@@ -613,9 +682,23 @@ function prepareSalaryMatrixRows(employees: Employee[], salaryMatrix: SalaryMatr
   const totalRow: Record<string, any> = { 'ماه': `مجموع سال مالی ${year}` };
   let grandTotal = 0;
   employees.forEach(emp => {
-    const empTotal = salaryMatrix
-      .filter(item => item.employeeId === emp.id && item.year === year)
-      .reduce((sum, i) => sum + i.amount + (i.bonus || 0), 0);
+    let empTotal = 0;
+    for (let m = 1; m <= 12; m++) {
+      const empTxs = transactions.filter(t => {
+        const targetYear = t.salaryYear || t.year;
+        const targetMonth = t.salaryMonth || t.month;
+        if (targetYear !== year || targetMonth !== m) return false;
+        const isMatch = t.relatedEmployeeId === emp.id || 
+          Boolean(t.recipientOrPayer && t.recipientOrPayer.trim().toLowerCase() === emp.name.trim().toLowerCase()) ||
+          Boolean(t.title && t.title.toLowerCase().includes(emp.name.trim().toLowerCase()) && (t.title.includes('حقوق') || t.title.includes('دستمزد')));
+        return isMatch && isSalaryTransaction(t);
+      });
+      const txTotal = empTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
+      const cell = salaryMatrix.find(item => item.employeeId === emp.id && item.month === m && item.year === year);
+      const paid = empTxs.length > 0 ? txTotal : (cell ? cell.amount : 0);
+      const bonus = cell?.bonus || 0;
+      empTotal += paid + bonus;
+    }
     const colName = emp.hasInsurance ? `${emp.name} (بیمه)` : emp.name;
     totalRow[colName] = empTotal;
     grandTotal += empTotal;
@@ -640,7 +723,7 @@ function prepareMembersRows(members: CompanyMember[], transactions: FinancialTra
       .filter(t => isSalaryTransaction(t))
       .reduce((acc, t) => acc + (t.type === 'expense' ? t.amount : -t.amount), 0);
     const profitWithdrawal = memberTxs
-      .filter(t => t.memberPayoutType === 'profit_withdrawal' || (t.category === 'shareholder_payout' && !isSalaryTransaction(t)))
+      .filter(t => isMemberPayoutTransaction(t) && !isSalaryTransaction(t))
       .reduce((acc, t) => acc + (t.type === 'expense' ? t.amount : -t.amount), 0);
     const companyPurchasesPaid = memberTxs
       .filter(t => classifyPersonTransaction(t) === 'company_purchase')
@@ -798,10 +881,11 @@ export function exportSalaryMatrixToExcel(
   companyName: string,
   year: number,
   employees: Employee[],
-  salaryMatrix: SalaryMatrixItem[]
+  salaryMatrix: SalaryMatrixItem[],
+  transactions: FinancialTransaction[] = []
 ) {
   const wb = XLSX.utils.book_new();
-  const rows = prepareSalaryMatrixRows(employees, salaryMatrix, year);
+  const rows = prepareSalaryMatrixRows(employees, salaryMatrix, year, transactions);
 
   const ws = XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, ws, `ماتریس حقوق سال ${year}`);

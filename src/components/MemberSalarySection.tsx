@@ -41,6 +41,7 @@ import {
   toPersianDigits, 
   PERSIAN_MONTHS,
   isSalaryTransaction,
+  isMemberPayoutTransaction,
   classifyPersonTransaction,
   getTxPaymentDate
 } from '../utils/formatters';
@@ -152,9 +153,15 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
 
   /**
    * تابع کمکی جامع برای شناسایی عضو متناظر و نوع پرداخت (حقوق یا برداشت) برای هر تراکنش مالی
+   * در ماتریس و لیست حقوق اعضا، به هیچ وجه خریدهای شرکتی یا تنخواه قرار نمی‌گیرند.
    */
   const getTxMemberInfo = useCallback((t: FinancialTransaction) => {
     if (t.type !== 'expense') return null;
+
+    // ۱. بررسی قطعی: سند باید پرداخت حقوق کارکرد یا برداشت سود عضو باشد و نباید خرید شرکتی باشد
+    if (!isMemberPayoutTransaction(t)) {
+      return null;
+    }
 
     let member = members.find(m => m.id === t.relatedMemberId || (t as any).memberId === m.id);
     if (!member && t.recipientOrPayer) {
@@ -177,8 +184,9 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
     const titleLower = (t.title || '').toLowerCase();
     const descLower = (t.description || '').toLowerCase();
 
-    // تعیین دقیق نوع پرداخت: حقوق یا برداشت سود/تنخواه
+    // تعیین دقیق نوع پرداخت: حقوق کارکرد یا برداشت سود
     const isExplicitSalary = 
+      isSalaryTransaction(t) ||
       t.memberPayoutType === 'salary' || 
       t.category === 'salary' || 
       titleLower.includes('حقوق') || 
@@ -190,8 +198,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
       titleLower.includes('برداشت') ||
       titleLower.includes('سود سهام') ||
       titleLower.includes('سود شرکا') ||
-      titleLower.includes('سهم شریک') ||
-      t.category === 'shareholder_payout';
+      titleLower.includes('سهم شریک');
 
     let payoutType: MemberPayoutType = 'profit_withdrawal';
     if (isExplicitSalary) {

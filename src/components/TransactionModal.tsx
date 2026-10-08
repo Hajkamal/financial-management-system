@@ -487,6 +487,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         : 'profit_withdrawal'
     );
 
+    const isPayoutCategory = category === 'shareholder_payout' || category === 'salary';
     const tx: FinancialTransaction = {
       id: editingTransaction ? editingTransaction.id : `tx-${Date.now()}`,
       type,
@@ -502,7 +503,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       recipientOrPayer: recipientFinal,
       trackingCode: trackingCode.trim() || undefined,
       relatedMemberId: finalMemId || undefined,
-      memberPayoutType: finalMemId ? computedPayoutType : undefined,
+      memberPayoutType: (finalMemId && isPayoutCategory) ? computedPayoutType : undefined,
       relatedEmployeeId: finalEmpId || undefined,
       relatedLoanId: category === 'loan_installment' ? relatedLoanId : undefined,
       salaryMonth: isSalaryCategory ? salaryMonth : undefined,

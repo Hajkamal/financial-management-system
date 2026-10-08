@@ -130,10 +130,9 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
   const [selectedPersonForHistory, setSelectedPersonForHistory] = useState<PersonTarget | null>(null);
 
   /**
-   * تابع تجمیع حقوق هر کارمند در هر ماه از دو منبع:
-
-   * ۱. اسناد مالی ثبت‌شده در دفتر هزینه‌ها (با اولویت ماه کارکرد)
-   * ۲. ردیف ذخیره شده در ماتریس حقوق
+   * تابع استخراج مستقیم حقوق هر کارمند در هر ماه از فیلتر کردن تراکنش‌های ثبت‌شده:
+   * مقادیر مستقیماً بر اساس تراکنش‌های ثبت شده با دسته‌بندی حقوق برای هر کارمند در ماه مربوطه استخراج می‌شوند.
+   * خریدهای شرکتی، تنخواه و هزینه‌های متفرقه به هیچ وجه در ماتریس حقوق آورده نمی‌شوند.
    */
   const getEmployeeMonthData = useCallback((empId: string, monthNum: PersianMonthNumber) => {
     const emp = employees.find(e => e.id === empId);
@@ -141,34 +140,36 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
       item => item.employeeId === empId && item.month === monthNum && item.year === selectedYear
     );
 
-    // اسناد مالی ثبت شده در دفتر هزینه‌ها/درآمدها برای این کارمند در این ماه (با اولویت ماه کارکرد حقوق)
-    // دقت شود: خریدهای شرکتی و تنخواه نباید به عنوان حقوق در ماتریس محاسبه شوند
+    // اسناد مالی ثبت شده در دفتر هزینه‌ها برای این کارمند در این ماه (با اولویت ماه کارکرد حقوق)
+    // دقت شود: خریدهای شرکتی و تنخواه طبق منطق جدید به هیچ وجه در ماتریس محاسبه نمی‌شوند
     const empTxs = transactions.filter(t => {
       const targetYear = t.salaryYear || t.year;
       const targetMonth = t.salaryMonth || t.month;
       if (targetYear !== selectedYear || targetMonth !== monthNum) return false;
       
       const isDirectMatch = t.relatedEmployeeId === empId;
-      const isNameMatch = Boolean(emp && emp.name && (
-        (t.recipientOrPayer && t.recipientOrPayer.trim().toLowerCase() === emp.name.trim().toLowerCase()) ||
-        (t.title && t.title.toLowerCase().includes(emp.name.trim().toLowerCase()))
-      ));
+      const isRecipientMatch = Boolean(emp && emp.name && t.recipientOrPayer && 
+        t.recipientOrPayer.trim().toLowerCase() === emp.name.trim().toLowerCase()
+      );
+      const isTitleMatch = Boolean(emp && emp.name && t.title && 
+        t.title.toLowerCase().includes(emp.name.trim().toLowerCase()) &&
+        (t.title.includes('حقوق') || t.title.includes('دستمزد'))
+      );
 
-      if (!isDirectMatch && !isNameMatch) return false;
+      if (!isDirectMatch && !isRecipientMatch && !isTitleMatch) return false;
 
-      // سند باید مربوط به حقوق و دستمزد کارکرد باشد
+      // سند باید صراحتاً مربوط به حقوق و دستمزد کارکرد باشد
       return isSalaryTransaction(t);
     });
 
     const txTotal = empTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
     const hasTransactions = empTxs.length > 0;
 
-    // اصل مبلغ: اگر سندی در هزینه‌ها ثبت شده باشد، دقیقاً مجموع اسناد است.
-    // در غیر این صورت، مبلغ وارد شده در ماتریس یا صفر است.
-    const amt = hasTransactions ? txTotal : (cell ? cell.amount : 0);
+    // اصل مبلغ مستقیماً بر اساس تراکنش‌های ثبت‌شده در هزینه‌ها است
+    const amt = txTotal;
     const bonus = cell?.bonus || 0;
     const totalCell = amt + bonus;
-    const isManualOnly = !hasTransactions && amt > 0;
+    const isManualOnly = !hasTransactions && totalCell > 0;
     const status: 'paid' | 'pending' | 'zero' = totalCell === 0 
       ? 'zero' 
       : (hasTransactions ? 'paid' : (cell?.status || 'paid'));
@@ -567,7 +568,7 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
               {canExport && (
                 <button
                   onClick={() => {
-                    exportSalaryMatrixToExcel(companyName, selectedYear, employees, salaryMatrix);
+                    exportSalaryMatrixToExcel(companyName, selectedYear, employees, salaryMatrix, transactions);
                     if (onShowToast) onShowToast(`ماتریس حقوق سال مالی ${selectedYear} با موفقیت در قالب اکسل دانلود شد.`);
                   }}
                   className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"

@@ -253,23 +253,26 @@ export const PersonPaymentHistoryModal: React.FC<PersonPaymentHistoryModalProps>
 
     return PERSIAN_MONTHS.map(m => {
       const cell = salaryMatrix.find(s => s.employeeId === person.id && s.month === m.num && s.year === selectedYear);
-      const base = cell?.amount ?? person.baseSalary ?? 0;
-      const bonus = cell?.bonus ?? 0;
-      const total = base + bonus;
-      const status = cell?.status || (total > 0 ? 'calculated' : 'pending');
 
-      // Check corresponding salary transaction in ledger (only actual salary transactions)
-      const matchingTx = transactions.find(t => {
+      // Check corresponding salary transactions in ledger (only actual salary transactions)
+      const matchingTxs = transactions.filter(t => {
         if (t.type !== 'expense') return false;
-        const isYear = (t.year || t.salaryYear) === selectedYear;
+        const isYear = (t.salaryYear || t.year) === selectedYear;
         const isMonth = (t.salaryMonth || t.month) === m.num;
         const isPerson = (t.relatedEmployeeId === person.id) || 
           ((t as any).employeeId === person.id) ||
           (t.recipientOrPayer && t.recipientOrPayer.trim().toLowerCase() === personNameNorm) ||
-          (t.title && t.title.toLowerCase().includes(personNameNorm));
+          (t.title && t.title.toLowerCase().includes(personNameNorm) && (t.title.includes('حقوق') || t.title.includes('دستمزد')));
         
         return isYear && isMonth && isPerson && isSalaryTransaction(t);
       });
+
+      const txAmount = matchingTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
+      const matchingTx = matchingTxs[0];
+      const base = matchingTxs.length > 0 ? txAmount : (cell?.amount ?? 0);
+      const bonus = cell?.bonus ?? 0;
+      const total = base + bonus;
+      const status = matchingTxs.length > 0 ? 'paid' : (cell?.status || (total > 0 ? 'calculated' : 'pending'));
 
       return {
         month: m,
