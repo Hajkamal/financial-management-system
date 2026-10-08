@@ -491,6 +491,30 @@ export function isSalaryTransaction(t: FinancialTransaction): boolean {
 }
 
 /**
+ * استخراج دقیق سال و ماه پرداخت سند بر اساس تاریخ ثبت شده (dateString یا month/year)
+ * مبنای سندهای پرداختی در ماتریس حقوق و دستمزد و برداشت اعضا
+ */
+export function getTxPaymentDate(t: FinancialTransaction): { year: number; month: PersianMonthNumber; day: number } {
+  let year = t.year;
+  let month = t.month;
+  let day = t.day || 1;
+
+  if (t.dateString && typeof t.dateString === 'string' && t.dateString.includes('/')) {
+    const parts = t.dateString.trim().split('/');
+    if (parts.length >= 2) {
+      const py = parseInt(parts[0], 10);
+      const pm = parseInt(parts[1], 10);
+      const pd = parts.length >= 3 ? parseInt(parts[2], 10) : day;
+      if (!isNaN(py) && py > 1300) year = py;
+      if (!isNaN(pm) && pm >= 1 && pm <= 12) month = pm as PersianMonthNumber;
+      if (!isNaN(pd) && pd >= 1 && pd <= 31) day = pd;
+    }
+  }
+
+  return { year, month, day };
+}
+
+/**
  * طبقه‌بندی دقیق نوع سند مالی مرتبط با اشخاص:
  * - 'salary': حقوق و دستمزد ماهانه کارکرد
  * - 'company_purchase': خرید برای شرکت، تنخواه و بازپرداخت هزینه‌های انجام شده
@@ -510,14 +534,23 @@ export function classifyPersonTransaction(t: FinancialTransaction): PersonTransa
 
   if (isSalaryTransaction(t)) return 'salary';
 
-  if (t.category === 'shareholder_payout' || t.memberPayoutType === 'profit_withdrawal') {
+  const titleLower = (t.title || '').toLowerCase();
+  const descLower = (t.description || '').toLowerCase();
+
+  // اگر سند صراحتاً برداشت سود یا سهم سهامدار باشد
+  if (
+    t.category === 'shareholder_payout' || 
+    t.memberPayoutType === 'profit_withdrawal' ||
+    titleLower.includes('برداشت') ||
+    titleLower.includes('سود سهام') ||
+    titleLower.includes('سود شرکا') ||
+    titleLower.includes('سهم شریک')
+  ) {
     return 'profit_withdrawal';
   }
 
-  const titleLower = (t.title || '').toLowerCase();
-  const descLower = (t.description || '').toLowerCase();
   const purchaseKeywords = [
-    'خرید', 'تنخواه', 'فاکتور', 'تجهیزات', 'لوازم', 'ملزومات', 'هاست', 'سرور', 
+    'خرید', 'فاکتور', 'تجهیزات', 'لوازم', 'ملزومات', 'هاست', 'سرور', 
     'پذیرایی', 'اسنپ', 'بلیط', 'بنزین', 'تعمیر', 'سخت‌افزار', 'شارژ', 'اشتراک', 'بازپرداخت', 'دفتر', 'سایت'
   ];
   const isPurchase = purchaseKeywords.some(kw => titleLower.includes(kw) || descLower.includes(kw)) ||

@@ -527,9 +527,13 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
           selectedYear={selectedYear}
           currencyMode={currencyMode}
           onAddMemberPayoutTransaction={onAddMemberPayoutTransaction}
+          onSaveTransaction={onSaveTransaction}
           onDeleteTransaction={onDeleteTransaction}
           onNavigateToMembers={onNavigateToMembers}
           onOpenPersonHistory={setSelectedPersonForHistory}
+          canEdit={canEdit}
+          currentUser={currentUser}
+          onShowToast={onShowToast}
         />
       ) : (
 
