@@ -928,22 +928,31 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   // ==========================
   // عملیات تراکنش‌ها (Transactions)
   // ==========================
-  const handleSaveTransaction = (tx: FinancialTransaction) => {
+  // عملیات تراکنش‌ها (دفتر کل)
+  // ==========================
+  const handleSaveTransaction = async (tx: FinancialTransaction, expectedUpdatedAt?: string | null): Promise<boolean> => {
+    // ۱. ذخیره اولیه و بررسی تعارض در دیتابیس متمرکز ابری Supabase
+    const dbResult = await SupabaseDataService.saveTransaction(tx, expectedUpdatedAt);
+    if (!dbResult.success) {
+      onShowToast(dbResult.error || 'خطا در ثبت سند مالی در پایگاه داده ابری. اطلاعات ذخیره نشد.');
+      return false;
+    }
+
+    // ۲. تنها پس از موفقیت قطعی دیتابیس، استیت کلاینت به‌روزرسانی و پیام موفقیت نمایش داده می‌شود
     const existingIndex = transactions.findIndex(t => t.id === tx.id);
     let updated: FinancialTransaction[];
     if (existingIndex >= 0) {
       updated = [...transactions];
       updated[existingIndex] = tx;
-      onShowToast('سند مالی با موفقیت ویرایش شد.');
+      onShowToast('سند مالی با موفقیت در پایگاه داده ویرایش شد.');
     } else {
       updated = [tx, ...transactions];
-      onShowToast('سند مالی جدید با موفقیت ثبت گردید.');
+      onShowToast('سند مالی جدید با موفقیت در پایگاه داده ثبت گردید.');
     }
     const sorted = sortTransactionsByDate(updated, 'desc');
     setTransactions(sorted);
-    // ☁️ ذخیره در سرور و ابر
-    serverApi.saveTransaction(tx);
-    SupabaseDataService.saveTransaction(tx);
+    writeLocal('ayandeh_transactions', sorted);
+    serverApi.saveTransaction(tx).catch(() => {});
 
     // ⚡ همگام‌سازی مستقیم و بلادرنگ با ماتریس حقوق پرسنل (فقط در صورتی که سند بابت حقوق و دستمزد باشد)
     const targetEmpId = tx.relatedEmployeeId || employees.find(e => 
@@ -997,21 +1006,29 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         }
 
         writeLocal('ayandeh_salary_matrix', updatedSm);
-        serverApi.saveSalaryCell(savedCell);
-        SupabaseDataService.saveSalaryMatrixItem(savedCell);
+        serverApi.saveSalaryCell(savedCell).catch(() => {});
+        SupabaseDataService.saveSalaryMatrixItem(savedCell).catch(() => {});
         return updatedSm;
       });
     }
+
+    return true;
   };
 
-  const handleDeleteTransaction = (id: string) => {
+  const handleDeleteTransaction = async (id: string): Promise<boolean> => {
+    // ۱. حذف قطعی از دیتابیس Supabase
+    const dbResult = await SupabaseDataService.deleteTransaction(id);
+    if (!dbResult.success) {
+      onShowToast(dbResult.error || 'خطا در حذف سند مالی از پایگاه داده.');
+      return false;
+    }
+
     const txToDelete = transactions.find(t => t.id === id);
     const updated = transactions.filter(t => t.id !== id);
     setTransactions(updated);
+    writeLocal('ayandeh_transactions', updated);
     onShowToast('سند مالی با موفقیت حذف گردید.');
-    // ☁️ حذف از سرور و ابر
-    serverApi.deleteTransaction(id);
-    SupabaseDataService.deleteTransaction(id);
+    serverApi.deleteTransaction(id).catch(() => {});
 
     // به‌روزرسانی مجدد ماتریس حقوق در صورت حذف سند مربوط به حقوق کارمند
     if (txToDelete && isSalaryTransaction(txToDelete)) {
@@ -1049,14 +1066,16 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
             };
             updatedSm[smIndex] = savedCell;
             writeLocal('ayandeh_salary_matrix', updatedSm);
-            serverApi.saveSalaryCell(savedCell);
-            SupabaseDataService.saveSalaryMatrixItem(savedCell);
+            serverApi.saveSalaryCell(savedCell).catch(() => {});
+            SupabaseDataService.saveSalaryMatrixItem(savedCell).catch(() => {});
             return updatedSm;
           }
           return prev;
         });
       }
     }
+
+    return true;
   };
 
   const handleClearDemoTransactions = () => {
@@ -1071,15 +1090,12 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   // ==========================
   // عملیات کارمندان و حقوق
   // ==========================
-  const handleSaveEmployee = (emp: Employee) => {
+  const handleSaveEmployee = async (emp: Employee): Promise<boolean> => {
     const idx = employees.findIndex(e => e.id === emp.id);
-    if (idx >= 0) {
-      setEmployees(prev => prev.map(e => e.id === emp.id ? emp : e));
-      onShowToast(`مشخصات کارمند «${emp.name}» به‌روزرسانی شد.`);
-    } else {
-      setEmployees(prev => [...prev, emp]);
-      // مقداردهی ماتریس سال جاری
-      const newItems: SalaryMatrixItem[] = [];
+    const isNew = idx < 0;
+
+    let newItems: SalaryMatrixItem[] = [];
+    if (isNew) {
       for (let m = 1; m <= 12; m++) {
         const newItem: SalaryMatrixItem = {
           id: `sm-${emp.id}-${selectedYear}-${m}`,
@@ -1091,62 +1107,89 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
         };
         newItems.push(newItem);
       }
+    }
+
+    // ۱. ذخیره اولیه در Supabase
+    const empRes = await SupabaseDataService.saveEmployee(emp);
+    if (!empRes.success) {
+      onShowToast(empRes.error || 'خطا در ذخیره‌سازی اطلاعات کارمند در پایگاه داده.');
+      return false;
+    }
+
+    if (isNew && newItems.length > 0) {
+      await SupabaseDataService.saveSalaryMatrixBatch(newItems);
+      serverApi.saveSalaryMatrixBatch(newItems).catch(() => {});
+    }
+
+    // ۲. به‌روزرسانی استیت پس از تایید سرور
+    if (idx >= 0) {
+      setEmployees(prev => prev.map(e => e.id === emp.id ? emp : e));
+      onShowToast(`مشخصات کارمند «${emp.name}» به‌روزرسانی شد.`);
+    } else {
+      setEmployees(prev => [...prev, emp]);
       setSalaryMatrix(prev => [...prev, ...newItems]);
       onShowToast(`کارمند جدید «${emp.name}» با موفقیت افزوده شد.`);
-      // ☁️ ذخیره ماتریس حقوق در سرور و ابر
-      serverApi.saveSalaryMatrixBatch(newItems);
-      SupabaseDataService.saveSalaryMatrixBatch(newItems);
     }
-    // ☁️ ذخیره کارمند در سرور و ابر
-    serverApi.saveEmployee(emp);
-    SupabaseDataService.saveEmployee(emp);
+
+    serverApi.saveEmployee(emp).catch(() => {});
+    return true;
   };
 
-  const handleDeleteEmployee = (id: string) => {
+  const handleDeleteEmployee = async (id: string): Promise<boolean> => {
+    const dbRes = await SupabaseDataService.deleteEmployee(id);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در حذف کارمند از پایگاه داده.');
+      return false;
+    }
+
     const emp = employees.find(e => e.id === id);
     setEmployees(prev => prev.filter(e => e.id !== id));
     setSalaryMatrix(prev => prev.filter(item => item.employeeId !== id));
     onShowToast(`کارمند «${emp?.name || ''}» حذف شد.`);
-    // ☁️ حذف از سرور و ابر
-    serverApi.deleteEmployee(id);
-    SupabaseDataService.deleteEmployee(id);
+    serverApi.deleteEmployee(id).catch(() => {});
+    return true;
   };
 
-  const handleUpdateSalaryCell = (item: Partial<SalaryMatrixItem> & { employeeId: string; month: PersianMonthNumber; year: number }) => {
+  const handleUpdateSalaryCell = async (item: Partial<SalaryMatrixItem> & { employeeId: string; month: PersianMonthNumber; year: number }): Promise<boolean> => {
     const existingIndex = salaryMatrix.findIndex(
       i => i.employeeId === item.employeeId && i.month === item.month && i.year === item.year
     );
 
-    let savedItem: SalaryMatrixItem;
+    const savedItem: SalaryMatrixItem = existingIndex >= 0 
+      ? { ...salaryMatrix[existingIndex], ...item } as SalaryMatrixItem
+      : {
+          id: `sm-${item.employeeId}-${item.year}-${item.month}`,
+          employeeId: item.employeeId,
+          year: item.year,
+          month: item.month,
+          amount: item.amount || 0,
+          bonus: item.bonus,
+          status: item.status || 'paid',
+          colorTag: item.colorTag,
+        };
+
+    const dbRes = await SupabaseDataService.saveSalaryMatrixItem(savedItem);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در ثبت حقوق پرسنل در پایگاه داده.');
+      return false;
+    }
 
     if (existingIndex >= 0) {
       setSalaryMatrix(prev => {
         const updated = [...prev];
-        updated[existingIndex] = { ...updated[existingIndex], ...item };
-        savedItem = updated[existingIndex];
+        updated[existingIndex] = savedItem;
         return updated;
       });
-      savedItem = { ...salaryMatrix[existingIndex], ...item } as SalaryMatrixItem;
     } else {
-      savedItem = {
-        id: `sm-${item.employeeId}-${item.year}-${item.month}`,
-        employeeId: item.employeeId,
-        year: item.year,
-        month: item.month,
-        amount: item.amount || 0,
-        bonus: item.bonus,
-        status: item.status || 'paid',
-        colorTag: item.colorTag,
-      };
       setSalaryMatrix(prev => [...prev, savedItem]);
     }
+
     onShowToast('تغییرات حقوق با موفقیت اعمال گردید.');
-    // ☁️ ذخیره در سرور و ابر
-    serverApi.saveSalaryCell(savedItem);
-    SupabaseDataService.saveSalaryMatrixItem(savedItem);
+    serverApi.saveSalaryCell(savedItem).catch(() => {});
+    return true;
   };
 
-  const handleAddSalaryExpenseTransaction = (month: PersianMonthNumber, totalAmount: number, details: string) => {
+  const handleAddSalaryExpenseTransaction = async (month: PersianMonthNumber, totalAmount: number, details: string): Promise<boolean> => {
     const monthName = PERSIAN_MONTHS.find(m => m.num === month)?.name || `ماه ${month}`;
     const day = month <= 6 ? 31 : (month <= 11 ? 30 : 29);
     const dateString = `${selectedYear}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
@@ -1170,14 +1213,19 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       createdAt: regDt,
     };
 
+    const dbRes = await SupabaseDataService.saveTransaction(tx);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در ثبت سند هزینه حقوق در پایگاه داده.');
+      return false;
+    }
+
     setTransactions(prev => sortTransactionsByDate([tx, ...prev], 'desc'));
     onShowToast(`سند کل حقوق ماه ${monthName} به مبلغ ${formatCurrency(totalAmount, currencyMode)} ثبت شد.`);
-    // ☁️ ذخیره در سرور و ابر
-    serverApi.saveTransaction(tx);
-    SupabaseDataService.saveTransaction(tx);
+    serverApi.saveTransaction(tx).catch(() => {});
+    return true;
   };
 
-  const handleAddMemberPayoutTransaction = (params: {
+  const handleAddMemberPayoutTransaction = async (params: {
     memberId: string;
     type: MemberPayoutType;
     amount: number;
@@ -1189,7 +1237,7 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     trackingCode?: string;
     salaryMonth?: PersianMonthNumber;
     salaryYear?: number;
-  }) => {
+  }): Promise<boolean> => {
     const member = members.find(m => m.id === params.memberId);
     const day = params.day || (params.month <= 6 ? 31 : (params.month <= 11 ? 30 : 29));
     const dateString = params.dateString || `${selectedYear}/${String(params.month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
@@ -1217,17 +1265,28 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       createdAt: regDt,
     };
 
+    const dbRes = await SupabaseDataService.saveTransaction(tx);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در ثبت سند پرداخت به عضو در پایگاه داده.');
+      return false;
+    }
+
     setTransactions(prev => sortTransactionsByDate([tx, ...prev], 'desc'));
     onShowToast(`سند پرداختی به ${member?.name || 'عضو'} با موفقیت در دفتر کل ثبت شد.`);
-    // ☁️ ذخیره در سرور و ابر
-    serverApi.saveTransaction(tx);
-    SupabaseDataService.saveTransaction(tx);
+    serverApi.saveTransaction(tx).catch(() => {});
+    return true;
   };
 
   // ==========================
   // عملیات اعضای شرکت
   // ==========================
-  const handleSaveMember = (member: CompanyMember) => {
+  const handleSaveMember = async (member: CompanyMember): Promise<boolean> => {
+    const dbRes = await SupabaseDataService.saveMember(member);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در ذخیره اطلاعات عضو در پایگاه داده.');
+      return false;
+    }
+
     const idx = members.findIndex(m => m.id === member.id);
     if (idx >= 0) {
       setMembers(prev => prev.map(m => m.id === member.id ? member : m));
@@ -1236,24 +1295,35 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       setMembers(prev => [...prev, member]);
       onShowToast(`سهامدار جدید «${member.name}» افزوده شد.`);
     }
-    // ☁️ ذخیره در سرور و ابر
-    serverApi.saveMember(member);
-    SupabaseDataService.saveMember(member);
+
+    serverApi.saveMember(member).catch(() => {});
+    return true;
   };
 
-  const handleDeleteMember = (id: string) => {
+  const handleDeleteMember = async (id: string): Promise<boolean> => {
+    const dbRes = await SupabaseDataService.deleteMember(id);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در حذف سهامدار از پایگاه داده.');
+      return false;
+    }
+
     const m = members.find(item => item.id === id);
     setMembers(prev => prev.filter(item => item.id !== id));
     onShowToast(`عضو «${m?.name || ''}» حذف شد.`);
-    // ☁️ حذف از سرور و ابر
-    serverApi.deleteMember(id);
-    SupabaseDataService.deleteMember(id);
+    serverApi.deleteMember(id).catch(() => {});
+    return true;
   };
 
   // ==========================
   // عملیات تسهیلات و وام‌ها
   // ==========================
-  const handleSaveLoan = (loan: Loan) => {
+  const handleSaveLoan = async (loan: Loan): Promise<boolean> => {
+    const dbRes = await SupabaseDataService.saveLoan(loan);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در ذخیره اطلاعات تسهیلات در پایگاه داده.');
+      return false;
+    }
+
     const idx = loans.findIndex(l => l.id === loan.id);
     if (idx >= 0) {
       setLoans(prev => prev.map(l => l.id === loan.id ? loan : l));
@@ -1262,36 +1332,39 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       setLoans(prev => [...prev, loan]);
       onShowToast(`تسهیلات جدید «${loan.title}» ثبت گردید.`);
     }
-    // ☁️ ذخیره در سرور و ابر
-    serverApi.saveLoan(loan);
-    SupabaseDataService.saveLoan(loan);
+
+    serverApi.saveLoan(loan).catch(() => {});
+    return true;
   };
 
-  const handleDeleteLoan = (id: string) => {
+  const handleDeleteLoan = async (id: string): Promise<boolean> => {
+    const dbRes = await SupabaseDataService.deleteLoan(id);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در حذف تسهیلات از پایگاه داده.');
+      return false;
+    }
+
     const loan = loans.find(l => l.id === id);
     setLoans(prev => prev.filter(l => l.id !== id));
     onShowToast(`تسهیلات «${loan?.title || ''}» حذف شد.`);
-    // ☁️ حذف از سرور و ابر
-    serverApi.deleteLoan(id);
-    SupabaseDataService.deleteLoan(id);
+    serverApi.deleteLoan(id).catch(() => {});
+    return true;
   };
 
-  const handlePayLoanInstallment = (params: {
+  const handlePayLoanInstallment = async (params: {
     loanId: string;
     amount: number;
     month: PersianMonthNumber;
     title: string;
     description?: string;
-  }) => {
+  }): Promise<boolean> => {
     const loan = loans.find(l => l.id === params.loanId);
-    if (!loan) return;
+    if (!loan) return false;
 
     const updatedLoan = {
       ...loan,
       paidInstallments: Math.min(loan.totalInstallments, loan.paidInstallments + 1),
     };
-
-    setLoans(prev => prev.map(l => l.id === params.loanId ? updatedLoan : l));
 
     const day = params.month <= 6 ? 31 : (params.month <= 11 ? 30 : 29);
     const dateString = `${selectedYear}/${String(params.month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
@@ -1316,51 +1389,76 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       createdAt: regDt,
     };
 
+    const [loanRes, txRes] = await Promise.all([
+      SupabaseDataService.saveLoan(updatedLoan),
+      SupabaseDataService.saveTransaction(tx),
+    ]);
+
+    if (!loanRes.success || !txRes.success) {
+      onShowToast(loanRes.error || txRes.error || 'خطا در ثبت پرداخت قسط وام در پایگاه داده.');
+      return false;
+    }
+
+    setLoans(prev => prev.map(l => l.id === params.loanId ? updatedLoan : l));
     setTransactions(prev => sortTransactionsByDate([tx, ...prev], 'desc'));
     onShowToast(`پرداخت قسط وام «${loan.title}» ثبت شد.`);
-    // ☁️ ذخیره در سرور و ابر
-    serverApi.saveLoan(updatedLoan);
-    serverApi.saveTransaction(tx);
-    SupabaseDataService.saveLoan(updatedLoan);
-    SupabaseDataService.saveTransaction(tx);
+    serverApi.saveLoan(updatedLoan).catch(() => {});
+    serverApi.saveTransaction(tx).catch(() => {});
+    return true;
   };
 
   // ==========================
   // عملیات حساب‌های بانکی
   // ==========================
-  const handleAddBankAccount = (accountData: Omit<BankAccount, 'id' | 'createdAt'>) => {
+  const handleAddBankAccount = async (accountData: Omit<BankAccount, 'id' | 'createdAt'>): Promise<boolean> => {
     const newAccount: BankAccount = {
       ...accountData,
       id: `bank-${Date.now()}`,
       createdAt: '۱۴۰۵/۰۱/۰۱',
     };
+
+    const dbRes = await SupabaseDataService.saveBankAccount(newAccount);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در افزودن حساب بانکی به پایگاه داده.');
+      return false;
+    }
+
     setBankAccounts(prev => [newAccount, ...prev]);
     onShowToast(`حساب بانکی «${newAccount.bankName}» با موفقیت افزوده شد.`);
-    // ☁️ ذخیره در سرور و ابر
-    serverApi.saveBankAccount(newAccount);
-    SupabaseDataService.saveBankAccount(newAccount);
+    serverApi.saveBankAccount(newAccount).catch(() => {});
+    return true;
   };
 
-  const handleUpdateBankAccount = (updatedAccount: BankAccount) => {
+  const handleUpdateBankAccount = async (updatedAccount: BankAccount): Promise<boolean> => {
+    const dbRes = await SupabaseDataService.saveBankAccount(updatedAccount);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در به‌روزرسانی حساب بانکی در پایگاه داده.');
+      return false;
+    }
+
     setBankAccounts(prev => prev.map(acc => acc.id === updatedAccount.id ? updatedAccount : acc));
     onShowToast(`اطلاعات حساب بانکی «${updatedAccount.bankName}» به‌روزرسانی شد.`);
-    // ☁️ ذخیره در سرور و ابر
-    serverApi.saveBankAccount(updatedAccount);
-    SupabaseDataService.saveBankAccount(updatedAccount);
+    serverApi.saveBankAccount(updatedAccount).catch(() => {});
+    return true;
   };
 
-  const handleDeleteBankAccount = (id: string) => {
+  const handleDeleteBankAccount = async (id: string): Promise<boolean> => {
+    const dbRes = await SupabaseDataService.deleteBankAccount(id);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در حذف حساب بانکی از پایگاه داده.');
+      return false;
+    }
+
     setBankAccounts(prev => prev.filter(acc => acc.id !== id));
     onShowToast('حساب بانکی مورد نظر حذف گردید.');
-    // ☁️ حذف از سرور و ابر
-    serverApi.deleteBankAccount(id);
-    SupabaseDataService.deleteBankAccount(id);
+    serverApi.deleteBankAccount(id).catch(() => {});
+    return true;
   };
 
   // ==========================
   // عملیات سال‌های مالی
   // ==========================
-  const handleAddFiscalYear = (yearData: Omit<FiscalYear, 'isClosed'> & { isClosed?: boolean }) => {
+  const handleAddFiscalYear = async (yearData: Omit<FiscalYear, 'isClosed'> & { isClosed?: boolean }): Promise<boolean> => {
     const newFy: FiscalYear = {
       year: yearData.year,
       title: yearData.title,
@@ -1370,37 +1468,50 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       openingBalance: yearData.openingBalance || 0,
       notes: yearData.notes,
     };
+
+    const dbRes = await SupabaseDataService.saveFiscalYear(newFy);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در تعریف سال مالی در پایگاه داده.');
+      return false;
+    }
+
     const updated = sanitizeFiscalYearsList([...fiscalYears, newFy]);
     setFiscalYears(updated);
     setSelectedYear(newFy.year);
     onShowToast(`سال مالی ${newFy.year} با موفقیت تعریف گردید.`);
-    // ☁️ ذخیره در سرور و ابر
-    serverApi.saveFiscalYear(newFy);
-    SupabaseDataService.saveFiscalYear(newFy);
+    serverApi.saveFiscalYear(newFy).catch(() => {});
+    return true;
   };
 
-  const handleUpdateFiscalYear = (year: number, updatedData: Partial<FiscalYear>) => {
-    let updatedFy: FiscalYear | null = null;
-    setFiscalYears(prev => prev.map(fy => {
-      if (fy.year === year) {
-        updatedFy = { ...fy, ...updatedData };
-        return updatedFy;
-      }
-      return fy;
-    }));
+  const handleUpdateFiscalYear = async (year: number, updatedData: Partial<FiscalYear>): Promise<boolean> => {
+    const existing = fiscalYears.find(fy => fy.year === year);
+    if (!existing) return false;
+    const updatedFy = { ...existing, ...updatedData };
+
+    const dbRes = await SupabaseDataService.saveFiscalYear(updatedFy);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در به‌روزرسانی سال مالی در پایگاه داده.');
+      return false;
+    }
+
+    setFiscalYears(prev => prev.map(fy => fy.year === year ? updatedFy : fy));
     onShowToast(`اطلاعات سال مالی ${year} به‌روزرسانی شد.`);
-    // ☁️ ذخیره در سرور و ابر
-    if (updatedFy) {
-      serverApi.saveFiscalYear(updatedFy);
-      SupabaseDataService.saveFiscalYear(updatedFy);
-    }
+    serverApi.saveFiscalYear(updatedFy).catch(() => {});
+    return true;
   };
 
-  const handleDeleteFiscalYear = (year: number) => {
+  const handleDeleteFiscalYear = async (year: number): Promise<boolean> => {
     if (year === 1405 && fiscalYears.filter(fy => fy.year !== 1404).length <= 1) {
-      alert('امکان حذف تنها سال مالی فعال وجود ندارد.');
-      return;
+      onShowToast('امکان حذف تنها سال مالی فعال وجود ندارد.');
+      return false;
     }
+
+    const dbRes = await SupabaseDataService.deleteFiscalYear(year);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در حذف سال مالی از پایگاه داده.');
+      return false;
+    }
+
     const updated = fiscalYears.filter(fy => fy.year !== year);
     setFiscalYears(updated);
     if (selectedYear === year) {
@@ -1408,9 +1519,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       if (fallback) setSelectedYear(fallback.year);
     }
     onShowToast(`سال مالی ${year} حذف گردید.`);
-    // ☁️ حذف از سرور و ابر
-    serverApi.deleteFiscalYear(year);
-    SupabaseDataService.deleteFiscalYear(year);
+    serverApi.deleteFiscalYear(year).catch(() => {});
+    return true;
   };
 
   const handleCloseFiscalYear = (
@@ -1649,7 +1759,13 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
   // ==========================
   // عملیات ارزش افزوده و تعرفه‌ها
   // ==========================
-  const handleSaveVatInvoice = (invoice: VatInvoice) => {
+  const handleSaveVatInvoice = async (invoice: VatInvoice): Promise<boolean> => {
+    const dbRes = await SupabaseDataService.saveVatInvoice(invoice);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در ذخیره‌سازی صورتحساب در پایگاه داده.');
+      return false;
+    }
+
     const exists = vatInvoices.some(inv => inv.id === invoice.id);
     let updatedInvoices: VatInvoice[];
     if (exists) {
@@ -1665,16 +1781,21 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     if (hasChanges) {
       setTransactions(updatedTxs);
       writeLocal('ayandeh_transactions', updatedTxs);
-      // ☁️ ذخیره تراکنش‌های به‌روز شده در سرور و ابر
-      serverApi.saveTransactions(updatedTxs);
-      SupabaseDataService.saveTransactions(updatedTxs);
+      serverApi.saveTransactions(updatedTxs).catch(() => {});
+      SupabaseDataService.saveTransactions(updatedTxs).catch(() => {});
     }
-    // ☁️ ذخیره فاکتور در سرور و ابر
-    serverApi.saveVatInvoice(invoice);
-    SupabaseDataService.saveVatInvoice(invoice);
+
+    serverApi.saveVatInvoice(invoice).catch(() => {});
+    return true;
   };
 
-  const handleDeleteVatInvoice = (id: string) => {
+  const handleDeleteVatInvoice = async (id: string): Promise<boolean> => {
+    const dbRes = await SupabaseDataService.deleteVatInvoice(id);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در حذف صورتحساب از پایگاه داده.');
+      return false;
+    }
+
     const inv = vatInvoices.find(i => i.id === id);
     const updated = vatInvoices.filter(i => i.id !== id);
     setVatInvoices(updated);
@@ -1682,30 +1803,42 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
     const removedTxIds = transactions.filter(t => t.id.includes(id)).map(t => t.id);
     setTransactions(prev => prev.filter(t => !t.id.includes(id)));
     onShowToast(`صورتحساب رسمی شماره ${inv?.invoiceNumber || ''} حذف شد.`);
-    // ☁️ حذف از سرور و ابر
-    serverApi.deleteVatInvoice(id);
-    removedTxIds.forEach(txId => serverApi.deleteTransaction(txId));
-    SupabaseDataService.deleteVatInvoice(id);
-    removedTxIds.forEach(txId => SupabaseDataService.deleteTransaction(txId));
+    serverApi.deleteVatInvoice(id).catch(() => {});
+    removedTxIds.forEach(txId => {
+      serverApi.deleteTransaction(txId).catch(() => {});
+      SupabaseDataService.deleteTransaction(txId).catch(() => {});
+    });
+    return true;
   };
 
-  const handleSyncVatInvoiceToTransactions = (invoice: VatInvoice) => {
+  const handleSyncVatInvoiceToTransactions = async (invoice: VatInvoice): Promise<boolean> => {
     const updatedInvoices = vatInvoices.map(inv => inv.id === invoice.id ? { ...inv, isSyncedToTransactions: true } : inv);
+    const syncedInvoice = updatedInvoices.find(i => i.id === invoice.id);
+    if (!syncedInvoice) return false;
+
+    const dbRes = await SupabaseDataService.saveVatInvoice(syncedInvoice);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در همگام‌سازی صورتحساب در پایگاه داده.');
+      return false;
+    }
+
     setVatInvoices(updatedInvoices);
     const { updatedTxs } = reconcileVatInvoicesWithTransactions(updatedInvoices, transactions, currencyMode);
     setTransactions(updatedTxs);
     onShowToast(`صورتحساب شماره ${invoice.invoiceNumber} با موفقیت در اسناد مالی شرکت منظور شد.`);
-    // ☁️ ذخیره در سرور و ابر
-    const syncedInvoice = updatedInvoices.find(i => i.id === invoice.id);
-    if (syncedInvoice) {
-      serverApi.saveVatInvoice(syncedInvoice);
-      SupabaseDataService.saveVatInvoice(syncedInvoice);
-    }
-    serverApi.saveTransactions(updatedTxs);
-    SupabaseDataService.saveTransactions(updatedTxs);
+    serverApi.saveVatInvoice(syncedInvoice).catch(() => {});
+    serverApi.saveTransactions(updatedTxs).catch(() => {});
+    SupabaseDataService.saveTransactions(updatedTxs).catch(() => {});
+    return true;
   };
 
-  const handleSaveServiceTariff = (tariff: ServiceTariff) => {
+  const handleSaveServiceTariff = async (tariff: ServiceTariff): Promise<boolean> => {
+    const dbRes = await SupabaseDataService.saveServiceTariff(tariff);
+    if (!dbRes.success) {
+      onShowToast(dbRes.error || 'خطا در ذخیره تعرفه خدمت در پایگاه داده.');
+      return false;
+    }
+
     const exists = serviceTariffs.some(t => t.id === tariff.id);
     if (exists) {
       setServiceTariffs(prev => prev.map(t => t.id === tariff.id ? tariff : t));
@@ -1714,9 +1847,8 @@ export function useFinancialData({ currencyMode, onShowToast, currentUser }: Use
       setServiceTariffs(prev => [...prev, tariff]);
       onShowToast(`تعرفه جدید «${tariff.title}» با موفقیت افزوده شد.`);
     }
-    // ☁️ ذخیره در سرور و ابر
-    serverApi.saveServiceTariff(tariff);
-    SupabaseDataService.saveServiceTariff(tariff);
+    serverApi.saveServiceTariff(tariff).catch(() => {});
+    return true;
   };
 
   // ==========================

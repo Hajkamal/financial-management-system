@@ -9,28 +9,12 @@ interface UseAuthManagerProps {
 }
 
 export function useAuthManager({ users, onShowToast }: UseAuthManagerProps) {
-  // Supabase & Local Authentication state (persisted across refreshes)
-  const [user, setUser] = useState<User | null>(() => {
-    try {
-      const saved = localStorage.getItem('ayandeh_active_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
+  // Supabase Authentication state (managed authoritatively by Supabase Auth)
+  const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  
-  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(() => {
-    try {
-      // If we already have a saved active user, don't show full-page loading blocker on refresh
-      return !localStorage.getItem('ayandeh_active_user');
-    } catch {
-      return true;
-    }
-  });
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
-  // Support for impersonating / testing another user role
+  // Support for impersonating / testing another user role (Only permitted for verified super_admin)
   const [impersonatedUser, setImpersonatedUser] = useState<AppUser | null>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_impersonated_user');
@@ -40,71 +24,45 @@ export function useAuthManager({ users, onShowToast }: UseAuthManagerProps) {
     }
   });
 
-  // Keep active user synchronized in localStorage
+  // Monitor Supabase auth session directly as the single source of truth
   useEffect(() => {
-    if (user) {
-      try {
-        localStorage.setItem('ayandeh_active_user', JSON.stringify(user));
-      } catch {}
-    }
-  }, [user]);
-
-  // Monitor Supabase auth session and maintain persistence
-  useEffect(() => {
-    const savedLocalUser = (() => {
-      try {
-        const s = localStorage.getItem('ayandeh_active_user');
-        return s ? JSON.parse(s) : null;
-      } catch {
-        return null;
-      }
-    })();
-
     if (!supabase) {
-      if (savedLocalUser && !user) {
-        setUser(savedLocalUser);
-      }
+      // In purely offline mode without Supabase, check local fallback
+      try {
+        const saved = localStorage.getItem('ayandeh_active_user');
+        if (saved) setUser(JSON.parse(saved));
+      } catch {}
       setIsAuthLoading(false);
       return;
     }
 
-    // Check active session from Supabase
+    // Check active session from Supabase (validated via signed JWT)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setSession(session);
         setUser(session.user);
-        try {
-          localStorage.setItem('ayandeh_active_user', JSON.stringify(session.user));
-        } catch {}
-      } else if (savedLocalUser) {
-        // Retain existing user on page refresh
-        setUser(savedLocalUser);
       } else {
+        setSession(null);
         setUser(null);
+        setImpersonatedUser(null);
       }
       setIsAuthLoading(false);
     }).catch((err) => {
       console.warn('Supabase getSession notice:', err);
-      if (savedLocalUser) {
-        setUser(savedLocalUser);
-      }
+      setSession(null);
+      setUser(null);
       setIsAuthLoading(false);
     });
 
-    // Listen for auth state transitions
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
+    // Listen for real-time auth state transitions (Token refresh, login, logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       if (currentSession?.user) {
         setSession(currentSession);
         setUser(currentSession.user);
-        try {
-          localStorage.setItem('ayandeh_active_user', JSON.stringify(currentSession.user));
-        } catch {}
-      } else if (event === 'SIGNED_OUT') {
-        const checkActive = localStorage.getItem('ayandeh_active_user');
-        if (!checkActive) {
-          setSession(null);
-          setUser(null);
-        }
+      } else {
+        setSession(null);
+        setUser(null);
+        setImpersonatedUser(null);
       }
       setIsAuthLoading(false);
     });
@@ -136,12 +94,22 @@ export function useAuthManager({ users, onShowToast }: UseAuthManagerProps) {
   };
 
   const handleSwitchUser = (targetUser: AppUser) => {
+    // امنیت دسترسی: فقط مدیر ارشد احراز هویت شده مجاز به تغییر هویت است
+    const isSuperAdmin = user?.email === 'vahidkamali03@gmail.com' || 
+      session?.user?.user_metadata?.role === 'super_admin' ||
+      session?.user?.app_metadata?.role === 'super_admin';
+
+    if (!isSuperAdmin) {
+      if (onShowToast) onShowToast('خطای دسترسی: تغییر هویت فقط برای مدیر ارشد سامانه مجاز است.');
+      return;
+    }
+
     setImpersonatedUser(targetUser);
     try {
       localStorage.setItem('ayandeh_impersonated_user', JSON.stringify(targetUser));
     } catch {}
     if (onShowToast) {
-      onShowToast(`شما اکنون با هویت و دسترسی «${targetUser.fullName}» (${targetUser.roleTitle}) فعالیت می‌کنید.`);
+      onShowToast(`شما اکنون با هویت و دسترسی آزمایشی «${targetUser.fullName}» (${targetUser.roleTitle}) فعالیت می‌کنید.`);
     }
   };
 
@@ -155,20 +123,51 @@ export function useAuthManager({ users, onShowToast }: UseAuthManagerProps) {
     }
   };
 
-  // Derive currently authenticated user in the applet
-  const currentAppUser = useMemo(() => {
-    if (impersonatedUser) return impersonatedUser;
-    const safeUserList = Array.isArray(users) && users.length > 0 ? users : INITIAL_USERS;
-    if (user?.email) {
-      const found = safeUserList.find(u => u.email?.toLowerCase() === user.email?.toLowerCase());
-      if (found) return found;
-      if (user.email.toLowerCase().includes('vahidkamali03')) {
-        return safeUserList.find(u => u.email === 'vahidkamali03@gmail.com') || safeUserList[0];
-      }
+  // بررسی امن و احراز شده هویت و نقش کاربر در سامانه
+  const currentAppUser = useMemo((): AppUser | null => {
+    if (!user) return null;
+
+    const isSuperAdmin = user.email === 'vahidkamali03@gmail.com' ||
+      session?.user?.user_metadata?.role === 'super_admin' ||
+      session?.user?.app_metadata?.role === 'super_admin';
+
+    // قابلیت تست نقش‌ها فقط در صورتی معتبر است که کاربر واقعی مدیر ارشد باشد
+    if (impersonatedUser && isSuperAdmin) {
+      return impersonatedUser;
     }
-    // Default to Super Admin Vahid Kamali
-    return safeUserList.find(u => u.email === 'vahidkamali03@gmail.com') || safeUserList[0] || INITIAL_USERS[0];
-  }, [user, users, impersonatedUser]);
+
+    const safeUserList = Array.isArray(users) && users.length > 0 ? users : INITIAL_USERS;
+    const foundInList = safeUserList.find(u => u.email?.toLowerCase() === user.email?.toLowerCase());
+
+    const meta = user.user_metadata || {};
+    const appMeta = (user as any).app_metadata || {};
+
+    // استخراج نقش از توکن معتبر سرور یا دیتابیس (نه صرفاً از کلاینت)
+    const verifiedRole = appMeta.role || meta.role || foundInList?.role || (user.email === 'vahidkamali03@gmail.com' ? 'super_admin' : 'viewer');
+    const verifiedStatus = appMeta.status || meta.status || foundInList?.status || 'active';
+
+    if (foundInList) {
+      return {
+        ...foundInList,
+        role: verifiedRole,
+        status: verifiedStatus,
+      };
+    }
+
+    // ساخت پرونده کاربر از روی متادیتای احراز هویت شده Supabase
+    return {
+      id: user.id,
+      email: user.email || '',
+      firstName: meta.firstName || meta.fullName?.split(' ')[0] || 'کاربر',
+      lastName: meta.lastName || meta.fullName?.split(' ').slice(1).join(' ') || 'سامانه',
+      fullName: meta.fullName || `${meta.firstName || ''} ${meta.lastName || ''}`.trim() || user.email || 'کاربر سامانه',
+      role: verifiedRole,
+      roleTitle: meta.roleTitle || (verifiedRole === 'super_admin' ? 'مدیر ارشد سامانه' : 'کاربر سامانه'),
+      status: verifiedStatus,
+      permissions: meta.permissions,
+      createdAt: user.created_at || 'امروز',
+    };
+  }, [user, users, impersonatedUser, session]);
 
   return {
     user,

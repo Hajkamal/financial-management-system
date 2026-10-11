@@ -20,7 +20,8 @@ import {
   Phone,
   ShieldCheck,
   AlertCircle,
-  FileCheck
+  FileCheck,
+  Loader2
 } from 'lucide-react';
 import { 
   FinancialTransaction, 
@@ -61,7 +62,7 @@ import { toPersianDigits } from '../utils/formatters';
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (transaction: FinancialTransaction) => void;
+  onSave: (transaction: FinancialTransaction) => void | Promise<boolean | void>;
   editingTransaction?: FinancialTransaction | null;
   selectedYear: number;
   currencyMode: CurrencyMode;
@@ -148,6 +149,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [inlineSubName, setInlineSubName] = useState('');
   const [isInlineEditingSub, setIsInlineEditingSub] = useState(false);
   const [inlineEditSubName, setInlineEditSubName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // بازنشانی کامل و پاکسازی فرم یا مقداردهی دقیق جهت ویرایش
   const resetForm = useCallback((tx: FinancialTransaction | null) => {
@@ -434,7 +436,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     setIsInlineEditingSub(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const numAmount = Number(amount) || 0;
     if (numAmount <= 0) return;
@@ -517,9 +519,19 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       updatedAt: editingTransaction ? currentRegistrationDateTime : undefined,
     };
 
-    onSave(tx);
-    resetForm(null);
-    onClose();
+    setIsSubmitting(true);
+    try {
+      const result = await onSave(tx);
+      // تنها در صورتی که ثبت موفق بوده (نتیجه false برنگردانده)، فرم ریست و بسته می‌شود
+      if (result !== false) {
+        resetForm(null);
+        onClose();
+      }
+    } catch (err) {
+      console.error('Error saving transaction in modal:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCloseModal = () => {
@@ -1321,11 +1333,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </button>
               <button
                 type="submit"
-                className={`px-5 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition-colors ${
+                disabled={isSubmitting}
+                className={`px-5 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                   type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
                 }`}
               >
-                {editingTransaction ? 'ذخیره تغییرات سند' : (type === 'income' ? 'ثبت درآمد' : 'ثبت هزینه')}
+                {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{editingTransaction ? 'ذخیره تغییرات سند' : (type === 'income' ? 'ثبت درآمد' : 'ثبت هزینه')}</span>
               </button>
             </div>
           </form>

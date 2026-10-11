@@ -344,7 +344,7 @@ export default function App() {
   }
 
   // احراز هویت اولیه
-  if (!user) {
+  if (!user || !currentAppUser) {
     return (
       <AuthScreen 
         users={users}
@@ -352,8 +352,8 @@ export default function App() {
           const authUser = {
             id: loggedInUser.id,
             email: loggedInUser.email,
-            user_metadata: { full_name: loggedInUser.fullName },
-            app_metadata: {},
+            user_metadata: { full_name: loggedInUser.fullName, role: loggedInUser.role },
+            app_metadata: { role: loggedInUser.role },
             aud: 'authenticated',
             created_at: new Date().toISOString()
           } as any;
@@ -797,7 +797,7 @@ export default function App() {
               setIsTxModalOpen(false);
               setEditingTx(null);
             }}
-            onSave={handleSaveTransaction}
+            onSave={(tx) => handleSaveTransaction(tx, editingTx?.updatedAt)}
             editingTransaction={editingTx}
             selectedYear={selectedYear}
             currencyMode={currencyMode}

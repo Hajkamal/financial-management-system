@@ -203,152 +203,112 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     // Mode: 'login'
     setIsLoading(true);
     try {
-      // 1. دریافت تازه‌ترین کاربران از دیتابیس سرور جهت اطمینان از یکپارچگی رمزهای تغییریافته
-      let activeUsers = safeUsers;
-      try {
-        const serverData = await serverApi.getFinancialData();
-        if (serverData && Array.isArray(serverData.users) && serverData.users.length > 0) {
-          activeUsers = serverData.users;
-        }
-      } catch {}
+      // اگر دیتابیس Supabase متصل و پیکربندی شده است، احراز هویت اولیه منحصراً از طریق Supabase انجام می‌شود
+      if (isSupabaseConfigured && supabase) {
+        let authResult = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: cleanPassword,
+        });
 
-      // Check registered system users first with normalized credentials
-      const localMatchedUser = activeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
-      if (localMatchedUser) {
-        // Enforce pending check
-        if (localMatchedUser.status === 'pending') {
-          setErrorMessage('حساب کاربری شما هنوز به تایید مدیر ارشد سامانه نرسیده است. لطفاً منتظر بمانید تا مدیر سامانه حساب شما را فعال کند.');
-          setIsLoading(false);
-          return;
-        }
-
-        if (localMatchedUser.status === 'inactive') {
-          setErrorMessage('این حساب کاربری غیرفعال یا معلق شده است. لطفاً با مدیر کل سامانه تماس بگیرید.');
-          setIsLoading(false);
-          return;
-        }
-
-        // Verify password using secure SHA-256 verification (with auto-upgrade for legacy plain passwords)
-        const isPasswordValid = await verifyPassword(cleanPassword, localMatchedUser.password || '');
-        if (isPasswordValid) {
-          // Auto-upgrade legacy plain text password to SHA-256 hash in storage
-          if (!localMatchedUser.password?.startsWith('sha256:')) {
-            try {
-              const upgradedHash = await hashPassword(cleanPassword);
-              localMatchedUser.password = upgradedHash;
-              serverApi.changePassword(localMatchedUser.id, upgradedHash);
-            } catch {}
+        // در صورت عدم وجود کاربر در Supabase Auth اما وجود در لیست پیش‌فرض اولیه (مانند سوپرادمین وحید کمالی)
+        if (authResult.error && authResult.error.message.toLowerCase().includes('invalid login credentials')) {
+          const matchedInitial = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
+          if (matchedInitial) {
+            const isMatch = await verifyPassword(cleanPassword, matchedInitial.password || '');
+            if (isMatch) {
+              // ثبت‌نام و فعال‌سازی خودکار در Supabase Auth برای ایجاد نشست معتبر JWT
+              await supabase.auth.signUp({
+                email: cleanEmail,
+                password: cleanPassword,
+                options: {
+                  data: {
+                    fullName: matchedInitial.fullName,
+                    firstName: matchedInitial.firstName,
+                    lastName: matchedInitial.lastName,
+                    role: matchedInitial.role,
+                    roleTitle: matchedInitial.roleTitle,
+                    status: 'active',
+                  }
+                }
+              });
+              // تلاش مجدد برای ورود رسمی
+              authResult = await supabase.auth.signInWithPassword({
+                email: cleanEmail,
+                password: cleanPassword,
+              });
+            }
           }
+        }
 
-          // Successful local login - persist immediately to localStorage
-          try {
-            localStorage.setItem('ayandeh_active_user', JSON.stringify({
-              id: localMatchedUser.id,
-              email: localMatchedUser.email,
-              user_metadata: { full_name: localMatchedUser.fullName },
-              app_metadata: {},
-              aud: 'authenticated',
-              created_at: new Date().toISOString()
-            }));
-            localStorage.setItem('ayandeh_active_user_role', localMatchedUser.role);
-          } catch {}
+        if (authResult.error) {
+          throw authResult.error;
+        }
 
-          // Also trigger Supabase sign-in in the background if configured
-          if (isSupabaseConfigured && supabase) {
-            supabase.auth.signInWithPassword({
-              email: cleanEmail,
-              password: cleanPassword,
-            }).catch(() => {
-              // Ignore background remote auth mismatch for local user
-            });
-          }
+        if (authResult.data.session && authResult.data.user) {
+          const sUser = authResult.data.user;
+          const meta = sUser.user_metadata || {};
+          const isSuper = cleanEmail === 'vahidkamali03@gmail.com';
+          const existing = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
 
-          if (onLoginUser) onLoginUser(localMatchedUser);
-          if (onAuthSuccess) onAuthSuccess();
-          return;
-        } else {
-          // در صورتی که رمز عبور همخوانی ندارد
-          if (!isSupabaseConfigured || !supabase) {
-            setErrorMessage('کلمه عبور وارد شده نادرست است.');
+          const userRole: UserRole = (meta.role as UserRole) || existing?.role || (isSuper ? 'super_admin' : 'viewer');
+          const userStatus = meta.status || existing?.status || 'active';
+
+          if (userStatus === 'pending') {
+            await supabase.auth.signOut();
+            setErrorMessage('حساب کاربری شما هنوز به تایید مدیر ارشد سامانه نرسیده است. لطفاً منتظر بمانید تا مدیر سامانه حساب شما را فعال کند.');
             setIsLoading(false);
             return;
           }
-        }
-      }
 
-      // 2. If not verified locally and Supabase is configured, try Supabase auth
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email: cleanEmail,
-            password: cleanPassword,
-          });
-          if (error) throw error;
-
-          if (data.session && data.user) {
-            const meta = data.user.user_metadata || {};
-            const isSuper = cleanEmail === 'vahidkamali03@gmail.com';
-            
-            // Look up local user or fallback to metadata
-            const existing = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
-
-            const userRole: UserRole = existing?.role || (meta.role as UserRole) || (isSuper ? 'super_admin' : 'accountant');
-            const userStatus = existing?.status || meta.status || (isSuper ? 'active' : 'active');
-            const userFullName = existing?.fullName || meta.fullName || (meta.firstName ? `${meta.firstName} ${meta.lastName || ''}`.trim() : '') || (cleanEmail.split('@')[0] || 'کاربر سامانه');
-            const firstName = existing?.firstName || meta.firstName || userFullName.split(' ')[0] || 'کاربر';
-            const lastName = existing?.lastName || meta.lastName || userFullName.split(' ').slice(1).join(' ') || 'سامانه';
-
-            if (userStatus === 'pending') {
-              setErrorMessage('حساب کاربری شما هنوز به تایید مدیر ارشد سامانه نرسیده است. لطفاً منتظر بمانید تا مدیر سامانه حساب شما را فعال کند.');
-              setIsLoading(false);
-              return;
-            }
-
-            if (userStatus === 'inactive') {
-              setErrorMessage('این حساب کاربری غیرفعال یا معلق شده است. لطفاً با مدیر کل سامانه تماس بگیرید.');
-              setIsLoading(false);
-              return;
-            }
-
-            const dynamicUser: AppUser = {
-              id: existing?.id || data.user.id,
-              email: cleanEmail,
-              firstName,
-              lastName,
-              fullName: userFullName,
-              role: userRole,
-              roleTitle: existing?.roleTitle || meta.roleTitle || (userRole === 'accountant' ? 'کارشناس حسابداری و ثبت اسناد' : 'کاربر سامانه'),
-              status: userStatus,
-              password: cleanPassword,
-              permissions: existing?.permissions || meta.permissions || getPermissionsByRole(userRole),
-              createdAt: existing?.createdAt || 'امروز',
-              phone: existing?.phone || meta.phone,
-            };
-
-            // Save to localStorage immediately
-            try {
-              localStorage.setItem('ayandeh_active_user', JSON.stringify(data.user));
-              localStorage.setItem('ayandeh_active_user_role', userRole);
-            } catch {}
-
-            // If not found in local users on this browser, register into local state so future lookups are immediate
-            if (!existing && onRegisterUser) {
-              onRegisterUser(dynamicUser);
-            }
-
-            if (onLoginUser) onLoginUser(dynamicUser);
-            if (onAuthSuccess) onAuthSuccess();
+          if (userStatus === 'inactive') {
+            await supabase.auth.signOut();
+            setErrorMessage('این حساب کاربری غیرفعال یا معلق شده است. لطفاً با مدیر کل سامانه تماس بگیرید.');
+            setIsLoading(false);
             return;
           }
-        } catch (supabaseErr: any) {
-          setErrorMessage(getPersianAuthErrorMessage(supabaseErr));
+
+          const dynamicUser: AppUser = {
+            id: existing?.id || sUser.id,
+            email: cleanEmail,
+            firstName: meta.firstName || existing?.firstName || 'کاربر',
+            lastName: meta.lastName || existing?.lastName || 'سامانه',
+            fullName: meta.fullName || existing?.fullName || cleanEmail,
+            role: userRole,
+            roleTitle: meta.roleTitle || existing?.roleTitle || (userRole === 'super_admin' ? 'مدیر ارشد سامانه' : 'کاربر سامانه'),
+            status: userStatus as any,
+            permissions: getPermissionsByRole(userRole),
+            createdAt: sUser.created_at || 'امروز',
+          };
+
+          if (onLoginUser) onLoginUser(dynamicUser);
+          if (onAuthSuccess) onAuthSuccess();
           return;
         }
       }
 
-      // If user not recognized
-      setErrorMessage('ایمیل یا کلمه عبور وارد شده نادرست است.');
+      // حالت آفلاین / بدون اتصال Supabase (صرفاً در محیط توسعه محلی)
+      const localMatchedUser = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
+      if (localMatchedUser) {
+        if (localMatchedUser.status === 'pending') {
+          setErrorMessage('حساب کاربری شما در انتظار تایید مدیر ارشد سامانه است.');
+          setIsLoading(false);
+          return;
+        }
+        if (localMatchedUser.status === 'inactive') {
+          setErrorMessage('این حساب کاربری غیرفعال شده است.');
+          setIsLoading(false);
+          return;
+        }
 
+        const isPasswordValid = await verifyPassword(cleanPassword, localMatchedUser.password || '');
+        if (isPasswordValid) {
+          if (onLoginUser) onLoginUser(localMatchedUser);
+          if (onAuthSuccess) onAuthSuccess();
+          return;
+        }
+      }
+
+      setErrorMessage('ایمیل یا رمز عبور وارد شده نادرست است.');
     } catch (err: any) {
       setErrorMessage(getPersianAuthErrorMessage(err));
     } finally {
