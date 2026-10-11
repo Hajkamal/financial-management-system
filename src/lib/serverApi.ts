@@ -52,20 +52,9 @@ export const setCurrentUserContext = (user: AppUser | null) => {
   }
 };
 
-const getHeaders = () => {
-  const token = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SERVER_API_TOKEN) || 'ayandeh-secret-token-1405';
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'x-api-token': token,
-    'x-device-info': isMobile ? 'گوشی تلفن همراه' : 'رایانه / دسکتاپ',
-  };
-  if (currentUserContext) {
-    if (currentUserContext.fullName) headers['x-user-name'] = encodeURIComponent(currentUserContext.fullName);
-    if (currentUserContext.email) headers['x-user-email'] = currentUserContext.email;
-    if (currentUserContext.roleTitle) headers['x-user-role'] = encodeURIComponent(currentUserContext.roleTitle);
-  }
-  return headers;
+const getHeaders = (): Record<string, string> => {
+  // Legacy JSON/shared-token API is disabled, including in AI Studio development.
+  throw new Error('API قدیمی فایل JSON غیرفعال است؛ از Supabase استفاده کنید.');
 };
 
 

@@ -158,6 +158,20 @@ export default function App() {
     }, 4000);
   };
 
+  // ۲. مدیریت نشست کاربری و احراز هویت با Custom Hook
+  const {
+    user,
+    isAuthLoading,
+    impersonatedUser,
+    currentAppUser,
+    handleLogout,
+    handleSwitchUser,
+    handleResetImpersonation,
+  } = useAuthManager({
+    onShowToast: showToast,
+  });
+
+
   // ۱. مدیریت داده‌های مالی با Custom Hook
   const {
     fiscalYears,
@@ -226,22 +240,7 @@ export default function App() {
   } = useFinancialData({
     currencyMode,
     onShowToast: showToast,
-    currentUser: null, // به‌زودی از auth می‌گیرد
-  });
-
-  // ۲. مدیریت نشست کاربری و احراز هویت با Custom Hook
-  const {
-    user,
-    setUser,
-    isAuthLoading,
-    impersonatedUser,
-    currentAppUser,
-    handleLogout,
-    handleSwitchUser,
-    handleResetImpersonation,
-  } = useAuthManager({
-    users,
-    onShowToast: showToast,
+    currentUser: currentAppUser,
   });
 
   // ارسال هویت کاربر فعال به سرور برای ثبت در لاگ تاریخچه تغییرات
@@ -348,21 +347,6 @@ export default function App() {
     return (
       <AuthScreen 
         users={users}
-        onLoginUser={(loggedInUser) => {
-          const authUser = {
-            id: loggedInUser.id,
-            email: loggedInUser.email,
-            user_metadata: { full_name: loggedInUser.fullName, role: loggedInUser.role },
-            app_metadata: { role: loggedInUser.role },
-            aud: 'authenticated',
-            created_at: new Date().toISOString()
-          } as any;
-          setUser(authUser);
-          try {
-            localStorage.setItem('ayandeh_active_user', JSON.stringify(authUser));
-            localStorage.setItem('ayandeh_active_user_role', loggedInUser.role);
-          } catch {}
-        }}
         onRegisterUser={handleAddUser}
         onAuthSuccess={() => {
           showToast('ورود با موفقیت انجام شد.');
@@ -399,6 +383,10 @@ export default function App() {
       {/* ستون اصلی محتوا */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         
+        <div className="bg-amber-100 text-amber-900 px-4 py-3 text-sm" role="status">
+          نسخه آزمایشی اصلاح امنیت — برای استفاده اصلی آماده نیست. اطلاعات را فقط در دیتابیس آزمایشی بررسی کنید.
+        </div>
+
         {/* نوار بنر تست هویت کاربر آزمایشی (Impersonation) */}
         {impersonatedUser && (
           <div className="bg-amber-500 text-slate-900 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-xs z-30">
@@ -797,7 +785,7 @@ export default function App() {
               setIsTxModalOpen(false);
               setEditingTx(null);
             }}
-            onSave={(tx) => handleSaveTransaction(tx, editingTx?.updatedAt)}
+            onSave={(tx) => handleSaveTransaction(tx, (editingTx as any)?.rowVersion)}
             editingTransaction={editingTx}
             selectedYear={selectedYear}
             currencyMode={currencyMode}

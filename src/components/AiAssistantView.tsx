@@ -1,3 +1,4 @@
+import { supabase } from '../lib/supabase';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Sparkles, 
@@ -618,9 +619,11 @@ ${topInc.map((t, idx) => `${idx + 1}. **${t.title}**: ${formatCurrency(t.amount,
       const systemContext = compileFinancialContext();
 
       // Call server proxy route with chat history
+      const { data: authData } = await supabase!.auth.getSession();
+      if (!authData.session) throw new Error('نشست معتبر لازم است.');
       const response = await fetch('/api/gemini/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authData.session.access_token },
         signal: controller.signal,
         body: JSON.stringify({
           prompt: textToSend,
