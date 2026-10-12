@@ -13,6 +13,7 @@ import {
   saveDatabase,
   resetDatabaseToClean,
   decryptBackup,
+  encryptBackup,
 } from "./serverDb";
 import {
   installAuth,
@@ -214,6 +215,17 @@ function financialView(db: any, actor: any) {
     );
   return data;
 }
+// Non-mutating manager-only configuration check: no financial revision or backup is saved.
+app.get('/api/financial-data/readiness', async (req,res,next)=>{
+ try {
+  requirePermission(req,'canBackupRestore');
+  const probe={kind:'configuration-check',nonce:randomBytes(16).toString('hex')};
+  const encrypted=encryptBackup(probe);
+  if(canonical(decryptBackup(encrypted))!==canonical(probe))fail('بررسی رمزنگاری بکاپ ناموفق است.',503);
+  const db=await loadDatabase();
+  res.json({readsReady:true,backupEncryptionReady:true,writesEnabled:process.env.FINANCIAL_WRITES_ENABLED==='true',revision:db.revision});
+ }catch(e){next(e);}
+});
 app.get("/api/financial-data", async (req, res, next) => {
   try {
     if (

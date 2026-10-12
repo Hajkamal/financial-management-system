@@ -1162,6 +1162,18 @@ function financialView(db, actor) {
     );
   return data;
 }
+app.get("/api/financial-data/readiness", async (req, res, next) => {
+  try {
+    requirePermission(req, "canBackupRestore");
+    const probe = { kind: "configuration-check", nonce: randomBytes2(16).toString("hex") };
+    const encrypted = encryptBackup(probe);
+    if (canonical(decryptBackup(encrypted)) !== canonical(probe)) fail("\u0628\u0631\u0631\u0633\u06CC \u0631\u0645\u0632\u0646\u06AF\u0627\u0631\u06CC \u0628\u06A9\u0627\u067E \u0646\u0627\u0645\u0648\u0641\u0642 \u0627\u0633\u062A.", 503);
+    const db = await loadDatabase();
+    res.json({ readsReady: true, backupEncryptionReady: true, writesEnabled: process.env.FINANCIAL_WRITES_ENABLED === "true", revision: db.revision });
+  } catch (e) {
+    next(e);
+  }
+});
 app.get("/api/financial-data", async (req, res, next) => {
   try {
     if (!req.actor.permissions?.canViewDashboard && !req.actor.permissions?.canViewTransactions && req.actor.role !== "super_admin")

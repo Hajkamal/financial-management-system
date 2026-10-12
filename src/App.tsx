@@ -346,7 +346,7 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         
         <div className="bg-amber-100 text-amber-900 px-4 py-3 text-sm" role="status">
-          نسخه اصلاحی — تا تأیید پیکربندی و بازیابی بکاپ روی نسخه اصلی منتشر نشود.
+          داده‌های مالی روی سرور ذخیره می‌شوند؛ پشتیبان مستقل را خارج از سامانه نگه دارید.
         </div>
 
         {/* نوار بنر تست هویت کاربر آزمایشی (Impersonation) */}
@@ -462,7 +462,7 @@ export default function App() {
                   <span className="text-[10px] bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-400/20">توصیه امنیتی</span>
                 </p>
                 <p className="text-[11px] text-slate-300 mt-0.5">
-                  جهت جلوگیری از پاک شدن داده‌ها در صورت تغییر دستگاه یا کش مرورگر، نسخه پشتیبان دانلود فرمایید.
+                  تغییر دستگاه یا پاک‌کردن کش، داده‌های سرور را حذف نمی‌کند؛ برای بازیابی در حوادث، پشتیبان مستقل دانلود و امن نگهداری کنید.
                 </p>
               </div>
             </div>
