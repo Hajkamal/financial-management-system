@@ -448,4 +448,10 @@ CREATE OR REPLACE FUNCTION public.read_saved_backup(p_id uuid) RETURNS text LANG
 $$;
 REVOKE ALL ON FUNCTION public.list_saved_backups(),public.read_saved_backup(uuid) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.list_saved_backups(),public.read_saved_backup(uuid) TO service_role;
+-- Legacy event-trigger helper must not be exposed as a public RPC.
+DO $$ BEGIN
+ IF to_regprocedure('public.rls_auto_enable()') IS NOT NULL THEN
+  EXECUTE 'REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC,anon,authenticated';
+ END IF;
+END; $$;
 COMMIT;
