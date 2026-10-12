@@ -13,6 +13,7 @@ test('HTTP readiness validates encryption without mutating financial data or exp
 test('HTTP invalid session cannot access financial data',async()=>{assert.equal((await call('',{token:'invalid-token-long-enough'})).status,401);});
 test('HTTP reserved claims are not trusted until Auth accepts exact token',async()=>{authFailure=true;try{assert.equal((await call()).status,401);}finally{authFailure=false;}});
 test('HTTP pending account remains blocked after Auth verification',async()=>{assert.equal((await call('',{role:'pending'})).status,403);});
+test('HTTP absent category settings return income and expense defaults without writing settings',async()=>{const before=await snap();const r=await call();assert.equal(r.status,200);assert.ok(r.data.data.customCategories.some(c=>c.type==='income'));assert.ok(r.data.data.customCategories.some(c=>c.type==='expense'));assert.equal((await snap()).revision,before.revision);assert.deepEqual((await snap()).settings,before.settings);});
 test('HTTP successful snapshot is no-store and omits passwords',async()=>{const r=await call();assert.equal(r.status,200);assert.equal(r.headers.get('cache-control'),'no-store');assert.ok(r.data.data.users.every(u=>!('password' in u)));});
 test('HTTP viewer cannot grant self write permission via metadata',async()=>{const s=await snap();assert.equal((await call('/transaction',{role:'viewer',method:'POST',revision:s.revision,body:tx()})).status,403);});
 test('HTTP writes require revision',async()=>{assert.equal((await call('/transaction',{method:'POST',body:tx()})).status,428);});

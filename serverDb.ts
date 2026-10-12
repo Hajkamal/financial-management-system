@@ -1,4 +1,5 @@
 import { createCipheriv,createDecipheriv,randomBytes } from 'node:crypto';
+import { resolveTransactionCategories } from './src/utils/transactionCategories';
 import { adminClient } from './server-security/supabase-admin';
 import * as convert from './src/lib/databaseConverters';
 import { getPermissionsByRole } from './src/utils/permissions';
@@ -22,7 +23,7 @@ const tables = {
 export function snapshotFromRows(raw:any):ServerDatabase {
   if(!raw || !Number.isSafeInteger(raw.revision)) fail('پاسخ دیتابیس معتبر نیست.',503);
   const db:any={version:4,revision:raw.revision,lastUpdated:raw.lastUpdated,selectedYear:raw.settings?.selectedYear||1405,
-    customCategories:raw.settings?.customCategories||[],companyLogo:raw.settings?.companyLogo||null,syncLogs:raw.sync_logs||[]};
+    customCategories:resolveTransactionCategories(raw.settings?.customCategories),companyLogo:raw.settings?.companyLogo||null,syncLogs:raw.sync_logs||[]};
   for(const [key,[table,from]] of Object.entries(tables)) {
     if(!Array.isArray(raw[table])) fail('بخشی از اطلاعات دیتابیس دریافت نشد.',503);
     db[key]=raw[table].map((row:any)=>(from as (r:any)=>any)(row));

@@ -82,6 +82,279 @@ import { randomUUID } from "node:crypto";
 // serverDb.ts
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
+// src/utils/permissions.ts
+var ALL_PERMISSIONS_GRANTED = {
+  canViewDashboard: true,
+  canViewTransactions: true,
+  canCreateTransactions: true,
+  canEditTransactions: true,
+  canDeleteTransactions: true,
+  canManageSalaryMatrix: true,
+  canManageEmployees: true,
+  canManageMembers: true,
+  canManageLoans: true,
+  canManageFiscalYears: true,
+  canExportExcel: true,
+  canBackupRestore: true,
+  canManageUsers: true,
+  canManageBankAccounts: true,
+  canManageVatReports: true,
+  canUseAiAssistant: true
+};
+var FINANCE_MANAGER_PERMISSIONS = {
+  canViewDashboard: true,
+  canViewTransactions: true,
+  canCreateTransactions: true,
+  canEditTransactions: true,
+  canDeleteTransactions: true,
+  canManageSalaryMatrix: true,
+  canManageEmployees: true,
+  canManageMembers: true,
+  canManageLoans: true,
+  canManageFiscalYears: true,
+  canExportExcel: true,
+  canBackupRestore: true,
+  canManageUsers: false,
+  canManageBankAccounts: true,
+  canManageVatReports: true,
+  canUseAiAssistant: true
+};
+var ACCOUNTANT_PERMISSIONS = {
+  canViewDashboard: true,
+  canViewTransactions: true,
+  canCreateTransactions: true,
+  canEditTransactions: true,
+  canDeleteTransactions: false,
+  canManageSalaryMatrix: true,
+  canManageEmployees: false,
+  canManageMembers: false,
+  canManageLoans: false,
+  canManageFiscalYears: false,
+  canExportExcel: true,
+  canBackupRestore: false,
+  canManageUsers: false,
+  canManageBankAccounts: true,
+  canManageVatReports: true,
+  canUseAiAssistant: true
+};
+var VIEWER_PERMISSIONS = {
+  canViewDashboard: true,
+  canViewTransactions: true,
+  canCreateTransactions: false,
+  canEditTransactions: false,
+  canDeleteTransactions: false,
+  canManageSalaryMatrix: false,
+  canManageEmployees: false,
+  canManageMembers: false,
+  canManageLoans: false,
+  canManageFiscalYears: false,
+  canExportExcel: true,
+  canBackupRestore: false,
+  canManageUsers: false,
+  canManageBankAccounts: false,
+  canManageVatReports: false,
+  canUseAiAssistant: true
+};
+function getPermissionsByRole(role) {
+  switch (role) {
+    case "super_admin":
+      return { ...ALL_PERMISSIONS_GRANTED };
+    case "finance_manager":
+      return { ...FINANCE_MANAGER_PERMISSIONS };
+    case "accountant":
+      return { ...ACCOUNTANT_PERMISSIONS };
+    case "viewer":
+      return { ...VIEWER_PERMISSIONS };
+    case "custom":
+    default:
+      return { ...VIEWER_PERMISSIONS };
+  }
+}
+
+// src/data/initialData.ts
+var INITIAL_CUSTOM_CATEGORIES = [
+  // هزینه‌ها
+  {
+    id: "salary",
+    type: "expense",
+    label: "\u062D\u0642\u0648\u0642 \u06A9\u0627\u0631\u0645\u0646\u062F\u0627\u0646",
+    color: "text-rose-700",
+    badgeBg: "bg-rose-100 text-rose-800 border-rose-300",
+    isCustom: false
+  },
+  {
+    id: "secretary_commission",
+    type: "expense",
+    label: "\u06A9\u0627\u0631\u0645\u0632\u062F \u0645\u0627\u0647\u0627\u0646\u0647 \u0645\u0646\u0634\u06CC\u200C\u0647\u0627",
+    color: "text-pink-700",
+    badgeBg: "bg-pink-100 text-pink-800 border-pink-300",
+    isCustom: false
+  },
+  {
+    id: "doctors_payout",
+    type: "expense",
+    label: "\u067E\u0631\u062F\u0627\u062E\u062A\u06CC \u067E\u0632\u0634\u06A9\u0627\u0646",
+    color: "text-cyan-700",
+    badgeBg: "bg-cyan-100 text-cyan-800 border-cyan-300",
+    isCustom: false
+  },
+  {
+    id: "marketing_alizadeh",
+    type: "expense",
+    label: "\u067E\u0631\u062F\u0627\u062E\u062A \u062A\u06CC\u0645 \u0645\u0627\u0631\u06A9\u062A\u06CC\u0646\u06AF \u0639\u0644\u06CC\u0632\u0627\u062F\u0647",
+    color: "text-orange-700",
+    badgeBg: "bg-orange-100 text-orange-800 border-orange-300",
+    isCustom: false
+  },
+  {
+    id: "infrastructure",
+    type: "expense",
+    label: "\u0647\u0632\u06CC\u0646\u0647\u200C\u0647\u0627\u06CC \u0632\u06CC\u0631\u0633\u0627\u062E\u062A\u06CC (\u0633\u0631\u0648\u0631\u060C \u067E\u06CC\u0627\u0645\u06A9\u060C AI)",
+    color: "text-purple-700",
+    badgeBg: "bg-purple-100 text-purple-800 border-purple-300",
+    isCustom: false,
+    subCategories: [
+      { id: "server", name: "\u0633\u0631\u0648\u0631 \u0648 \u0647\u0627\u0633\u062A\u06CC\u0646\u06AF (\u0627\u0628\u0631 \u0622\u0631\u0648\u0627\u0646/Hetzner)" },
+      { id: "sms", name: "\u0633\u0627\u0645\u0627\u0646\u0647 \u067E\u06CC\u0627\u0645\u06A9 (\u06A9\u0627\u0648\u0647\u200C\u0646\u06AF\u0627\u0631)" },
+      { id: "ai_tokens", name: "\u0627\u0634\u062A\u0631\u0627\u06A9 \u0648 \u062A\u0648\u06A9\u0646\u200C\u0647\u0627\u06CC \u0647\u0648\u0634 \u0645\u0635\u0646\u0648\u0639\u06CC (OpenAI / Gemini)" },
+      { id: "domain_tools", name: "\u062F\u0627\u0645\u0646\u0647\u200C\u0647\u0627 \u0648 \u0627\u0628\u0632\u0627\u0631\u0647\u0627\u06CC \u062A\u0648\u0633\u0639\u0647" }
+    ]
+  },
+  {
+    id: "insurance",
+    type: "expense",
+    label: "\u0647\u0632\u06CC\u0646\u0647 \u0628\u06CC\u0645\u0647 \u06A9\u0627\u0631\u0645\u0646\u062F\u0627\u0646",
+    color: "text-amber-700",
+    badgeBg: "bg-amber-100 text-amber-800 border-amber-300",
+    isCustom: false
+  },
+  {
+    id: "shareholder_payout",
+    type: "expense",
+    label: "\u067E\u0631\u062F\u0627\u062E\u062A\u06CC \u0628\u0647 \u0627\u0639\u0636\u0627 \u0648 \u0634\u0631\u06A9\u0627",
+    color: "text-violet-700",
+    badgeBg: "bg-violet-100 text-violet-800 border-violet-300",
+    isCustom: false
+  },
+  {
+    id: "loan_installment",
+    type: "expense",
+    label: "\u0628\u062F\u0647\u06CC \u0648 \u0627\u0642\u0633\u0627\u0637 \u062A\u0633\u0647\u06CC\u0644\u0627\u062A",
+    color: "text-red-700",
+    badgeBg: "bg-red-100 text-red-800 border-red-300",
+    isCustom: false
+  },
+  {
+    id: "guarantee_deposit",
+    type: "expense",
+    label: "\u0648\u0627\u0631\u06CC\u0632 \u0633\u067E\u0631\u062F\u0647 \u062D\u0633\u0646 \u0627\u0646\u062C\u0627\u0645 \u062A\u0639\u0647\u062F\u0627\u062A / \u067E\u06CC\u0634\u200C\u067E\u0631\u062F\u0627\u062E\u062A \u0642\u0631\u0627\u0631\u062F\u0627\u062F",
+    color: "text-indigo-700",
+    badgeBg: "bg-indigo-100 text-indigo-800 border-indigo-300",
+    isCustom: false
+  },
+  {
+    id: "office_site",
+    type: "expense",
+    label: "\u0647\u0632\u06CC\u0646\u0647\u200C\u0647\u0627\u06CC \u0633\u0627\u06CC\u062A \u0648 \u0627\u062F\u0627\u0631\u06CC",
+    color: "text-slate-700",
+    badgeBg: "bg-slate-100 text-slate-800 border-slate-300",
+    isCustom: false,
+    subCategories: [
+      { id: "supermarket", name: "\u0633\u0648\u067E\u0631\u0645\u0627\u0631\u06A9\u062A" },
+      { id: "office_supplies", name: "\u0644\u0648\u0627\u0632\u0645 \u0627\u0644\u062A\u062D\u0631\u06CC\u0631 \u0648 \u0627\u0642\u0644\u0627\u0645 \u0645\u0635\u0631\u0641\u06CC" },
+      { id: "cleaning_tea", name: "\u067E\u0630\u06CC\u0631\u0627\u06CC\u06CC \u0648 \u0646\u0638\u0627\u0641\u062A" },
+      { id: "internet_tel", name: "\u0627\u06CC\u0646\u062A\u0631\u0646\u062A \u0648 \u062A\u0644\u0641\u0646" },
+      { id: "blubank_zarei", name: "\u0634\u0627\u0631\u0698 \u06A9\u0627\u0631\u062A \u0628\u0644\u0648 \u0633\u06A9\u06CC\u0646\u0647 \u0632\u0627\u0631\u0639\u06CC - \u0634\u0631\u06A9\u062A" }
+    ]
+  },
+  {
+    id: "ads_basina",
+    type: "expense",
+    label: "\u062A\u0628\u0644\u06CC\u063A\u0627\u062A \u0628\u0627\u0633\u06CC\u0646\u0627",
+    color: "text-blue-700",
+    badgeBg: "bg-blue-100 text-blue-800 border-blue-300",
+    isCustom: false,
+    subCategories: [
+      { id: "cafe_bazaar", name: "\u06A9\u0627\u0641\u0647 \u0628\u0627\u0632\u0627\u0631" },
+      { id: "myket", name: "\u0645\u0627\u06CC\u06A9\u062A" },
+      { id: "google_ads", name: "\u06AF\u0648\u06AF\u0644 \u0627\u062F\u0632" },
+      { id: "yektanet", name: "\u06CC\u06A9\u062A\u0627\u0646\u062A" },
+      { id: "social_ads", name: "\u062A\u0628\u0644\u06CC\u063A\u0627\u062A \u0627\u06CC\u0646\u0633\u062A\u0627\u06AF\u0631\u0627\u0645 \u0648 \u0634\u0628\u06A9\u0647\u200C\u0647\u0627\u06CC \u0627\u062C\u062A\u0645\u0627\u0639\u06CC" },
+      { id: "sms_campaign", name: "\u06A9\u0645\u067E\u06CC\u0646 \u067E\u06CC\u0627\u0645\u06A9\u06CC \u062A\u0628\u0644\u06CC\u063A\u0627\u062A\u06CC" },
+      { id: "reportage", name: "\u0631\u067E\u0648\u0631\u062A\u0627\u0698" }
+    ]
+  },
+  // درآمدها
+  {
+    id: "sale_basina",
+    type: "income",
+    label: "\u0641\u0631\u0648\u0634 \u0628\u0627\u0633\u06CC\u0646\u0627",
+    color: "text-emerald-700",
+    badgeBg: "bg-emerald-100 text-emerald-800 border-emerald-300",
+    isCustom: false,
+    subCategories: [
+      { id: "appointment", name: "\u0646\u0648\u0628\u062A\u200C\u062F\u0647\u06CC \u0622\u0646\u0644\u0627\u06CC\u0646" },
+      { id: "online_consultation", name: "\u0645\u0634\u0627\u0648\u0631\u0647 \u0622\u0646\u0644\u0627\u06CC\u0646" },
+      { id: "ai_lab_interpretation", name: "\u062A\u0641\u0633\u06CC\u0631 \u0622\u0632\u0645\u0627\u06CC\u0634 \u0647\u0648\u0634 \u0645\u0635\u0646\u0648\u0639\u06CC" },
+      { id: "online_triage", name: "\u062A\u0631\u06CC\u0627\u0698 \u0622\u0646\u0644\u0627\u06CC\u0646" },
+      { id: "general", name: "\u0639\u0645\u0648\u0645\u06CC \u0648 \u0645\u062A\u0641\u0631\u0642\u0647" }
+    ]
+  },
+  {
+    id: "sale_sepid",
+    type: "income",
+    label: "\u0641\u0631\u0648\u0634 \u0633\u067E\u06CC\u062F",
+    color: "text-teal-700",
+    badgeBg: "bg-teal-100 text-teal-800 border-teal-300",
+    isCustom: false
+  },
+  {
+    id: "shareholder_deposit",
+    type: "income",
+    label: "\u0648\u0627\u0631\u06CC\u0632\u06CC \u0633\u0647\u0627\u0645\u062F\u0627\u0631\u0627\u0646",
+    color: "text-blue-700",
+    badgeBg: "bg-blue-100 text-blue-800 border-blue-300",
+    isCustom: false
+  },
+  {
+    id: "capital_raise",
+    type: "income",
+    label: "\u062C\u0630\u0628 \u0633\u0631\u0645\u0627\u06CC\u0647",
+    color: "text-indigo-700",
+    badgeBg: "bg-indigo-100 text-indigo-800 border-indigo-300",
+    isCustom: false
+  },
+  {
+    id: "zarinpal_gateway",
+    type: "income",
+    label: "\u062F\u0631\u06AF\u0627\u0647 \u067E\u0631\u062F\u0627\u062E\u062A \u0632\u0631\u06CC\u0646\u200C\u067E\u0627\u0644",
+    color: "text-amber-700",
+    badgeBg: "bg-amber-100 text-amber-800 border-amber-300",
+    isCustom: false
+  },
+  {
+    id: "guarantee_refund",
+    type: "income",
+    label: "\u0627\u0633\u062A\u0631\u062F\u0627\u062F \u0633\u067E\u0631\u062F\u0647 \u062D\u0633\u0646 \u0627\u0646\u062C\u0627\u0645 \u062A\u0639\u0647\u062F\u0627\u062A / \u067E\u06CC\u0634\u200C\u067E\u0631\u062F\u0627\u062E\u062A",
+    color: "text-sky-700",
+    badgeBg: "bg-sky-100 text-sky-800 border-sky-300",
+    isCustom: false
+  },
+  {
+    id: "other_income",
+    type: "income",
+    label: "\u0633\u0627\u06CC\u0631 \u062F\u0631\u0622\u0645\u062F\u0647\u0627",
+    color: "text-slate-700",
+    badgeBg: "bg-slate-100 text-slate-800 border-slate-300",
+    isCustom: false
+  }
+];
+
+// src/utils/transactionCategories.ts
+function resolveTransactionCategories(list) {
+  return Array.isArray(list) && list.length > 0 ? list : INITIAL_CUSTOM_CATEGORIES;
+}
+
 // src/lib/databaseConverters.ts
 var fiscalYearToDb = (fy) => ({
   year: fy.year,
@@ -504,95 +777,6 @@ var dbToServiceTariff = (row) => ({
   notes: row.notes
 });
 
-// src/utils/permissions.ts
-var ALL_PERMISSIONS_GRANTED = {
-  canViewDashboard: true,
-  canViewTransactions: true,
-  canCreateTransactions: true,
-  canEditTransactions: true,
-  canDeleteTransactions: true,
-  canManageSalaryMatrix: true,
-  canManageEmployees: true,
-  canManageMembers: true,
-  canManageLoans: true,
-  canManageFiscalYears: true,
-  canExportExcel: true,
-  canBackupRestore: true,
-  canManageUsers: true,
-  canManageBankAccounts: true,
-  canManageVatReports: true,
-  canUseAiAssistant: true
-};
-var FINANCE_MANAGER_PERMISSIONS = {
-  canViewDashboard: true,
-  canViewTransactions: true,
-  canCreateTransactions: true,
-  canEditTransactions: true,
-  canDeleteTransactions: true,
-  canManageSalaryMatrix: true,
-  canManageEmployees: true,
-  canManageMembers: true,
-  canManageLoans: true,
-  canManageFiscalYears: true,
-  canExportExcel: true,
-  canBackupRestore: true,
-  canManageUsers: false,
-  canManageBankAccounts: true,
-  canManageVatReports: true,
-  canUseAiAssistant: true
-};
-var ACCOUNTANT_PERMISSIONS = {
-  canViewDashboard: true,
-  canViewTransactions: true,
-  canCreateTransactions: true,
-  canEditTransactions: true,
-  canDeleteTransactions: false,
-  canManageSalaryMatrix: true,
-  canManageEmployees: false,
-  canManageMembers: false,
-  canManageLoans: false,
-  canManageFiscalYears: false,
-  canExportExcel: true,
-  canBackupRestore: false,
-  canManageUsers: false,
-  canManageBankAccounts: true,
-  canManageVatReports: true,
-  canUseAiAssistant: true
-};
-var VIEWER_PERMISSIONS = {
-  canViewDashboard: true,
-  canViewTransactions: true,
-  canCreateTransactions: false,
-  canEditTransactions: false,
-  canDeleteTransactions: false,
-  canManageSalaryMatrix: false,
-  canManageEmployees: false,
-  canManageMembers: false,
-  canManageLoans: false,
-  canManageFiscalYears: false,
-  canExportExcel: true,
-  canBackupRestore: false,
-  canManageUsers: false,
-  canManageBankAccounts: false,
-  canManageVatReports: false,
-  canUseAiAssistant: true
-};
-function getPermissionsByRole(role) {
-  switch (role) {
-    case "super_admin":
-      return { ...ALL_PERMISSIONS_GRANTED };
-    case "finance_manager":
-      return { ...FINANCE_MANAGER_PERMISSIONS };
-    case "accountant":
-      return { ...ACCOUNTANT_PERMISSIONS };
-    case "viewer":
-      return { ...VIEWER_PERMISSIONS };
-    case "custom":
-    default:
-      return { ...VIEWER_PERMISSIONS };
-  }
-}
-
 // security/validation.ts
 import { createHash } from "node:crypto";
 import { isValidJalaaliDate } from "jalaali-js";
@@ -745,7 +929,7 @@ function snapshotFromRows(raw) {
     revision: raw.revision,
     lastUpdated: raw.lastUpdated,
     selectedYear: raw.settings?.selectedYear || 1405,
-    customCategories: raw.settings?.customCategories || [],
+    customCategories: resolveTransactionCategories(raw.settings?.customCategories),
     companyLogo: raw.settings?.companyLogo || null,
     syncLogs: raw.sync_logs || []
   };

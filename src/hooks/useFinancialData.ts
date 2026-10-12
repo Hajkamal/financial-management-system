@@ -1,6 +1,7 @@
+import { resolveTransactionCategories } from '../utils/transactionCategories';
 import { ServerFullData } from "../lib/serverApi";
 import { hasPendingWrites } from "../lib/request";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   FinancialTransaction,
   FiscalYear,
@@ -398,8 +399,10 @@ export function useFinancialData({
     vatInvoices,
     serviceTariffs,
   } = data;
-  const customCategories = data.customCategories || INITIAL_CUSTOM_CATEGORIES,
-    syncLogs = data.syncLogs || [];
+  // Polling produces new array instances; retain category identity while its content is unchanged.
+  const categoryContentKey = JSON.stringify(data.customCategories ?? null);
+  const customCategories = useMemo(() => resolveTransactionCategories(data.customCategories), [categoryContentKey]);
+  const syncLogs = data.syncLogs || [];
   const userId = currentUser?.id;
   const liveUser = useRef(userId);
   liveUser.current = userId;
