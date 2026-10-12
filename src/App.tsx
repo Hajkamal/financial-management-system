@@ -158,6 +158,20 @@ export default function App() {
     }, 4000);
   };
 
+  // ۲. مدیریت نشست کاربری و احراز هویت با Custom Hook
+  const {
+    user,
+    isAuthLoading,
+    impersonatedUser,
+    currentAppUser,
+    handleLogout,
+    handleSwitchUser,
+    handleResetImpersonation,
+  } = useAuthManager({
+    onShowToast: showToast,
+  });
+
+
   // ۱. مدیریت داده‌های مالی با Custom Hook
   const {
     fiscalYears,
@@ -173,6 +187,9 @@ export default function App() {
     vatInvoices,
     serviceTariffs,
     customCategories,
+    companyLogo,
+    handleSaveCompanyLogo,
+    handleSaveTransactions,
     handleSaveTransaction,
     handleDeleteTransaction,
     handleClearDemoTransactions,
@@ -226,22 +243,7 @@ export default function App() {
   } = useFinancialData({
     currencyMode,
     onShowToast: showToast,
-    currentUser: null, // به‌زودی از auth می‌گیرد
-  });
-
-  // ۲. مدیریت نشست کاربری و احراز هویت با Custom Hook
-  const {
-    user,
-    setUser,
-    isAuthLoading,
-    impersonatedUser,
-    currentAppUser,
-    handleLogout,
-    handleSwitchUser,
-    handleResetImpersonation,
-  } = useAuthManager({
-    users,
-    onShowToast: showToast,
+    currentUser: currentAppUser,
   });
 
   // ارسال هویت کاربر فعال به سرور برای ثبت در لاگ تاریخچه تغییرات
@@ -258,14 +260,7 @@ export default function App() {
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   // یادآور دوره‌ای بک‌آپ
-  useEffect(() => {
-    try {
-      const savedLogo = localStorage.getItem('ayandeh_company_logo');
-      updateDocumentFavicon(savedLogo);
-    } catch {
-      updateDocumentFavicon(null);
-    }
-  }, []);
+  useEffect(()=>{updateDocumentFavicon(currentAppUser ? companyLogo : null);},[currentAppUser,companyLogo]);
   const [showBackupReminder, setShowBackupReminder] = useState<boolean>(() => {
     try {
       const dismissedUntil = localStorage.getItem('ayandeh_backup_reminder_dismissed');
@@ -288,43 +283,7 @@ export default function App() {
     } catch {}
   };
 
-  const handleQuickBackupDownload = () => {
-    try {
-      const { crossPlatformFilename } = generateBackupFilename(companyName, selectedYear);
-      const payload = {
-        backupApp: 'سامانه حسابداری و مدیریت مالی آینده نگاران خلاق',
-        version: '2.5.0',
-        exportDateIso: new Date().toISOString(),
-        companyName,
-        year: selectedYear,
-        fiscalYears,
-        users,
-        bankAccounts,
-        vatInvoices,
-        serviceTariffs,
-        transactions,
-        employees,
-        salaryMatrix,
-        members,
-        loans,
-      };
-
-      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(payload, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute('href', dataStr);
-      downloadAnchor.setAttribute('download', crossPlatformFilename);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-
-      localStorage.setItem('ayandeh_last_backup_date', new Date().toISOString());
-      setShowBackupReminder(false);
-      showToast('نسخه پشتیبان سال ۱۴۰۵ با موفقیت دانلود شد.');
-    } catch (e) {
-      console.error(e);
-      showToast('خطا در دانلود نسخه پشتیبان.');
-    }
-  };
+  const handleQuickBackupDownload = () => { setIsBackupModalOpen(true); };
 
   // بررسی وضعیت لودینگ نشست
   if (isAuthLoading) {
@@ -348,21 +307,6 @@ export default function App() {
     return (
       <AuthScreen 
         users={users}
-        onLoginUser={(loggedInUser) => {
-          const authUser = {
-            id: loggedInUser.id,
-            email: loggedInUser.email,
-            user_metadata: { full_name: loggedInUser.fullName, role: loggedInUser.role },
-            app_metadata: { role: loggedInUser.role },
-            aud: 'authenticated',
-            created_at: new Date().toISOString()
-          } as any;
-          setUser(authUser);
-          try {
-            localStorage.setItem('ayandeh_active_user', JSON.stringify(authUser));
-            localStorage.setItem('ayandeh_active_user_role', loggedInUser.role);
-          } catch {}
-        }}
         onRegisterUser={handleAddUser}
         onAuthSuccess={() => {
           showToast('ورود با موفقیت انجام شد.');
@@ -394,11 +338,17 @@ export default function App() {
         onOpenChangePassword={() => setIsChangePasswordOpen(true)}
         fiscalYears={fiscalYears}
         currentUser={currentAppUser}
+        companyLogo={companyLogo}
+        onSaveCompanyLogo={handleSaveCompanyLogo}
       />
 
       {/* ستون اصلی محتوا */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         
+        <div className="bg-amber-100 text-amber-900 px-4 py-3 text-sm" role="status">
+          نسخه اصلاحی — تا تأیید پیکربندی و بازیابی بکاپ روی نسخه اصلی منتشر نشود.
+        </div>
+
         {/* نوار بنر تست هویت کاربر آزمایشی (Impersonation) */}
         {impersonatedUser && (
           <div className="bg-amber-500 text-slate-900 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-xs z-30">
@@ -597,6 +547,7 @@ export default function App() {
               selectedYear={selectedYear}
               currencyMode={currencyMode}
               onSaveTransaction={handleSaveTransaction}
+              onSaveTransactions={handleSaveTransactions}
               onEditTransaction={(tx) => {
                 setEditingTx(tx);
                 setIsTxModalOpen(true);
@@ -797,7 +748,7 @@ export default function App() {
               setIsTxModalOpen(false);
               setEditingTx(null);
             }}
-            onSave={(tx) => handleSaveTransaction(tx, editingTx?.updatedAt)}
+            onSave={handleSaveTransaction}
             editingTransaction={editingTx}
             selectedYear={selectedYear}
             currencyMode={currencyMode}
@@ -878,8 +829,8 @@ export default function App() {
             isOpen={isChangePasswordOpen}
             onClose={() => setIsChangePasswordOpen(false)}
             currentUser={currentAppUser}
-            onSavePassword={async (newPwd) => {
-              await handleChangePassword(currentAppUser.id, newPwd);
+            onSavePassword={async (newPwd, currentPwd) => {
+              await handleChangePassword(currentAppUser.id, newPwd, currentPwd);
             }}
           />
         </Suspense>

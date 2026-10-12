@@ -40,16 +40,16 @@ interface FiscalYearsViewProps {
   fiscalYears: FiscalYear[];
   selectedYear: number;
   setSelectedYear: (year: number) => void;
-  onAddFiscalYear: (yearData: Omit<FiscalYear, 'isClosed'> & { isClosed?: boolean }) => void;
-  onUpdateFiscalYear: (year: number, updated: Partial<FiscalYear>) => void;
-  onDeleteFiscalYear: (year: number) => void;
+  onAddFiscalYear: (yearData: Omit<FiscalYear, 'isClosed'> & { isClosed?: boolean }) => boolean | void | Promise<boolean | void>;
+  onUpdateFiscalYear: (year: number, updated: Partial<FiscalYear>) => boolean | void | Promise<boolean | void>;
+  onDeleteFiscalYear: (year: number) => boolean | void | Promise<boolean | void>;
   onCloseFiscalYear: (
     sourceYear: number, 
     targetYear: number, 
     createOpeningTx: boolean, 
     openingAmount: number
-  ) => void;
-  onReopenFiscalYear: (year: number) => void;
+  ) => boolean | void | Promise<boolean | void>;
+  onReopenFiscalYear: (year: number) => boolean | void | Promise<boolean | void>;
   transactions: FinancialTransaction[];
   currencyMode: CurrencyMode;
   companyName: string;
@@ -138,14 +138,14 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
   };
 
   // Submit Add Fiscal Year
-  const handleSaveAddModal = (e: React.FormEvent) => {
+  const handleSaveAddModal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (fiscalYears.some(y => y.year === formYearNumber)) {
       alert(`سال مالی ${formYearNumber} از قبل در سیستم وجود دارد.`);
       return;
     }
 
-    onAddFiscalYear({
+    if ((await onAddFiscalYear({
       year: formYearNumber,
       title: formTitle.trim() || `سال مالی ${formYearNumber}`,
       startDate: formStartDate || `${formYearNumber}/01/01`,
@@ -153,7 +153,7 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
       openingBalance: formOpeningBalance,
       notes: formNotes,
       isClosed: false
-    });
+    })) === false) return;
 
     if (formSetActive) {
       setSelectedYear(formYearNumber);
@@ -175,17 +175,17 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
   };
 
   // Submit Edit Modal
-  const handleSaveEditModal = (e: React.FormEvent) => {
+  const handleSaveEditModal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingYear) return;
 
-    onUpdateFiscalYear(editingYear.year, {
+    if ((await onUpdateFiscalYear(editingYear.year, {
       title: formTitle.trim() || `سال مالی ${editingYear.year}`,
       startDate: formStartDate,
       endDate: formEndDate,
       openingBalance: formOpeningBalance,
       notes: formNotes,
-    });
+    })) === false) return;
 
     setEditingYear(null);
     onShowToast(`مشخصات سال مالی ${editingYear.year} ویرایش شد.`);
@@ -199,17 +199,17 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
   };
 
   // Submit Closing Fiscal Year
-  const handleConfirmCloseYear = () => {
+  const handleConfirmCloseYear = async () => {
     if (!closingTargetYear) return;
     const stats = yearStats[closingTargetYear.year] || { income: 0, expense: 0, net: 0, txCount: 0 };
     const openingAmt = stats.net;
 
-    onCloseFiscalYear(
+    if ((await onCloseFiscalYear(
       closingTargetYear.year,
       nextFiscalYearNumber,
       createOpeningEntry,
       openingAmt
-    );
+    )) === false) return;
 
     setClosingTargetYear(null);
     onShowToast(`سال مالی ${closingTargetYear.year} با موفقیت بسته شد و به سال ${nextFiscalYearNumber} منتقل شدید.`);
@@ -793,8 +793,8 @@ export const FiscalYearsView: React.FC<FiscalYearsViewProps> = ({
                 انصراف
               </button>
               <button
-                onClick={() => {
-                  onDeleteFiscalYear(deleteTargetYear.year);
+                onClick={async () => {
+                  if ((await onDeleteFiscalYear(deleteTargetYear.year)) === false) return;
                   setDeleteTargetYear(null);
                   onShowToast(`سال مالی ${deleteTargetYear.year} حذف شد.`);
                 }}

@@ -56,9 +56,10 @@ interface SalaryMatrixViewProps {
   transactions: FinancialTransaction[];
   selectedYear: number;
   currencyMode: CurrencyMode;
-  onSaveTransaction?: (transaction: FinancialTransaction) => void;
+  onSaveTransactions?: (transactions:FinancialTransaction[]) => Promise<boolean>;
+  onSaveTransaction?: (transaction: FinancialTransaction) => boolean | void | Promise<boolean | void>;
   onEditTransaction?: (tx: FinancialTransaction) => void;
-  onUpdateSalaryCell: (item: Partial<SalaryMatrixItem> & { employeeId: string; month: PersianMonthNumber; year: number }) => void;
+  onUpdateSalaryCell: (item: Partial<SalaryMatrixItem> & { employeeId: string; month: PersianMonthNumber; year: number; transaction?: FinancialTransaction }) => boolean | void | Promise<boolean | void>;
   onAddSalaryExpenseTransaction: (month: PersianMonthNumber, totalAmount: number, details: string) => void;
   onAddMemberPayoutTransaction: (params: {
     memberId: string;
@@ -72,8 +73,8 @@ interface SalaryMatrixViewProps {
     trackingCode?: string;
     salaryMonth?: PersianMonthNumber;
     salaryYear?: number;
-  }) => void;
-  onDeleteTransaction: (id: string) => void;
+  }) => boolean | void | Promise<boolean | void>;
+  onDeleteTransaction: (id: string) => boolean | void | Promise<boolean | void>;
   onNavigateToEmployees: () => void;
   onNavigateToMembers?: () => void;
   companyName?: string;
@@ -91,6 +92,7 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
   selectedYear,
   currencyMode,
   onSaveTransaction,
+  onSaveTransactions,
   onEditTransaction,
   onUpdateSalaryCell,
   onAddSalaryExpenseTransaction,
@@ -335,7 +337,7 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
   };
 
   // ذخیره اطلاعات سلول و ثبت/به‌روزرسانی خودکار سند هزینه
-  const handleSaveCell = () => {
+  const handleSaveCell = async () => {
     if (!editingCell) return;
     const amt = Number(inputAmount) || 0;
     const bns = Number(inputBonus) || 0;
@@ -343,17 +345,8 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
     const salMonthName = PERSIAN_MONTHS.find(m => m.num === editingCell.month)?.name;
     const payMonthName = PERSIAN_MONTHS.find(m => m.num === inputPayMonth)?.name;
 
-    // ۱. به‌روزرسانی ماتریس حقوق
-    onUpdateSalaryCell({
-      employeeId: editingCell.employeeId,
-      month: editingCell.month,
-      year: selectedYear,
-      amount: amt,
-      bonus: bns,
-      status: inputStatus,
-      colorTag: inputColor,
-    });
-
+    let linkedTransaction:FinancialTransaction|undefined;
+    if (syncWithExpenses && (editingCell.transactions?.length||0)>1) { onShowToast?.("این دوره چند سند پرداخت دارد؛ اسناد را جداگانه ویرایش کنید.");return; }
     // ۲. همگام‌سازی بلادرنگ با اسناد مالی دفتر هزینه‌ها در صورت فعال بودن تیک
     if (syncWithExpenses && onSaveTransaction) {
       if (amt > 0) {
@@ -377,8 +370,8 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
             title: autoTitle,
             trackingCode: inputTrackingCode || existingTx.trackingCode,
           };
-          onSaveTransaction(updatedTx);
-          if (onShowToast) onShowToast(`سند هزینه موجود در دفتر کل با مبلغ ${formatCurrency(amt, currencyMode)} به‌روزرسانی شد.`);
+          linkedTransaction=updatedTx;
+
         } else if (!editingCell.transactions || editingCell.transactions.length === 0) {
           // ایجاد سند هزینه جدید و رسمی در دفتر کل
           const regDt = getCurrentJalaliDateTime().fullString;
@@ -402,22 +395,23 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
             createdByName: currentUser?.fullName || 'وحید کمالی',
             createdAt: regDt,
           };
-          onSaveTransaction(newTx);
-          if (onShowToast) onShowToast(`سند هزینه حقوق به مبلغ ${formatCurrency(amt, currencyMode)} با موفقیت در دفتر هزینه‌ها ثبت شد.`);
+          linkedTransaction=newTx;
+
         }
       }
     }
 
+    if ((await onUpdateSalaryCell({employeeId:editingCell.employeeId,month:editingCell.month,year:selectedYear,amount:amt,bonus:bns,status:inputStatus,colorTag:inputColor,transaction:linkedTransaction}))===false) return;
     setEditingCell(null);
   };
 
   // عملیات ایجاد خودکار اسناد هزینه برای تمامی موارد فاقد سند (یکپارچه‌سازی با ۱ کلیک)
-  const handleExecuteBulkSync = () => {
-    if (!onSaveTransaction) return;
+  const handleExecuteBulkSync = async () => {
+    if (!onSaveTransactions) return;
     const list = reconciliationStats.manualOnlyList;
     if (list.length === 0) return;
 
-    let createdCount = 0;
+    const batch:FinancialTransaction[]=[];
     list.forEach((item, idx) => {
       const salMonthName = PERSIAN_MONTHS.find(m => m.num === item.month)?.name;
       // اگر کمتر از ۱۲ باشد، روز ۲ ماه بعد را در نظر می‌گیریم
@@ -450,10 +444,11 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
         createdAt: regDt,
       };
 
-      onSaveTransaction(tx);
-      createdCount++;
+      batch.push(tx);
     });
 
+    if (!(await onSaveTransactions(batch))) return;
+    const createdCount=batch.length;
     setIsBulkSyncModalOpen(false);
     if (onShowToast) {
       onShowToast(`تعداد ${toPersianDigits(createdCount)} سند هزینه با موفقیت در دفتر هزینه‌ها ثبت و ماتریس حقوق کاملاً یکپارچه گردید.`);
@@ -844,7 +839,9 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
                               </div>
                             ) : missingCount > 0 ? (
                               <button
-                                onClick={() => {
+                                onClick={async () => {
+                                  if(!onSaveTransactions)return;
+                                  const batch:FinancialTransaction[]=[];
                                   // ثبت سند برای موارد فاقد سند در این ماه
                                   activeEmps.filter(s => !s.hasTransactions).forEach((s, i) => {
                                     const emp = employees.find(e => e.id === s.cell?.employeeId);
@@ -878,9 +875,10 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
                                         createdByName: currentUser?.fullName || 'مسئول مالی',
                                         createdAt: regDt,
                                       };
-                                      onSaveTransaction(tx);
+                                      batch.push(tx);
                                     }
                                   });
+                                  if(!(await onSaveTransactions(batch)))return;
                                   if (onShowToast) onShowToast(`اسناد هزینه برای ${toPersianDigits(missingCount)} نفر در ماه ${month.name} ثبت گردید.`);
                                 }}
                                 className="text-[10px] px-2 py-1 rounded-lg font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-colors cursor-pointer"
@@ -1045,9 +1043,9 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
                                 )}
                                 <button
                                   type="button"
-                                  onClick={() => {
+                                  onClick={async () => {
                                     if (confirm('آیا از حذف این سند مالی اطمینان دارید؟')) {
-                                      onDeleteTransaction(tx.id);
+                                      if ((await onDeleteTransaction(tx.id)) === false) return;
                                       setEditingCell(null);
                                     }
                                   }}
@@ -1359,9 +1357,9 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
                                   </button>
                                 )}
                                 <button
-                                  onClick={() => {
+                                  onClick={async () => {
                                     if (confirm('آیا از حذف این سند مالی اطمینان دارید؟')) {
-                                      onDeleteTransaction(tx.id);
+                                      if ((await onDeleteTransaction(tx.id)) === false) return;
                                     }
                                   }}
                                   className="p-1 text-rose-500 hover:bg-rose-50 rounded"

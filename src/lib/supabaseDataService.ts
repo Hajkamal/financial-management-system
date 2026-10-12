@@ -1,3 +1,4 @@
+import { financialWritesEnabled, READ_ONLY_MESSAGE } from './financialWriteGuard';
 /**
  * لایه سرویس ارتباط با دیتابیس Supabase
  * تبدیل داده‌ها بین فرمت اپلیکیشن (camelCase) و دیتابیس (snake_case)
@@ -68,6 +69,8 @@ const transactionToDb = (tx: FinancialTransaction) => ({
   member_payout_type: tx.memberPayoutType || null,
   related_employee_id: tx.relatedEmployeeId || null,
   related_loan_id: tx.relatedLoanId || null,
+  salary_year: tx.salaryYear ?? null,
+  salary_month: tx.salaryMonth ?? null,
   created_by: tx.createdBy || null,
   created_by_name: tx.createdByName || null,
   created_at: tx.createdAt || null,
@@ -76,7 +79,7 @@ const transactionToDb = (tx: FinancialTransaction) => ({
   updated_at: tx.updatedAt || null,
 });
 
-const dbToTransaction = (row: any): FinancialTransaction => ({
+const dbToTransaction = (row: any): FinancialTransaction => Object.assign({
   id: row.id,
   type: row.type || 'expense',
   category: row.category || 'other',
@@ -100,7 +103,9 @@ const dbToTransaction = (row: any): FinancialTransaction => ({
   updatedBy: row.updated_by || null,
   updatedByName: row.updated_by_name || null,
   updatedAt: row.updated_at || null,
-});
+  salaryYear: row.salary_year ?? undefined,
+  salaryMonth: row.salary_month ?? undefined,
+} as FinancialTransaction, { rowVersion: Number(row.row_version) });
 
 // --- Employee ---
 const employeeToDb = (emp: Employee) => {
@@ -250,7 +255,6 @@ const appUserToDb = (u: AppUser) => ({
   first_name: u.firstName,
   last_name: u.lastName,
   full_name: u.fullName,
-  password: u.password || null,
   role: u.role,
   role_title: u.roleTitle,
   status: u.status,
@@ -268,7 +272,6 @@ const dbToAppUser = (row: any): AppUser => ({
   firstName: row.first_name,
   lastName: row.last_name,
   fullName: row.full_name,
-  password: row.password,
   role: row.role,
   roleTitle: row.role_title,
   status: row.status,
@@ -519,20 +522,21 @@ export function translateDbError(error: any): string {
 
 async function fetchAll<T>(table: string, converter: (row: any) => T): Promise<T[] | null> {
   if (!supabase || !isSupabaseConfigured) return null;
+  const profileColumns = 'id,email,first_name,last_name,full_name,role,role_title,status,permissions,avatar_color,last_login,phone,notes,created_at';
+  const rows: T[] = [];
   try {
-    const { data, error } = await supabase.from(table).select('*');
-    if (error) {
-      console.warn(`Supabase fetchAll(${table}) error:`, error.message);
-      return null;
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await supabase.from(table).select(table === 'app_users' ? profileColumns : '*')
+        .order(table === 'fiscal_years' ? 'year' : 'id').range(offset, offset + 499);
+      if (error || !data) return null;
+      rows.push(...data.map(converter));
+      if (data.length < 500) return rows;
     }
-    return (data || []).map(converter);
-  } catch (err) {
-    console.warn(`Supabase fetchAll(${table}) exception:`, err);
-    return null;
-  }
+  } catch { return null; }
 }
 
 async function upsertRow(table: string, row: any): Promise<DataServiceResult> {
+  if (!financialWritesEnabled()) return { success: false, error: READ_ONLY_MESSAGE };
   if (!supabase || !isSupabaseConfigured) {
     return { success: false, error: 'پیکربندی دیتابیس Supabase در دسترس نیست.' };
   }
@@ -564,6 +568,7 @@ async function upsertMany(table: string, rows: any[]): Promise<DataServiceResult
 }
 
 async function upsertManyDetailed(table: string, rows: any[]): Promise<{ ok: boolean; error?: string; code?: string }> {
+  if (!financialWritesEnabled()) return { ok: false, error: READ_ONLY_MESSAGE };
   if (!supabase || !isSupabaseConfigured || rows.length === 0) return { ok: false, error: 'Not configured or empty' };
   try {
     // Supabase upsert with batch — chunk into 500 rows at a time
@@ -587,6 +592,7 @@ async function upsertManyDetailed(table: string, rows: any[]): Promise<{ ok: boo
 }
 
 async function deleteRow(table: string, id: string | number, idColumn: string = 'id'): Promise<DataServiceResult> {
+  if (!financialWritesEnabled()) return { success: false, error: READ_ONLY_MESSAGE };
   if (!supabase || !isSupabaseConfigured) {
     return { success: false, error: 'پیکربندی دیتابیس Supabase در دسترس نیست.' };
   }
@@ -604,6 +610,7 @@ async function deleteRow(table: string, id: string | number, idColumn: string = 
 }
 
 async function deleteByColumn(table: string, column: string, value: string): Promise<DataServiceResult> {
+  if (!financialWritesEnabled()) return { success: false, error: READ_ONLY_MESSAGE };
   if (!supabase || !isSupabaseConfigured) {
     return { success: false, error: 'پیکربندی دیتابیس Supabase در دسترس نیست.' };
   }
@@ -621,6 +628,7 @@ async function deleteByColumn(table: string, column: string, value: string): Pro
 }
 
 async function clearTable(table: string): Promise<DataServiceResult> {
+  if (!financialWritesEnabled()) return { success: false, error: READ_ONLY_MESSAGE };
   if (!supabase || !isSupabaseConfigured) {
     return { success: false, error: 'پیکربندی دیتابیس Supabase در دسترس نیست.' };
   }
@@ -661,51 +669,25 @@ export const SupabaseDataService = {
    * ذخیره یا ویرایش تراکنش با بررسی تعارض همزمانی (Optimistic Concurrency Control)
    * از بازنویسی اطلاعات جدیدتر ثبت‌شده توسط کاربر دیگر جلوگیری می‌کند.
    */
-  saveTransaction: async (tx: FinancialTransaction, expectedUpdatedAt?: string | null): Promise<DataServiceResult> => {
-    if (!supabase || !isSupabaseConfigured) {
-      return { success: false, error: 'پیکربندی دیتابیس Supabase در دسترس نیست.' };
-    }
-
-    try {
-      // اگر تراکنش از قبل وجود دارد، تاریخ آخرین ویرایش در سرور را چک می‌کنیم
-      if (tx.id) {
-        const { data: existing, error: fetchErr } = await supabase
-          .from('transactions')
-          .select('id, updated_at, db_updated_at')
-          .eq('id', tx.id)
-          .maybeSingle();
-
-        if (!fetchErr && existing && existing.updated_at) {
-          const knownTimestamp = expectedUpdatedAt || tx.updatedAt;
-          // اگر سرور تاریخچه ویرایشی جدیدتر دارد که با نسخه کلاینت متفاوت است
-          if (knownTimestamp && existing.updated_at !== knownTimestamp) {
-            const serverTime = new Date(existing.updated_at).getTime();
-            const clientKnownTime = new Date(knownTimestamp).getTime();
-            if (!isNaN(serverTime) && !isNaN(clientKnownTime) && serverTime > clientKnownTime) {
-              return {
-                success: false,
-                isConflict: true,
-                error: 'هشدار تعارض همزمانی: این سند مالی اخیراً توسط کاربر دیگری ویرایش شده است. جهت جلوگیری از بازنویسی تصادفی اطلاعات، لطفاً ابتدا صفحه را رفرش نمایید.',
-              };
-            }
-          }
-        }
-      }
-
-      const row = transactionToDb({
-        ...tx,
-        updatedAt: new Date().toISOString(),
-      });
-
-      return await upsertRow('transactions', row);
-    } catch (err: any) {
-      return { success: false, error: translateDbError(err) };
-    }
+  saveTransaction: async (tx: FinancialTransaction, expectedVersion?: number | null): Promise<DataServiceResult> => {
+    if (!financialWritesEnabled()) return { success: false, error: READ_ONLY_MESSAGE };
+    if (!supabase) return { success: false, error: 'Supabase در دسترس نیست.' };
+    const version = expectedVersion ?? (tx as any).rowVersion ?? null;
+    const { data, error } = await supabase.rpc('save_financial_transaction', { p_record: transactionToDb(tx), p_expected_version: version });
+    if (error) return { success: false, error: error.code === '40001' ? 'سند تغییر کرده است؛ ابتدا اطلاعات تازه را دریافت کنید.' : translateDbError(error), code: error.code, isConflict: error.code === '40001' };
+    return { success: true, data: dbToTransaction(data) };
   },
-
-  saveTransactions: (txs: FinancialTransaction[]) => upsertMany('transactions', txs.map(transactionToDb)),
-  deleteTransaction: (id: string) => deleteRow('transactions', id),
-  clearTransactions: () => clearTable('transactions'),
+  saveTransactions: async (txs: FinancialTransaction[]): Promise<DataServiceResult> => {
+    // This legacy multi-row operation is NOT atomic; keep disabled in phase one.
+    return { success: false, error: 'ذخیره گروهی تا تکمیل مسیر اتمیک غیرفعال است.' };
+  },
+  deleteTransaction: async (id: string, expectedVersion?: number): Promise<DataServiceResult> => {
+    if (!financialWritesEnabled()) return { success: false, error: READ_ONLY_MESSAGE };
+    if (!supabase || expectedVersion === undefined) return { success: false, error: 'نسخه معتبر سند برای حذف لازم است.' };
+    const { error } = await supabase.rpc('delete_financial_transaction', { p_id: id, p_expected_version: expectedVersion });
+    return error ? { success: false, error: translateDbError(error), code: error.code } : { success: true };
+  },
+  clearTransactions: async (): Promise<DataServiceResult> => ({ success: false, error: 'حذف گروهی غیرفعال است.' }),
 
   // --- کارمندان ---
   fetchEmployees: () => fetchAll('employees', dbToEmployee),
@@ -786,6 +768,7 @@ export const SupabaseDataService = {
         fetchAll('service_tariffs', dbToServiceTariff),
       ]);
 
+      if ([fiscalYears,transactions,employees,salaryMatrix,members,loans,users,bankAccounts,vatInvoices,serviceTariffs].some(v => v === null)) return null;
       return {
         fiscalYears: fiscalYears || [],
         transactions: transactions || [],

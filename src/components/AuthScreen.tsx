@@ -28,10 +28,10 @@ import {
 } from '../lib/supabase';
 import { AppUser, UserRole } from '../types';
 import { getPermissionsByRole } from '../utils/permissions';
-import { INITIAL_USERS } from '../data/initialData';
+
 import { toEnglishDigits, normalizeEmail, normalizePassword } from '../utils/formatters';
-import { hashPassword, verifyPassword } from '../utils/crypto';
-import { serverApi } from '../lib/serverApi';
+
+
 
 interface AuthScreenProps {
   users?: AppUser[];
@@ -43,7 +43,7 @@ interface AuthScreenProps {
 type AuthMode = 'login' | 'signup' | 'forgot_password';
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ 
-  users = INITIAL_USERS, 
+  users = [], 
   onLoginUser,
   onRegisterUser,
   onAuthSuccess 
@@ -60,260 +60,36 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const safeUsers = Array.isArray(users) && users.length > 0 ? users : INITIAL_USERS;
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
+    if (isLoading) return;
+    setErrorMessage(null); setSuccessMessage(null);
+    if (!supabase || !isSupabaseConfigured) { setErrorMessage('اتصال امن Supabase تنظیم نشده است؛ ورود محلی غیرفعال است.'); return; }
     const cleanEmail = normalizeEmail(email);
-    const cleanPassword = normalizePassword(password);
-    const cleanConfirm = normalizePassword(confirmPassword);
-
-    if (!cleanEmail) {
-      setErrorMessage('لطفاً نشانی ایمیل را وارد نمایید.');
-      return;
-    }
-
-    if (mode === 'forgot_password') {
-      setIsLoading(true);
-      try {
-        if (isSupabaseConfigured && supabase) {
-          const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-            redirectTo: window.location.origin,
-          });
-          if (error) throw error;
-          setSuccessMessage('لینک بازیابی رمز عبور به ایمیل شما ارسال شد.');
-        } else {
-          // در حالت سرور داخلی: ثبت درخواست بدون فاش کردن رمز
-          const found = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
-          if (found) {
-            setSuccessMessage(`درخواست بازیابی برای حساب «${found.fullName}» ثبت گردید. جهت دریافت یا بازنشانی رمز عبور، با مدیر کل سامانه هماهنگ نمایید.`);
-            setMode('login');
-          } else {
-            setErrorMessage('کاربری با این نشانی ایمیل در سامانه یافت نشد.');
-          }
-        }
-      } catch (err: any) {
-        setErrorMessage(getPersianAuthErrorMessage(err));
-      } finally {
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    if (!cleanPassword) {
-      setErrorMessage('لطفاً رمز عبور را وارد نمایید.');
-      return;
-    }
-
-    if (mode === 'signup') {
-      if (!firstName.trim() || !lastName.trim()) {
-        setErrorMessage('لطفاً نام و نام خانوادگی را وارد نمایید.');
-        return;
-      }
-      if (cleanPassword.length < 4) {
-        setErrorMessage('رمز عبور باید حداقل شامل ۴ کاراکتر باشد.');
-        return;
-      }
-      if (cleanPassword !== cleanConfirm) {
-        setErrorMessage('رمز عبور و تکرار آن با یکدیگر مطابقت ندارند.');
-        return;
-      }
-
-      // Check if user already exists
-      const existingUser = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
-      if (existingUser) {
-        if (existingUser.status === 'pending') {
-          setErrorMessage('درخواست ثبت‌نام شما قبلاً ثبت شده و در انتظار تایید مدیر ارشد سامانه است.');
-        } else if (existingUser.status === 'inactive') {
-          setErrorMessage('این حساب کاربری غیرفعال شده است. جهت فعال‌سازی مجدد با مدیر کل سامانه تماس بگیرید.');
-        } else {
-          setErrorMessage('کاربری با این نشانی ایمیل قبلاً در سامانه ثبت شده است. لطفاً از بخش «ورود به سامانه» وارد شوید.');
-        }
-        return;
-      }
-
-      setIsLoading(true);
-      try {
-        // Register in Supabase if configured (catch error gracefully so app never blocks)
-        if (isSupabaseConfigured && supabase) {
-          try {
-            const { error } = await supabase.auth.signUp({
-              email: cleanEmail,
-              password: cleanPassword,
-            });
-            if (error && !error.message.toLowerCase().includes('already registered')) {
-              console.warn('Supabase auth notice:', error.message);
-            }
-          } catch (supErr) {
-            console.warn('Supabase auth notice:', supErr);
-          }
-        }
-
-        // Check if this is the super admin email, otherwise default to pending
-        const isSuper = cleanEmail === 'vahidkamali03@gmail.com';
-        const hashedPassword = await hashPassword(cleanPassword);
-        const newUserData: Omit<AppUser, 'id' | 'createdAt'> = {
-          email: cleanEmail,
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          fullName: `${firstName.trim()} ${lastName.trim()}`,
-          password: hashedPassword,
-          role: isSuper ? 'super_admin' : 'viewer',
-          roleTitle: isSuper ? 'مدیر ارشد سامانه' : 'کاربر (در انتظار تایید)',
-          status: isSuper ? 'active' : 'pending',
-          permissions: getPermissionsByRole(isSuper ? 'super_admin' : 'viewer'),
-        };
-
-        if (onRegisterUser) {
-          onRegisterUser(newUserData);
-        }
-
-        if (isSuper) {
-          const newUser: AppUser = {
-            ...newUserData,
-            id: `user-${Date.now()}`,
-            createdAt: 'امروز',
-          };
-          setSuccessMessage('حساب کاربری مدیر ارشد با موفقیت ایجاد شد! در حال ورود به سامانه...');
-          setTimeout(() => {
-            if (onLoginUser) onLoginUser(newUser);
-            if (onAuthSuccess) onAuthSuccess();
-          }, 500);
-        } else {
-          // New regular user: MUST NOT enter, must wait for admin approval
-          setSuccessMessage('درخواست ثبت‌نام شما با موفقیت ثبت شد. حساب شما در حالت «در انتظار تایید مدیر» قرار گرفت و پس از تایید توسط مدیر کل سامانه (آقای وحید کمالی) فعال خواهد شد.');
-          setFirstName('');
-          setLastName('');
-          setPassword('');
-          setConfirmPassword('');
-          setMode('login');
-        }
-
-      } catch (err: any) {
-        setErrorMessage(getPersianAuthErrorMessage(err));
-      } finally {
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    // Mode: 'login'
+    if (!cleanEmail) { setErrorMessage('ایمیل را وارد کنید.'); return; }
+    if (mode === 'signup') { setErrorMessage('ایجاد و اتصال حساب جدید باید توسط مدیر انجام شود؛ ثبت‌نام عمومی در این نسخه غیرفعال است.'); return; }
     setIsLoading(true);
     try {
-      // اگر دیتابیس Supabase متصل و پیکربندی شده است، احراز هویت اولیه منحصراً از طریق Supabase انجام می‌شود
-      if (isSupabaseConfigured && supabase) {
-        let authResult = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: cleanPassword,
-        });
-
-        // در صورت عدم وجود کاربر در Supabase Auth اما وجود در لیست پیش‌فرض اولیه (مانند سوپرادمین وحید کمالی)
-        if (authResult.error && authResult.error.message.toLowerCase().includes('invalid login credentials')) {
-          const matchedInitial = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
-          if (matchedInitial) {
-            const isMatch = await verifyPassword(cleanPassword, matchedInitial.password || '');
-            if (isMatch) {
-              // ثبت‌نام و فعال‌سازی خودکار در Supabase Auth برای ایجاد نشست معتبر JWT
-              await supabase.auth.signUp({
-                email: cleanEmail,
-                password: cleanPassword,
-                options: {
-                  data: {
-                    fullName: matchedInitial.fullName,
-                    firstName: matchedInitial.firstName,
-                    lastName: matchedInitial.lastName,
-                    role: matchedInitial.role,
-                    roleTitle: matchedInitial.roleTitle,
-                    status: 'active',
-                  }
-                }
-              });
-              // تلاش مجدد برای ورود رسمی
-              authResult = await supabase.auth.signInWithPassword({
-                email: cleanEmail,
-                password: cleanPassword,
-              });
-            }
-          }
-        }
-
-        if (authResult.error) {
-          throw authResult.error;
-        }
-
-        if (authResult.data.session && authResult.data.user) {
-          const sUser = authResult.data.user;
-          const meta = sUser.user_metadata || {};
-          const isSuper = cleanEmail === 'vahidkamali03@gmail.com';
-          const existing = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
-
-          const userRole: UserRole = (meta.role as UserRole) || existing?.role || (isSuper ? 'super_admin' : 'viewer');
-          const userStatus = meta.status || existing?.status || 'active';
-
-          if (userStatus === 'pending') {
-            await supabase.auth.signOut();
-            setErrorMessage('حساب کاربری شما هنوز به تایید مدیر ارشد سامانه نرسیده است. لطفاً منتظر بمانید تا مدیر سامانه حساب شما را فعال کند.');
-            setIsLoading(false);
-            return;
-          }
-
-          if (userStatus === 'inactive') {
-            await supabase.auth.signOut();
-            setErrorMessage('این حساب کاربری غیرفعال یا معلق شده است. لطفاً با مدیر کل سامانه تماس بگیرید.');
-            setIsLoading(false);
-            return;
-          }
-
-          const dynamicUser: AppUser = {
-            id: existing?.id || sUser.id,
-            email: cleanEmail,
-            firstName: meta.firstName || existing?.firstName || 'کاربر',
-            lastName: meta.lastName || existing?.lastName || 'سامانه',
-            fullName: meta.fullName || existing?.fullName || cleanEmail,
-            role: userRole,
-            roleTitle: meta.roleTitle || existing?.roleTitle || (userRole === 'super_admin' ? 'مدیر ارشد سامانه' : 'کاربر سامانه'),
-            status: userStatus as any,
-            permissions: getPermissionsByRole(userRole),
-            createdAt: sUser.created_at || 'امروز',
-          };
-
-          if (onLoginUser) onLoginUser(dynamicUser);
-          if (onAuthSuccess) onAuthSuccess();
-          return;
-        }
+      if (mode === 'forgot_password') {
+        const result = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: window.location.origin });
+        if (result.error) throw result.error;
+        setSuccessMessage('اگر حساب قابل بازیابی باشد، راهنمای بازیابی ارسال می‌شود.');
+        return;
       }
-
-      // حالت آفلاین / بدون اتصال Supabase (صرفاً در محیط توسعه محلی)
-      const localMatchedUser = safeUsers.find(u => normalizeEmail(u.email) === cleanEmail);
-      if (localMatchedUser) {
-        if (localMatchedUser.status === 'pending') {
-          setErrorMessage('حساب کاربری شما در انتظار تایید مدیر ارشد سامانه است.');
-          setIsLoading(false);
-          return;
-        }
-        if (localMatchedUser.status === 'inactive') {
-          setErrorMessage('این حساب کاربری غیرفعال شده است.');
-          setIsLoading(false);
-          return;
-        }
-
-        const isPasswordValid = await verifyPassword(cleanPassword, localMatchedUser.password || '');
-        if (isPasswordValid) {
-          if (onLoginUser) onLoginUser(localMatchedUser);
-          if (onAuthSuccess) onAuthSuccess();
-          return;
-        }
+      const result = await supabase.auth.signInWithPassword({ email: cleanEmail, password: normalizePassword(password) });
+      if (result.error) throw result.error;
+      if (!result.data.session) throw new Error('نشست معتبر ایجاد نشد.');
+      const profile = await supabase.rpc('get_my_profile');
+      if (profile.error || !profile.data || profile.data.status !== 'active' || profile.data.authUserId !== result.data.user?.id) {
+        await supabase.auth.signOut();
+        throw new Error('حساب شما هنوز به پروفایل فعال سامانه متصل نشده است؛ با مدیر هماهنگ کنید.');
       }
-
-      setErrorMessage('ایمیل یا رمز عبور وارد شده نادرست است.');
-    } catch (err: any) {
-      setErrorMessage(getPersianAuthErrorMessage(err));
-    } finally {
-      setIsLoading(false);
-    }
+      // Auth state listener restores the real Supabase user; never fabricate one.
+      onAuthSuccess?.();
+    } catch (err: any) { setErrorMessage(getPersianAuthErrorMessage(err)); }
+    finally { setIsLoading(false); }
   };
 
   return (

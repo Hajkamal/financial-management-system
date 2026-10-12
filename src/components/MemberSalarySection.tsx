@@ -67,9 +67,9 @@ interface MemberSalarySectionProps {
     trackingCode?: string;
     salaryMonth?: PersianMonthNumber;
     salaryYear?: number;
-  }) => void;
-  onSaveTransaction?: (transaction: FinancialTransaction) => void;
-  onDeleteTransaction: (id: string) => void;
+  }) => boolean | void | Promise<boolean | void>;
+  onSaveTransaction?: (transaction: FinancialTransaction) => boolean | void | Promise<boolean | void>;
+  onDeleteTransaction: (id: string) => boolean | void | Promise<boolean | void>;
   onNavigateToMembers?: () => void;
   onOpenPersonHistory?: (person: PersonTarget) => void;
   canEdit?: boolean;
@@ -330,7 +330,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
    * ثبت یا ویرایش سند پرداختی از داخل مودال سلول
    * «یا در ماتریس سند باید بخونه یا دستی ما بزنیم که بعد به عنوان سند پرداختی اون شخص هم ثبت بشه»
    */
-  const handleSaveCellTransaction = (e: React.FormEvent) => {
+  const handleSaveCellTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeCellModal) return;
 
@@ -372,13 +372,13 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
           updatedByName: currentUser?.fullName || 'کاربر سیستم',
         };
 
-        onSaveTransaction(updatedTx);
+        if ((await onSaveTransaction(updatedTx)) === false) return;
         if (onShowToast) onShowToast(`سند پرداختی با مبلغ ${formatCurrency(numAmount, currencyMode)} با موفقیت ویرایش شد.`);
         handleCancelEditTxInCell();
       }
     } else {
       // ایجاد سند پرداختی جدید در دفتر هزینه‌ها و درج خودکار در ماتریس
-      onAddMemberPayoutTransaction({
+      if ((await onAddMemberPayoutTransaction({
         memberId: member.id,
         type: cellFormType,
         amount: numAmount,
@@ -390,7 +390,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
         trackingCode: finalTracking,
         salaryMonth: cellFormType === 'salary' ? month : undefined,
         salaryYear: cellFormType === 'salary' ? selectedYear : undefined,
-      });
+      })) === false) return;
 
       if (onShowToast) {
         onShowToast(`سند پرداختی به ${member.name} به مبلغ ${formatCurrency(numAmount, currencyMode)} ثبت و در ماتریس درج شد.`);
@@ -434,7 +434,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
     }
   };
 
-  const handleStandaloneFormSubmit = (e: React.FormEvent) => {
+  const handleStandaloneFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const numAmount = Number(standaloneAmount) || 0;
     if (numAmount <= 0 || !standaloneMemberId) return;
@@ -455,7 +455,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
     const finalTitle = standaloneTitle.trim() || defaultTitle;
     const finalDateString = `${selectedYear}/${standaloneMonth < 10 ? '0' + standaloneMonth : standaloneMonth}/${standaloneDay < 10 ? '0' + standaloneDay : standaloneDay}`;
 
-    onAddMemberPayoutTransaction({
+    if ((await onAddMemberPayoutTransaction({
       memberId: standaloneMemberId,
       type: standalonePayoutType,
       amount: numAmount,
@@ -467,7 +467,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
       trackingCode: standaloneTrackingCode.trim() || `MEM-${Date.now().toString().slice(-6)}`,
       salaryMonth: standalonePayoutType === 'salary' ? standaloneSalaryMonth : undefined,
       salaryYear: standalonePayoutType === 'salary' ? standaloneSalaryYear : undefined,
-    });
+    })) === false) return;
 
     setIsStandaloneModalOpen(false);
   };
@@ -1703,9 +1703,9 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
         title="حذف سند دریافتی عضو"
         itemName={deletingTx?.title}
         warningText="آیا از حذف این سند مالی اطمینان دارید؟ مبلغ این سند از سرفصل هزینه‌ها و ماتریس دریافتی عضو کسر خواهد شد."
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deletingTx) {
-            onDeleteTransaction(deletingTx.id);
+            if ((await onDeleteTransaction(deletingTx.id)) === false) return;
             setDeletingTx(null);
           }
         }}

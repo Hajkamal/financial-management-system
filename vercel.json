@@ -9,5 +9,7 @@
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build"
 }

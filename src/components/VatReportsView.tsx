@@ -113,10 +113,10 @@ interface VatReportsViewProps {
   selectedYear: number;
   currencyMode?: CurrencyMode;
   companyName: string;
-  onSaveInvoice: (invoice: VatInvoice) => void;
-  onDeleteInvoice: (id: string) => void;
+  onSaveInvoice: (invoice: VatInvoice) => boolean | void | Promise<boolean | void>;
+  onDeleteInvoice: (id: string) => boolean | void | Promise<boolean | void>;
   onSyncInvoiceToTransactions: (invoice: VatInvoice) => void;
-  onSaveServiceTariff: (tariff: ServiceTariff) => void;
+  onSaveServiceTariff: (tariff: ServiceTariff) => boolean | void | Promise<boolean | void>;
   onShowToast: (message: string) => void;
   currentUser?: AppUser | null;
 }
@@ -377,7 +377,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
     setIsInvoiceModalOpen(true);
   };
 
-  const handleSynthesizeSeasonalInvoice = (season: VatSeason) => {
+  const handleSynthesizeSeasonalInvoice = async (season: VatSeason) => {
     const months = SEASON_MONTHS[season] || [1, 2, 3];
     const monthInvoices = invoices.filter(
       i => i.year === selectedYear && i.periodType === 'monthly' && i.month && months.includes(i.month)
@@ -489,7 +489,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
       updatedAt: now.dateFormatted
     };
 
-    onSaveInvoice(seasonalInv);
+    if ((await onSaveInvoice(seasonalInv)) === false) return;
     onShowToast(`صورتحساب فصلی ۳ ماهه ${season} با موفقیت از ترکیب ${toPersianDigits(monthInvoices.length)} ماه ثبت‌شده صادر و محاسبه گردید.`);
   };
 
@@ -503,7 +503,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
   };
 
   // Add new tariff price item
-  const handleAddNewPriceToTariff = () => {
+  const handleAddNewPriceToTariff = async () => {
     if (!targetTariffForNewPrice || !newPriceValue || newPriceValue <= 0) {
       onShowToast('لطفاً مبلغ کارمزد جدید را وارد نمایید.');
       return;
@@ -523,7 +523,7 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
       ]
     };
 
-    onSaveServiceTariff(updated);
+    if ((await onSaveServiceTariff(updated)) === false) return;
     setIsNewPriceModalOpen(false);
     setTargetTariffForNewPrice(null);
     setNewPriceValue(0);
@@ -1097,9 +1097,9 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
                       </button>
 
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (confirm('آیا از حذف این صورتحساب اطمینان دارید؟')) {
-                            onDeleteInvoice(inv.id);
+                            if ((await onDeleteInvoice(inv.id)) === false) return;
                           }
                         }}
                         className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors cursor-pointer"
@@ -1492,8 +1492,8 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
             setIsInvoiceModalOpen(false);
             setEditingInvoice(null);
           }}
-          onSave={(inv) => {
-            onSaveInvoice(inv);
+          onSave={async (inv) => {
+            if ((await onSaveInvoice(inv)) === false) return;
             setIsInvoiceModalOpen(false);
             setEditingInvoice(null);
             onShowToast('صورتحساب فروش با موفقیت ذخیره گردید.');

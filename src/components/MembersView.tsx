@@ -36,8 +36,8 @@ interface MembersViewProps {
   transactions: FinancialTransaction[];
   selectedYear: number;
   currencyMode: CurrencyMode;
-  onSaveMember: (member: CompanyMember) => void;
-  onDeleteMember: (id: string) => void;
+  onSaveMember: (member: CompanyMember) => boolean | void | Promise<boolean | void>;
+  onDeleteMember: (id: string) => boolean | void | Promise<boolean | void>;
   onAddMemberPayoutTransaction: (params: {
     memberId: string;
     type: MemberPayoutType;
@@ -45,7 +45,7 @@ interface MembersViewProps {
     month: PersianMonthNumber;
     title: string;
     description?: string;
-  }) => void;
+  }) => boolean | void | Promise<boolean | void>;
   companyName?: string;
   onShowToast?: (msg: string) => void;
   canEdit?: boolean;
@@ -118,7 +118,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
     setIsMemberModalOpen(true);
   };
 
-  const handleSaveMemberForm = (e: React.FormEvent) => {
+  const handleSaveMemberForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
@@ -135,7 +135,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
       notes: notes.trim() || undefined,
     };
 
-    onSaveMember(mem);
+    if ((await onSaveMember(mem)) === false) return;
     setIsMemberModalOpen(false);
   };
 
@@ -147,7 +147,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
     setPayoutDesc('');
   };
 
-  const handleSubmitPayout = (e: React.FormEvent) => {
+  const handleSubmitPayout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payoutModalMember) return;
     const amt = Number(payoutAmount) || 0;
@@ -156,14 +156,14 @@ export const MembersView: React.FC<MembersViewProps> = ({
     const monthName = PERSIAN_MONTHS.find(m => m.num === payoutMonth)?.name || payoutMonth;
     const typeLabel = payoutType === 'salary' ? 'حقوق کارکرد ماهانه' : 'برداشت جداگانه سود';
 
-    onAddMemberPayoutTransaction({
+    if ((await onAddMemberPayoutTransaction({
       memberId: payoutModalMember.id,
       type: payoutType,
       amount: amt,
       month: payoutMonth,
       title: `${typeLabel} ${payoutModalMember.name} (ماه ${monthName})`,
       description: payoutDesc.trim() || undefined,
-    });
+    })) === false) return;
 
     setPayoutModalMember(null);
   };
@@ -642,9 +642,9 @@ export const MembersView: React.FC<MembersViewProps> = ({
         title="حذف عضو / سهامدار"
         itemName={deletingMember?.name}
         warningText="آیا از حذف این عضو یا سهامدار اطمینان دارید؟ توجه فرمایید مجموع سهام اعضا باید ۱۰۰٪ باقی بماند."
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deletingMember) {
-            onDeleteMember(deletingMember.id);
+            if ((await onDeleteMember(deletingMember.id)) === false) return;
             setDeletingMember(null);
           }
         }}

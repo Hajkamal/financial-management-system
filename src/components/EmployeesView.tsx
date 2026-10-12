@@ -39,8 +39,8 @@ interface EmployeesViewProps {
   transactions?: FinancialTransaction[];
   selectedYear: number;
   currencyMode: CurrencyMode;
-  onSaveEmployee: (employee: Employee) => void;
-  onDeleteEmployee: (id: string) => void;
+  onSaveEmployee: (employee: Employee) => boolean | void | Promise<boolean | void>;
+  onDeleteEmployee: (id: string) => boolean | void | Promise<boolean | void>;
   companyName?: string;
   onShowToast?: (msg: string) => void;
   canEdit?: boolean;
@@ -142,7 +142,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     setIsNewModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
@@ -209,12 +209,12 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       salaryHistory: updatedHistory,
     };
 
-    onSaveEmployee(newEmp);
+    if ((await onSaveEmployee(newEmp)) === false) return;
     setIsNewModalOpen(false);
   };
 
-  const handleUpdateFromHistoryModal = (updated: Employee) => {
-    onSaveEmployee(updated);
+  const handleUpdateFromHistoryModal = async (updated: Employee) => {
+    if ((await onSaveEmployee(updated)) === false) return;
     setHistoryModalEmployee(updated);
   };
 
@@ -953,9 +953,9 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         title="حذف پرونده کارمند"
         itemName={deletingEmp?.name}
         warningText="آیا از حذف این کارمند اطمینان دارید؟ تمامی سوابق مربوطه از ماتریس حقوق سال نیز حذف خواهند شد."
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deletingEmp) {
-            onDeleteEmployee(deletingEmp.id);
+            if ((await onDeleteEmployee(deletingEmp.id)) === false) return;
             setDeletingEmp(null);
           }
         }}
