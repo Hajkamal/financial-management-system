@@ -1,0 +1,479 @@
+import type {
+  FinancialTransaction,
+  FiscalYear,
+  Employee,
+  SalaryMatrixItem,
+  CompanyMember,
+  Loan,
+  AppUser,
+  BankAccount,
+  VatInvoice,
+  ServiceTariff,
+  PersianMonthNumber,
+  CustomCategoryDefinition,
+} from '../types';
+
+// =====================================================
+// تبدیل‌کننده‌ها: App ←→ Database
+// =====================================================
+
+// --- FiscalYear ---
+const fiscalYearToDb = (fy: FiscalYear) => ({
+  year: fy.year,
+  title: fy.title,
+  start_date: fy.startDate,
+  end_date: fy.endDate,
+  is_closed: fy.isClosed,
+  closed_at: fy.closedAt || null,
+  notes: fy.notes || null,
+  opening_balance: fy.openingBalance || 0,
+  closing_balance: fy.closingBalance ?? null,
+});
+
+const dbToFiscalYear = (row: any): FiscalYear => ({
+  year: row.year,
+  title: row.title,
+  startDate: row.start_date,
+  endDate: row.end_date,
+  isClosed: row.is_closed,
+  closedAt: row.closed_at,
+  notes: row.notes,
+  openingBalance: row.opening_balance,
+  closingBalance: row.closing_balance,
+});
+
+// --- Transaction ---
+const transactionToDb = (tx: FinancialTransaction) => ({
+  id: tx.id,
+  type: tx.type,
+  category: tx.category,
+  sub_category: tx.subCategory || null,
+  amount: tx.amount,
+  year: tx.year,
+  month: tx.month,
+  day: tx.day,
+  date_string: tx.dateString,
+  title: tx.title,
+  description: tx.description || null,
+  recipient_or_payer: tx.recipientOrPayer || null,
+  tracking_code: tx.trackingCode || null,
+  related_member_id: tx.relatedMemberId || null,
+  member_payout_type: tx.memberPayoutType || null,
+  related_employee_id: tx.relatedEmployeeId || null,
+  related_loan_id: tx.relatedLoanId || null,
+  salary_year: tx.salaryYear ?? null,
+  salary_month: tx.salaryMonth ?? null,
+  created_by: tx.createdBy || null,
+  created_by_name: tx.createdByName || null,
+  created_at: tx.createdAt || null,
+  updated_by: tx.updatedBy || null,
+  updated_by_name: tx.updatedByName || null,
+  updated_at: tx.updatedAt || null,
+});
+
+const dbToTransaction = (row: any): FinancialTransaction => Object.assign({
+  id: row.id,
+  type: row.type || 'expense',
+  category: row.category || 'other',
+  subCategory: row.sub_category || null,
+  amount: Number(row.amount) || 0,
+  year: Number(row.year) || 1405,
+  month: (Number(row.month) || 1) as PersianMonthNumber,
+  day: Number(row.day) || 1,
+  dateString: row.date_string || '',
+  title: row.title || row.description || '',
+  description: row.description || '',
+  recipientOrPayer: row.recipient_or_payer || '',
+  trackingCode: row.tracking_code || '',
+  relatedMemberId: row.related_member_id || null,
+  memberPayoutType: row.member_payout_type || null,
+  relatedEmployeeId: row.related_employee_id || null,
+  relatedLoanId: row.related_loan_id || null,
+  createdBy: row.created_by || null,
+  createdByName: row.created_by_name || null,
+  createdAt: row.created_at || null,
+  updatedBy: row.updated_by || null,
+  updatedByName: row.updated_by_name || null,
+  updatedAt: row.updated_at || null,
+  salaryYear: row.salary_year ?? undefined,
+  salaryMonth: row.salary_month ?? undefined,
+} as FinancialTransaction, { rowVersion: Number(row.row_version) });
+
+// --- Employee ---
+const employeeToDb = (emp: Employee) => {
+  let packedNotes = emp.notes || null;
+  if (Array.isArray(emp.salaryHistory) && emp.salaryHistory.length > 0) {
+    const cleanNotes = (emp.notes || '').replace(/\n?<!--SALARY_HISTORY:.*?-->/s, '').trim();
+    packedNotes = `${cleanNotes ? cleanNotes + '\n' : ''}<!--SALARY_HISTORY:${JSON.stringify(emp.salaryHistory)}-->`;
+  }
+  return {
+    id: emp.id,
+    name: emp.name,
+    role: emp.role,
+    start_date: emp.startDate,
+    end_date: emp.endDate || null,
+    status: emp.status,
+    base_salary: emp.baseSalary,
+    has_insurance: emp.hasInsurance,
+    insurance_number: emp.insuranceNumber || null,
+    iban: emp.iban || null,
+    national_id: emp.nationalId || null,
+    phone: emp.phone || null,
+    notes: packedNotes,
+  };
+};
+
+const dbToEmployee = (row: any): Employee => {
+  let cleanNotes = row.notes || undefined;
+  let parsedHistory: any[] | undefined = undefined;
+
+  if (row.notes && typeof row.notes === 'string' && row.notes.includes('<!--SALARY_HISTORY:')) {
+    const match = row.notes.match(/<!--SALARY_HISTORY:(.*?)-->/s);
+    if (match && match[1]) {
+      try {
+        parsedHistory = JSON.parse(match[1]);
+      } catch (e) {
+        console.warn('Could not parse salary history from notes:', e);
+      }
+    }
+    cleanNotes = row.notes.replace(/\n?<!--SALARY_HISTORY:.*?-->/s, '').trim() || undefined;
+  }
+
+  if (row.salary_history && Array.isArray(row.salary_history)) {
+    parsedHistory = row.salary_history;
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    role: row.role,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    status: row.status,
+    baseSalary: Number(row.base_salary) || 0,
+    hasInsurance: Boolean(row.has_insurance),
+    insuranceNumber: row.insurance_number,
+    iban: row.iban,
+    nationalId: row.national_id,
+    phone: row.phone,
+    notes: cleanNotes,
+    salaryHistory: parsedHistory,
+  };
+};
+
+// --- SalaryMatrixItem ---
+const salaryMatrixToDb = (item: SalaryMatrixItem) => ({
+  id: item.id,
+  employee_id: item.employeeId,
+  year: item.year,
+  month: item.month,
+  amount: item.amount,
+  bonus: item.bonus ?? null,
+  status: item.status,
+  color_tag: item.colorTag || null,
+});
+
+const dbToSalaryMatrix = (row: any): SalaryMatrixItem => ({
+  id: row.id,
+  employeeId: row.employee_id,
+  year: row.year,
+  month: row.month as PersianMonthNumber,
+  amount: row.amount,
+  bonus: row.bonus,
+  status: row.status,
+  colorTag: row.color_tag,
+});
+
+// --- CompanyMember ---
+const memberToDb = (m: CompanyMember) => ({
+  id: m.id,
+  name: m.name,
+  share_percentage: m.sharePercentage,
+  is_working_force: m.isWorkingForce,
+  role: m.role,
+  phone: m.phone || null,
+  iban: m.iban || null,
+  national_id: m.nationalId || null,
+  join_date: m.joinDate,
+  notes: m.notes || null,
+});
+
+const dbToMember = (row: any): CompanyMember => ({
+  id: row.id,
+  name: row.name,
+  sharePercentage: Number(row.share_percentage),
+  isWorkingForce: row.is_working_force,
+  role: row.role,
+  phone: row.phone,
+  iban: row.iban,
+  nationalId: row.national_id,
+  joinDate: row.join_date,
+  notes: row.notes,
+});
+
+// --- Loan ---
+const loanToDb = (loan: Loan) => ({
+  id: loan.id,
+  title: loan.title,
+  lender: loan.lender,
+  total_amount: loan.totalAmount,
+  installment_amount: loan.installmentAmount,
+  total_installments: loan.totalInstallments,
+  paid_installments: loan.paidInstallments,
+  start_date: loan.startDate,
+  next_due_date: loan.nextDueDate,
+  interest_rate: loan.interestRate ?? null,
+  notes: loan.notes || null,
+});
+
+const dbToLoan = (row: any): Loan => ({
+  id: row.id,
+  title: row.title,
+  lender: row.lender,
+  totalAmount: row.total_amount,
+  installmentAmount: row.installment_amount,
+  totalInstallments: row.total_installments,
+  paidInstallments: row.paid_installments,
+  startDate: row.start_date,
+  nextDueDate: row.next_due_date,
+  interestRate: row.interest_rate != null ? Number(row.interest_rate) : undefined,
+  notes: row.notes,
+});
+
+// --- AppUser ---
+const appUserToDb = (u: AppUser) => ({
+  id: u.id,
+  email: u.email,
+  first_name: u.firstName,
+  last_name: u.lastName,
+  full_name: u.fullName,
+  role: u.role,
+  role_title: u.roleTitle,
+  status: u.status,
+  permissions: u.permissions,
+  avatar_color: u.avatarColor || null,
+  last_login: u.lastLogin || null,
+  phone: u.phone || null,
+  notes: u.notes || null,
+  created_at: u.createdAt,
+});
+
+const dbToAppUser = (row: any): AppUser => ({
+  id: row.id,
+  email: row.email,
+  firstName: row.first_name,
+  lastName: row.last_name,
+  fullName: row.full_name,
+  role: row.role,
+  roleTitle: row.role_title,
+  status: row.status,
+  permissions: row.permissions,
+  avatarColor: row.avatar_color,
+  lastLogin: row.last_login,
+  phone: row.phone,
+  notes: row.notes,
+  createdAt: row.created_at,
+});
+
+// --- BankAccount ---
+const bankAccountToDb = (acc: BankAccount) => {
+  let packedNotes = acc.notes || null;
+  const extraData: any = {};
+  if (acc.openingBalance !== undefined) extraData.openingBalance = acc.openingBalance;
+  if (acc.closingBalance !== undefined) extraData.closingBalance = acc.closingBalance;
+  if (acc.pettyCashHolder) extraData.pettyCashHolder = acc.pettyCashHolder;
+  if (acc.accountCategory) extraData.accountCategory = acc.accountCategory;
+
+  if (Object.keys(extraData).length > 0) {
+    const cleanNotes = (acc.notes || '').replace(/\n?<!--ACCOUNT_META:.*?-->/s, '').trim();
+    packedNotes = `${cleanNotes ? cleanNotes + '\n' : ''}<!--ACCOUNT_META:${JSON.stringify(extraData)}-->`;
+  }
+
+  return {
+    id: acc.id,
+    bank_name: acc.bankName,
+    account_number: acc.accountNumber,
+    card_number: acc.cardNumber || null,
+    shaba_number: acc.shabaNumber,
+    branch_name: acc.branchName || null,
+    account_holder: acc.accountHolder,
+    account_type: acc.accountType,
+    balance: acc.balance,
+    currency: acc.currency || 'rial',
+    is_active: acc.isActive,
+    pos_terminal_id: acc.posTerminalId || null,
+    internet_banking_id: acc.internetBankingId || null,
+    color_theme: acc.colorTheme || null,
+    notes: packedNotes,
+    created_at: acc.createdAt,
+    updated_at: acc.updatedAt || null,
+  };
+};
+
+const dbToBankAccount = (row: any): BankAccount => {
+  let cleanNotes = row.notes || undefined;
+  let openingBalance = row.opening_balance ?? undefined;
+  let closingBalance = row.closing_balance ?? undefined;
+  let pettyCashHolder = row.petty_cash_holder ?? undefined;
+  let accountCategory = row.account_category ?? undefined;
+
+  if (row.notes && typeof row.notes === 'string' && row.notes.includes('<!--ACCOUNT_META:')) {
+    const match = row.notes.match(/<!--ACCOUNT_META:(.*?)-->/s);
+    if (match && match[1]) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        if (parsed.openingBalance !== undefined && openingBalance === undefined) openingBalance = parsed.openingBalance;
+        if (parsed.closingBalance !== undefined && closingBalance === undefined) closingBalance = parsed.closingBalance;
+        if (parsed.pettyCashHolder && !pettyCashHolder) pettyCashHolder = parsed.pettyCashHolder;
+        if (parsed.accountCategory && !accountCategory) accountCategory = parsed.accountCategory;
+      } catch (e) {
+        console.warn('Could not parse account meta:', e);
+      }
+    }
+    cleanNotes = row.notes.replace(/\n?<!--ACCOUNT_META:.*?-->/s, '').trim() || undefined;
+  }
+
+  return {
+    id: row.id,
+    bankName: row.bank_name,
+    accountNumber: row.account_number,
+    cardNumber: row.card_number,
+    shabaNumber: row.shaba_number,
+    branchName: row.branch_name,
+    accountHolder: row.account_holder,
+    accountType: row.account_type,
+    accountCategory: accountCategory || (row.account_type === 'petty_cash' ? 'petty_cash' : 'bank_account'),
+    pettyCashHolder,
+    balance: row.balance,
+    openingBalance,
+    closingBalance,
+    currency: row.currency,
+    isActive: row.is_active,
+    posTerminalId: row.pos_terminal_id,
+    internetBankingId: row.internet_banking_id,
+    colorTheme: row.color_theme,
+    notes: cleanNotes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
+
+// --- VatInvoice ---
+const vatInvoiceToDb = (inv: VatInvoice) => ({
+  id: inv.id,
+  invoice_number: inv.invoiceNumber,
+  system_invoice_id: inv.systemInvoiceId || null,
+  invoice_type: inv.invoiceType,
+  invoice_pattern: inv.invoicePattern,
+  invoice_subject: inv.invoiceSubject,
+  period_type: inv.periodType,
+  season: inv.season || null,
+  month: inv.month || null,
+  year: inv.year,
+  issue_date_time: inv.issueDateTime,
+  seller_economic_code: inv.sellerEconomicCode,
+  seller_national_id: inv.sellerNationalId,
+  seller_company_name: inv.sellerCompanyName,
+  seller_person_name: inv.sellerPersonName,
+  seller_postal_code: inv.sellerPostalCode,
+  seller_branch_code: inv.sellerBranchCode || null,
+  buyer_title: inv.buyerTitle || null,
+  buyer_economic_code: inv.buyerEconomicCode || null,
+  buyer_national_id: inv.buyerNationalId || null,
+  buyer_person_name: inv.buyerPersonName || null,
+  buyer_postal_code: inv.buyerPostalCode || null,
+  buyer_branch_code: inv.buyerBranchCode || null,
+  items: inv.items,
+  total_quantity: inv.totalQuantity,
+  total_gross_amount: inv.totalGrossAmount,
+  total_discount: inv.totalDiscount,
+  total_vat_amount: inv.totalVatAmount,
+  article17_tax: inv.article17Tax,
+  final_amount: inv.finalAmount,
+  amount_in_words: inv.amountInWords,
+  is_synced_to_transactions: inv.isSyncedToTransactions,
+  synced_transaction_id: inv.syncedTransactionId || null,
+  synced_transaction_ids: inv.syncedTransactionIds || null,
+  monthly_allocation: inv.monthlyAllocation || null,
+  is_synthesized_from_monthly: inv.isSynthesizedFromMonthly || false,
+  synthesized_from_invoice_ids: inv.synthesizedFromInvoiceIds || null,
+  notes: inv.notes || null,
+  created_at: inv.createdAt,
+  updated_at: inv.updatedAt || null,
+});
+
+const dbToVatInvoice = (row: any): VatInvoice => ({
+  id: row.id,
+  invoiceNumber: row.invoice_number,
+  systemInvoiceId: row.system_invoice_id,
+  invoiceType: row.invoice_type,
+  invoicePattern: row.invoice_pattern,
+  invoiceSubject: row.invoice_subject,
+  periodType: row.period_type,
+  season: row.season,
+  month: row.month as PersianMonthNumber | undefined,
+  year: row.year,
+  issueDateTime: row.issue_date_time,
+  sellerEconomicCode: row.seller_economic_code,
+  sellerNationalId: row.seller_national_id,
+  sellerCompanyName: row.seller_company_name,
+  sellerPersonName: row.seller_person_name,
+  sellerPostalCode: row.seller_postal_code,
+  sellerBranchCode: row.seller_branch_code,
+  buyerTitle: row.buyer_title,
+  buyerEconomicCode: row.buyer_economic_code,
+  buyerNationalId: row.buyer_national_id,
+  buyerPersonName: row.buyer_person_name,
+  buyerPostalCode: row.buyer_postal_code,
+  buyerBranchCode: row.buyer_branch_code,
+  items: row.items || [],
+  totalQuantity: row.total_quantity,
+  totalGrossAmount: row.total_gross_amount,
+  totalDiscount: row.total_discount,
+  totalVatAmount: row.total_vat_amount,
+  article17Tax: row.article17_tax,
+  finalAmount: row.final_amount,
+  amountInWords: row.amount_in_words,
+  isSyncedToTransactions: row.is_synced_to_transactions,
+  syncedTransactionId: row.synced_transaction_id,
+  syncedTransactionIds: row.synced_transaction_ids,
+  monthlyAllocation: row.monthly_allocation,
+  isSynthesizedFromMonthly: row.is_synthesized_from_monthly,
+  synthesizedFromInvoiceIds: row.synthesized_from_invoice_ids,
+  notes: row.notes,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+// --- ServiceTariff ---
+const serviceTariffToDb = (t: ServiceTariff) => ({
+  id: t.id,
+  internal_code: t.internalCode,
+  service_code: t.serviceCode,
+  title: t.title,
+  unit: t.unit,
+  current_price: t.currentPrice,
+  sub_category: t.subCategory,
+  default_vat_rate: t.defaultVatRate,
+  price_history: t.priceHistory,
+  is_active: t.isActive,
+  notes: t.notes || null,
+});
+
+const dbToServiceTariff = (row: any): ServiceTariff => ({
+  id: row.id,
+  internalCode: row.internal_code,
+  serviceCode: row.service_code,
+  title: row.title,
+  unit: row.unit,
+  currentPrice: row.current_price,
+  subCategory: row.sub_category,
+  defaultVatRate: Number(row.default_vat_rate),
+  priceHistory: row.price_history || [],
+  isActive: row.is_active,
+  notes: row.notes,
+});
+
+
+
+export { fiscalYearToDb,dbToFiscalYear,transactionToDb,dbToTransaction,employeeToDb,dbToEmployee,salaryMatrixToDb,dbToSalaryMatrix,memberToDb,dbToMember,loanToDb,dbToLoan,appUserToDb,dbToAppUser,bankAccountToDb,dbToBankAccount,vatInvoiceToDb,dbToVatInvoice,serviceTariffToDb,dbToServiceTariff };

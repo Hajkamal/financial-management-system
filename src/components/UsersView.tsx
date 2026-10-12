@@ -1,42 +1,47 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Users, 
-  UserPlus, 
-  Shield, 
-  ShieldCheck, 
-  KeyRound, 
-  Trash2, 
-  Edit3, 
-  Search, 
-  Filter, 
-  CheckCircle2, 
-  XCircle, 
-  Crown, 
-  Calculator, 
-  Eye, 
+import React, { useState, useMemo } from "react";
+import {
+  Users,
+  UserPlus,
+  Shield,
+  ShieldCheck,
+  KeyRound,
+  Trash2,
+  Edit3,
+  Search,
+  Filter,
+  CheckCircle2,
+  XCircle,
+  Crown,
+  Calculator,
+  Eye,
   EyeOff,
-  Briefcase, 
-  Sliders, 
-  LogIn, 
-  Lock, 
-  Mail, 
-  Phone, 
+  Briefcase,
+  Sliders,
+  LogIn,
+  Lock,
+  Mail,
+  Phone,
   Sparkles,
   HelpCircle,
   FileSpreadsheet,
   Clock,
-  UserCheck
-} from 'lucide-react';
-import { AppUser, UserRole, UserPermissions } from '../types';
-import { 
-  PERMISSION_DEFINITIONS, 
-  getPermissionsByRole, 
-  ALL_PERMISSIONS_GRANTED 
-} from '../utils/permissions';
-import { toPersianDigits, toEnglishDigits, normalizeEmail, normalizePassword } from '../utils/formatters';
-import { ConfirmDeleteModal } from './ConfirmDeleteModal';
-import { SyncHistoryViewer } from './SyncHistoryViewer';
-import { SyncAuditLog } from '../types';
+  UserCheck,
+} from "lucide-react";
+import { AppUser, UserRole, UserPermissions } from "../types";
+import {
+  PERMISSION_DEFINITIONS,
+  getPermissionsByRole,
+  ALL_PERMISSIONS_GRANTED,
+} from "../utils/permissions";
+import {
+  toPersianDigits,
+  toEnglishDigits,
+  normalizeEmail,
+  normalizePassword,
+} from "../utils/formatters";
+import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
+import { SyncHistoryViewer } from "./SyncHistoryViewer";
+import { SyncAuditLog } from "../types";
 
 interface UsersViewProps {
   users: AppUser[];
@@ -48,12 +53,12 @@ interface UsersViewProps {
   onTriggerPush?: () => Promise<{ success: boolean; message: string }>;
   onTriggerPull?: () => Promise<boolean>;
   isCloudConnected?: boolean;
-  onAddUser: (user: Omit<AppUser, 'id' | 'createdAt'>) => void;
-  onUpdateUser: (id: string, updates: Partial<AppUser>) => void;
-  onDeleteUser: (id: string) => void;
+  onAddUser: (user: Omit<AppUser, "id" | "createdAt">) => Promise<boolean>;
+  onUpdateUser: (id: string, updates: Partial<AppUser>) => Promise<boolean>;
+  onDeleteUser: (id: string) => Promise<boolean>;
   onSwitchUser: (user: AppUser) => void;
   onShowToast: (msg: string) => void;
-  initialSubTab?: 'users' | 'sync-history';
+  initialSubTab?: "users" | "sync-history";
 }
 
 export const UsersView: React.FC<UsersViewProps> = ({
@@ -71,35 +76,42 @@ export const UsersView: React.FC<UsersViewProps> = ({
   onDeleteUser,
   onSwitchUser,
   onShowToast,
-  initialSubTab = 'users',
+  initialSubTab = "users",
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'users' | 'sync-history'>(initialSubTab);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'inactive'>('all');
-
+  const [activeSubTab, setActiveSubTab] = useState<"users" | "sync-history">(
+    initialSubTab,
+  );
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "pending" | "inactive"
+  >("all");
 
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [deletingUser, setDeletingUser] = useState<AppUser | null>(null);
-  const [passwordModalUser, setPasswordModalUser] = useState<AppUser | null>(null);
-  const [newPassword, setNewPassword] = useState('');
+  const [passwordModalUser, setPasswordModalUser] = useState<AppUser | null>(
+    null,
+  );
+  const [newPassword, setNewPassword] = useState("");
   const [showResetPassword, setShowResetPassword] = useState(false);
-  const [visiblePasswordUserId, setVisiblePasswordUserId] = useState<string | null>(null);
+  const [visiblePasswordUserId, setVisiblePasswordUserId] = useState<
+    string | null
+  >(null);
 
   // Filtered users
   const filteredUsers = useMemo(() => {
-    return users.filter(u => {
-      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
-      if (statusFilter !== 'all' && u.status !== statusFilter) return false;
+    return users.filter((u) => {
+      if (roleFilter !== "all" && u.role !== roleFilter) return false;
+      if (statusFilter !== "all" && u.status !== statusFilter) return false;
       if (!searchTerm.trim()) return true;
 
       const term = searchTerm.toLowerCase().trim();
       return (
-        (u.fullName || '').toLowerCase().includes(term) ||
-        (u.email || '').toLowerCase().includes(term) ||
-        (u.roleTitle || '').toLowerCase().includes(term) ||
+        (u.fullName || "").toLowerCase().includes(term) ||
+        (u.email || "").toLowerCase().includes(term) ||
+        (u.roleTitle || "").toLowerCase().includes(term) ||
         (u.phone && u.phone.includes(term))
       );
     });
@@ -109,11 +121,13 @@ export const UsersView: React.FC<UsersViewProps> = ({
   const stats = useMemo(() => {
     return {
       total: users.length,
-      active: users.filter(u => u.status === 'active').length,
-      pending: users.filter(u => u.status === 'pending').length,
-      admins: users.filter(u => u.role === 'super_admin').length,
-      accountants: users.filter(u => u.role === 'accountant' || u.role === 'finance_manager').length,
-      viewers: users.filter(u => u.role === 'viewer').length,
+      active: users.filter((u) => u.status === "active").length,
+      pending: users.filter((u) => u.status === "pending").length,
+      admins: users.filter((u) => u.role === "super_admin").length,
+      accountants: users.filter(
+        (u) => u.role === "accountant" || u.role === "finance_manager",
+      ).length,
+      viewers: users.filter((u) => u.role === "viewer").length,
     };
   }, [users]);
 
@@ -127,75 +141,74 @@ export const UsersView: React.FC<UsersViewProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSavePassword = (e: React.FormEvent) => {
+  const handleSavePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passwordModalUser) return;
     const clean = normalizePassword(newPassword);
-    if (!clean || clean.length < 4) {
-      onShowToast('کلمه عبور باید حداقل ۴ کاراکتر باشد.');
+    if (!clean || clean.length < 12) {
+      onShowToast("کلمه عبور باید حداقل ۱۲ کاراکتر باشد.");
       return;
     }
 
-    onUpdateUser(passwordModalUser.id, { password: clean });
-    onShowToast(`کلمه عبور برای ${passwordModalUser.fullName} با موفقیت به‌روزرسانی شد.`);
+    const saved = await onUpdateUser(passwordModalUser.id, { password: clean });
+    if (!saved) return;
     setPasswordModalUser(null);
-    setNewPassword('');
+    setNewPassword("");
     setShowResetPassword(false);
   };
 
   const getRoleBadge = (role: UserRole) => {
     switch (role) {
-      case 'super_admin':
+      case "super_admin":
         return {
-          label: 'مدیر کل سامانه',
-          bg: 'bg-amber-100 text-amber-800 border-amber-300',
+          label: "مدیر کل سامانه",
+          bg: "bg-amber-100 text-amber-800 border-amber-300",
           icon: Crown,
-          iconColor: 'text-amber-600',
+          iconColor: "text-amber-600",
         };
-      case 'finance_manager':
+      case "finance_manager":
         return {
-          label: 'مدیر مالی',
-          bg: 'bg-blue-100 text-blue-800 border-blue-300',
+          label: "مدیر مالی",
+          bg: "bg-blue-100 text-blue-800 border-blue-300",
           icon: Briefcase,
-          iconColor: 'text-blue-600',
+          iconColor: "text-blue-600",
         };
-      case 'accountant':
+      case "accountant":
         return {
-          label: 'کارشناس حسابداری',
-          bg: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+          label: "کارشناس حسابداری",
+          bg: "bg-emerald-100 text-emerald-800 border-emerald-300",
           icon: Calculator,
-          iconColor: 'text-emerald-600',
+          iconColor: "text-emerald-600",
         };
-      case 'viewer':
+      case "viewer":
         return {
-          label: 'ناظر (فقط خواندنی)',
-          bg: 'bg-slate-100 text-slate-700 border-slate-300',
+          label: "ناظر (فقط خواندنی)",
+          bg: "bg-slate-100 text-slate-700 border-slate-300",
           icon: Eye,
-          iconColor: 'text-slate-600',
+          iconColor: "text-slate-600",
         };
-      case 'custom':
+      case "custom":
       default:
         return {
-          label: 'دسترسی سفارشی',
-          bg: 'bg-purple-100 text-purple-800 border-purple-300',
+          label: "دسترسی سفارشی",
+          bg: "bg-purple-100 text-purple-800 border-purple-300",
           icon: Sliders,
-          iconColor: 'text-purple-600',
+          iconColor: "text-purple-600",
         };
     }
   };
 
   return (
     <div className="space-y-6" id="users-view-container">
-      
       {/* Sub-Tab Navigation */}
       <div className="flex items-center gap-2 p-1.5 bg-slate-200/80 rounded-2xl w-fit">
         <button
           type="button"
-          onClick={() => setActiveSubTab('users')}
+          onClick={() => setActiveSubTab("users")}
           className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-            activeSubTab === 'users'
-              ? 'bg-white text-blue-700 shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
+            activeSubTab === "users"
+              ? "bg-white text-blue-700 shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
           }`}
         >
           <Users className="w-4 h-4" />
@@ -208,13 +221,13 @@ export const UsersView: React.FC<UsersViewProps> = ({
         <button
           type="button"
           onClick={() => {
-            setActiveSubTab('sync-history');
+            setActiveSubTab("sync-history");
             onRefreshSyncLogs();
           }}
           className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-            activeSubTab === 'sync-history'
-              ? 'bg-white text-blue-700 shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
+            activeSubTab === "sync-history"
+              ? "bg-white text-blue-700 shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
           }`}
         >
           <Sparkles className="w-4 h-4 text-amber-500" />
@@ -225,7 +238,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
         </button>
       </div>
 
-      {activeSubTab === 'sync-history' ? (
+      {activeSubTab === "sync-history" ? (
         <SyncHistoryViewer
           syncLogs={syncLogs}
           isLoading={isLoadingSyncLogs}
@@ -241,396 +254,482 @@ export const UsersView: React.FC<UsersViewProps> = ({
         <>
           {/* Top Banner with Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-500 block mb-1">
+                  کل کاربران ثبت‌شده
+                </span>
+                <span className="text-2xl font-black text-slate-900">
+                  {toPersianDigits(stats.total)}
+                </span>
+                <span className="text-[11px] text-slate-400 block mt-0.5">
+                  حساب‌های کاربری در سامانه
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+                <Users className="w-5 h-5" />
+              </div>
+            </div>
 
-        
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 block mb-1">کل کاربران ثبت‌شده</span>
-            <span className="text-2xl font-black text-slate-900">{toPersianDigits(stats.total)}</span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">حساب‌های کاربری در سامانه</span>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-            <Users className="w-5 h-5" />
-          </div>
-        </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-500 block mb-1">
+                  کاربران فعال
+                </span>
+                <span className="text-2xl font-black text-emerald-600">
+                  {toPersianDigits(stats.active)}
+                </span>
+                <span className="text-[11px] text-emerald-700/80 block mt-0.5">
+                  دارای مجوز ورود به سامانه
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 block mb-1">کاربران فعال</span>
-            <span className="text-2xl font-black text-emerald-600">{toPersianDigits(stats.active)}</span>
-            <span className="text-[11px] text-emerald-700/80 block mt-0.5">دارای مجوز ورود به سامانه</span>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className={`p-4 rounded-2xl border shadow-xs flex items-center justify-between transition-all ${
-          stats.pending > 0 
-            ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/30' 
-            : 'bg-white border-slate-200'
-        }`}>
-          <div>
-            <span className="text-xs text-amber-800 font-bold block mb-1">در انتظار تایید ادمین</span>
-            <span className="text-2xl font-black text-amber-700">{toPersianDigits(stats.pending)}</span>
-            <span className="text-[11px] text-amber-600/80 block mt-0.5">کاربران ثبت‌نامی معلق</span>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center border border-amber-200">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 block mb-1">مدیران ارشد سامانه</span>
-            <span className="text-2xl font-black text-amber-600">{toPersianDigits(stats.admins)}</span>
-            <span className="text-[11px] text-amber-700/80 block mt-0.5">دسترسی تام و نامحدود</span>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
-            <Crown className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 block mb-1">ثبت‌کنندگان اسناد مالی</span>
-            <span className="text-2xl font-black text-indigo-600">{toPersianDigits(stats.accountants)}</span>
-            <span className="text-[11px] text-indigo-700/80 block mt-0.5">حسابداران و مدیران مالی</span>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
-            <Calculator className="w-5 h-5" />
-          </div>
-        </div>
-
-      </div>
-
-      {/* Action Header & Filters */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-blue-600" />
-              <span>فهرست کاربران و کنترل سطوح دسترسی (RBAC)</span>
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              تعریف کاربران جدید، تعیین دسترسی فقط خواندنی یا ثبت درآمد و هزینه، و رهگیری اسناد
-            </p>
-          </div>
-
-          <button
-            id="add-user-btn"
-            onClick={handleOpenAddModal}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>+ تعریف کاربر جدید</span>
-          </button>
-        </div>
-
-        {/* Filter Toolbar */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
-          
-          {/* Search Box */}
-          <div className="relative">
-            <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="جستجوی نام، ایمیل، سِمَت یا شماره تلفن..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pr-9 pl-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none text-slate-800"
-            />
-          </div>
-
-          {/* Role Filter */}
-          <div>
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value as any)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none text-slate-700 bg-slate-50/50 cursor-pointer"
-            >
-              <option value="all">تمام نقش‌ها</option>
-              <option value="super_admin">مدیر کل سامانه (Super Admin)</option>
-              <option value="finance_manager">مدیر مالی (Finance Manager)</option>
-              <option value="accountant">کارشناس حسابداری (Accountant)</option>
-              <option value="viewer">ناظر / فقط خواندنی (Viewer)</option>
-              <option value="custom">دسترسی سفارشی (Custom)</option>
-            </select>
-          </div>
-
-          {/* Status Filter */}
-          <div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none text-slate-700 bg-slate-50/50 cursor-pointer"
-            >
-              <option value="all">تمام وضعیت‌ها</option>
-              <option value="active">فقط کاربران فعال</option>
-              <option value="pending">در انتظار تایید مدیر ارشد</option>
-              <option value="inactive">کاربران غیرفعال و معلق</option>
-            </select>
-          </div>
-
-        </div>
-      </div>
-
-      {/* Users Cards / List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filteredUsers.map((user) => {
-          const roleBadge = getRoleBadge(user.role);
-          const RoleIcon = roleBadge.icon;
-          const isCurrentUser = currentUser.id === user.id || currentUser.email === user.email;
-          const isSuperAdminEmail = user.email.toLowerCase() === 'vahidkamali03@gmail.com';
-
-          // Count active permissions
-          const grantedCount = Object.values(user.permissions).filter(Boolean).length;
-          const totalPermCount = Object.keys(user.permissions).length;
-
-          return (
             <div
-              key={user.id}
-              className={`bg-white rounded-2xl border transition-all shadow-xs flex flex-col justify-between overflow-hidden ${
-                isCurrentUser ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200 hover:border-slate-300'
+              className={`p-4 rounded-2xl border shadow-xs flex items-center justify-between transition-all ${
+                stats.pending > 0
+                  ? "bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/30"
+                  : "bg-white border-slate-200"
               }`}
             >
-              <div className="p-5 space-y-4">
-                
-                {/* Card Header: Avatar & Names & Role */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-black text-lg shadow-sm border border-white/20 shrink-0">
-                      {user.firstName ? user.firstName[0] : user.fullName[0]}
+              <div>
+                <span className="text-xs text-amber-800 font-bold block mb-1">
+                  در انتظار تایید ادمین
+                </span>
+                <span className="text-2xl font-black text-amber-700">
+                  {toPersianDigits(stats.pending)}
+                </span>
+                <span className="text-[11px] text-amber-600/80 block mt-0.5">
+                  کاربران ثبت‌نامی معلق
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center border border-amber-200">
+                <Clock className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-500 block mb-1">
+                  مدیران ارشد سامانه
+                </span>
+                <span className="text-2xl font-black text-amber-600">
+                  {toPersianDigits(stats.admins)}
+                </span>
+                <span className="text-[11px] text-amber-700/80 block mt-0.5">
+                  دسترسی تام و نامحدود
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
+                <Crown className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-500 block mb-1">
+                  ثبت‌کنندگان اسناد مالی
+                </span>
+                <span className="text-2xl font-black text-indigo-600">
+                  {toPersianDigits(stats.accountants)}
+                </span>
+                <span className="text-[11px] text-indigo-700/80 block mt-0.5">
+                  حسابداران و مدیران مالی
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
+                <Calculator className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Action Header & Filters */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-blue-600" />
+                  <span>فهرست کاربران و کنترل سطوح دسترسی (RBAC)</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  تعریف کاربران جدید، تعیین دسترسی فقط خواندنی یا ثبت درآمد و
+                  هزینه، و رهگیری اسناد
+                </p>
+              </div>
+
+              <button
+                id="add-user-btn"
+                onClick={handleOpenAddModal}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>+ تعریف کاربر جدید</span>
+              </button>
+            </div>
+
+            {/* Filter Toolbar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+              {/* Search Box */}
+              <div className="relative">
+                <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="جستجوی نام، ایمیل، سِمَت یا شماره تلفن..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pr-9 pl-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none text-slate-800"
+                />
+              </div>
+
+              {/* Role Filter */}
+              <div>
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value as any)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none text-slate-700 bg-slate-50/50 cursor-pointer"
+                >
+                  <option value="all">تمام نقش‌ها</option>
+                  <option value="super_admin">
+                    مدیر کل سامانه (Super Admin)
+                  </option>
+                  <option value="finance_manager">
+                    مدیر مالی (Finance Manager)
+                  </option>
+                  <option value="accountant">
+                    کارشناس حسابداری (Accountant)
+                  </option>
+                  <option value="viewer">ناظر / فقط خواندنی (Viewer)</option>
+                  <option value="custom">دسترسی سفارشی (Custom)</option>
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-600 focus:outline-none text-slate-700 bg-slate-50/50 cursor-pointer"
+                >
+                  <option value="all">تمام وضعیت‌ها</option>
+                  <option value="active">فقط کاربران فعال</option>
+                  <option value="pending">در انتظار تایید مدیر ارشد</option>
+                  <option value="inactive">کاربران غیرفعال و معلق</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Users Cards / List */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredUsers.map((user) => {
+              const roleBadge = getRoleBadge(user.role);
+              const RoleIcon = roleBadge.icon;
+              const isCurrentUser =
+                currentUser.id === user.id || currentUser.email === user.email;
+              const isSuperAdminEmail =
+                user.email.toLowerCase() === "vahidkamali03@gmail.com";
+
+              // Count active permissions
+              const grantedCount = Object.values(user.permissions).filter(
+                Boolean,
+              ).length;
+              const totalPermCount = Object.keys(user.permissions).length;
+
+              return (
+                <div
+                  key={user.id}
+                  className={`bg-white rounded-2xl border transition-all shadow-xs flex flex-col justify-between overflow-hidden ${
+                    isCurrentUser
+                      ? "border-blue-500 ring-2 ring-blue-500/20"
+                      : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="p-5 space-y-4">
+                    {/* Card Header: Avatar & Names & Role */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-black text-lg shadow-sm border border-white/20 shrink-0">
+                          {user.firstName
+                            ? user.firstName[0]
+                            : user.fullName[0]}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-black text-slate-900 text-sm">
+                              {user.fullName}
+                            </span>
+                            {isCurrentUser && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">
+                                شما (کاربر جاری)
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-slate-500 block mt-0.5">
+                            {user.roleTitle}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg border shrink-0 ${roleBadge.bg}`}
+                      >
+                        <RoleIcon
+                          className={`w-3.5 h-3.5 ${roleBadge.iconColor}`}
+                        />
+                        <span>{roleBadge.label}</span>
+                      </span>
                     </div>
+
+                    {/* Contact Info & Details */}
+                    <div className="space-y-1.5 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span className="text-slate-400 flex items-center gap-1">
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>ایمیل کاربری:</span>
+                        </span>
+                        <span
+                          className="font-mono font-medium text-slate-800 text-[11px] select-all"
+                          dir="ltr"
+                        >
+                          {user.email}
+                        </span>
+                      </div>
+
+                      {user.phone && (
+                        <div className="flex items-center justify-between text-slate-600">
+                          <span className="text-slate-400 flex items-center gap-1">
+                            <Phone className="w-3.5 h-3.5" />
+                            <span>شماره تماس:</span>
+                          </span>
+                          <span className="font-mono text-slate-700">
+                            {user.phone}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Password row with view toggle */}
+                      <div className="flex items-center justify-between text-slate-600 pt-1 border-t border-slate-200/60">
+                        <span className="text-slate-400 flex items-center gap-1">
+                          <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                          <span>امنیت کلمه عبور:</span>
+                        </span>
+                        <div
+                          className="flex items-center gap-1.5 font-mono text-[11px]"
+                          dir="ltr"
+                        >
+                          <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[10px]">
+                            {visiblePasswordUserId === user.id
+                              ? "SHA-256 Encrypted"
+                              : "••••••••"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setVisiblePasswordUserId((prev) =>
+                                prev === user.id ? null : user.id,
+                              )
+                            }
+                            className="text-slate-400 hover:text-slate-700 p-0.5 rounded transition-colors cursor-pointer"
+                            title={
+                              visiblePasswordUserId === user.id
+                                ? "مخفی‌سازی"
+                                : "بررسی وضعیت رمز عبور"
+                            }
+                          >
+                            {visiblePasswordUserId === user.id ? (
+                              <EyeOff className="w-3.5 h-3.5 text-amber-600" />
+                            ) : (
+                              <Eye className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-slate-600 pt-1 border-t border-slate-200/60">
+                        <span className="text-slate-400">وضعیت حساب:</span>
+                        <span
+                          className={`inline-flex items-center gap-1 font-bold text-[11px] ${
+                            user.status === "active"
+                              ? "text-emerald-700"
+                              : user.status === "pending"
+                                ? "text-amber-700"
+                                : "text-slate-500"
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              user.status === "active"
+                                ? "bg-emerald-500"
+                                : user.status === "pending"
+                                  ? "bg-amber-500 animate-pulse"
+                                  : "bg-slate-400"
+                            }`}
+                          ></span>
+                          <span>
+                            {user.status === "active"
+                              ? "فعال و مجاز به ورود"
+                              : user.status === "pending"
+                                ? "در انتظار تایید مدیر ارشد"
+                                : "غیرفعال / معلق"}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Permissions Snapshot Tags */}
                     <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-black text-slate-900 text-sm">{user.fullName}</span>
-                        {isCurrentUser && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">
-                            شما (کاربر جاری)
+                      <div className="flex items-center justify-between text-[11px] mb-2">
+                        <span className="text-slate-500 font-medium">
+                          مجوزهای فعال:
+                        </span>
+                        <span className="font-bold text-slate-700">
+                          {toPersianDigits(grantedCount)} از{" "}
+                          {toPersianDigits(totalPermCount)}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1">
+                        {user.permissions.canCreateTransactions ? (
+                          <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-medium">
+                            ✓ ثبت درآمد و هزینه
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-[10px]">
+                            ✕ عدم امکان ثبت
+                          </span>
+                        )}
+
+                        {user.permissions.canEditTransactions ? (
+                          <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-medium">
+                            ✓ ویرایش اسناد
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-[10px]">
+                            فقط خواندنی
+                          </span>
+                        )}
+
+                        {user.permissions.canExportExcel && (
+                          <span className="px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 text-[10px] font-medium flex items-center gap-1">
+                            <FileSpreadsheet className="w-2.5 h-2.5" />
+                            <span>خروجی اکسل</span>
+                          </span>
+                        )}
+
+                        {user.permissions.canManageSalaryMatrix && (
+                          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-medium">
+                            ✓ ماتریس حقوق
+                          </span>
+                        )}
+
+                        {user.permissions.canManageUsers && (
+                          <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-medium">
+                            ★ مدیریت کاربران
                           </span>
                         )}
                       </div>
-                      <span className="text-xs text-slate-500 block mt-0.5">{user.roleTitle}</span>
                     </div>
                   </div>
 
-                  <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg border shrink-0 ${roleBadge.bg}`}>
-                    <RoleIcon className={`w-3.5 h-3.5 ${roleBadge.iconColor}`} />
-                    <span>{roleBadge.label}</span>
-                  </span>
-                </div>
-
-                {/* Contact Info & Details */}
-                <div className="space-y-1.5 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span className="text-slate-400 flex items-center gap-1">
-                      <Mail className="w-3.5 h-3.5" />
-                      <span>ایمیل کاربری:</span>
-                    </span>
-                    <span className="font-mono font-medium text-slate-800 text-[11px] select-all" dir="ltr">
-                      {user.email}
-                    </span>
-                  </div>
-
-                  {user.phone && (
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span className="text-slate-400 flex items-center gap-1">
-                        <Phone className="w-3.5 h-3.5" />
-                        <span>شماره تماس:</span>
-                      </span>
-                      <span className="font-mono text-slate-700">{user.phone}</span>
-                    </div>
-                  )}
-
-                  {/* Password row with view toggle */}
-                  <div className="flex items-center justify-between text-slate-600 pt-1 border-t border-slate-200/60">
-                    <span className="text-slate-400 flex items-center gap-1">
-                      <KeyRound className="w-3.5 h-3.5 text-amber-600" />
-                      <span>امنیت کلمه عبور:</span>
-                    </span>
-                    <div className="flex items-center gap-1.5 font-mono text-[11px]" dir="ltr">
-                      <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[10px]">
-                        {visiblePasswordUserId === user.id ? 'SHA-256 Encrypted' : '••••••••'}
-                      </span>
+                  {/* Card Footer Actions */}
+                  <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-1 text-xs">
+                    {/* Switch or Approve button */}
+                    {user.status === "pending" ? (
                       <button
                         type="button"
-                        onClick={() => setVisiblePasswordUserId(prev => prev === user.id ? null : user.id)}
-                        className="text-slate-400 hover:text-slate-700 p-0.5 rounded transition-colors cursor-pointer"
-                        title={visiblePasswordUserId === user.id ? 'مخفی‌سازی' : 'بررسی وضعیت رمز عبور'}
+                        onClick={() => {
+                          onUpdateUser(user.id, {
+                            status: "active",
+                            roleTitle:
+                              user.roleTitle
+                                .replace("(در انتظار تایید)", "")
+                                .trim() || "کاربر فعال",
+                          });
+                          onShowToast(
+                            `حساب کاربری ${user.fullName} با موفقیت تایید و فعال شد.`,
+                          );
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer shadow-xs"
+                        title="تایید و فعال‌سازی حساب کاربر"
                       >
-                        {visiblePasswordUserId === user.id ? <EyeOff className="w-3.5 h-3.5 text-amber-600" /> : <Eye className="w-3.5 h-3.5" />}
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>تایید حساب کاربر</span>
                       </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSwitchUser(user);
+                          onShowToast(
+                            `با موفقیت به کاربر ${user.fullName} سوئیچ شدید.`,
+                          );
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer ${
+                          isCurrentUser
+                            ? "bg-blue-600 text-white"
+                            : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                        }`}
+                        title="ورود و تست سامانه با دسترسی‌های این کاربر"
+                      >
+                        <LogIn className="w-3.5 h-3.5" />
+                        <span>
+                          {isCurrentUser ? "کاربر فعال" : "ورود با این حساب"}
+                        </span>
+                      </button>
+                    )}
+
+                    <div className="flex items-center gap-1">
+                      {/* Reset Password */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPasswordModalUser(user);
+                          setNewPassword("");
+                        }}
+                        className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                        title="تغییر رمز عبور"
+                      >
+                        <KeyRound className="w-4 h-4" />
+                      </button>
+
+                      {/* Edit User */}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(user)}
+                        className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                        title="ویرایش مشخصات و دسترسی‌ها"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+
+                      {/* Delete User (Protected for super admin) */}
+                      {!isSuperAdminEmail ? (
+                        <button
+                          type="button"
+                          onClick={() => setDeletingUser(user)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="حذف حساب کاربر"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <span
+                          className="p-1.5 text-amber-500"
+                          title="حساب مدیر کل سامانه غیرقابل حذف است"
+                        >
+                          <Crown className="w-4 h-4" />
+                        </span>
+                      )}
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between text-slate-600 pt-1 border-t border-slate-200/60">
-                    <span className="text-slate-400">وضعیت حساب:</span>
-                    <span className={`inline-flex items-center gap-1 font-bold text-[11px] ${
-                      user.status === 'active' 
-                        ? 'text-emerald-700' 
-                        : user.status === 'pending' 
-                        ? 'text-amber-700' 
-                        : 'text-slate-500'
-                    }`}>
-                      <span className={`w-2 h-2 rounded-full ${
-                        user.status === 'active' 
-                          ? 'bg-emerald-500' 
-                          : user.status === 'pending' 
-                          ? 'bg-amber-500 animate-pulse' 
-                          : 'bg-slate-400'
-                      }`}></span>
-                      <span>
-                        {user.status === 'active' 
-                          ? 'فعال و مجاز به ورود' 
-                          : user.status === 'pending' 
-                          ? 'در انتظار تایید مدیر ارشد' 
-                          : 'غیرفعال / معلق'}
-                      </span>
-                    </span>
-                  </div>
                 </div>
-
-                {/* Permissions Snapshot Tags */}
-                <div>
-                  <div className="flex items-center justify-between text-[11px] mb-2">
-                    <span className="text-slate-500 font-medium">مجوزهای فعال:</span>
-                    <span className="font-bold text-slate-700">
-                      {toPersianDigits(grantedCount)} از {toPersianDigits(totalPermCount)}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1">
-                    {user.permissions.canCreateTransactions ? (
-                      <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-medium">
-                        ✓ ثبت درآمد و هزینه
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-[10px]">
-                        ✕ عدم امکان ثبت
-                      </span>
-                    )}
-
-                    {user.permissions.canEditTransactions ? (
-                      <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-medium">
-                        ✓ ویرایش اسناد
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-[10px]">
-                        فقط خواندنی
-                      </span>
-                    )}
-
-                    {user.permissions.canExportExcel && (
-                      <span className="px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 text-[10px] font-medium flex items-center gap-1">
-                        <FileSpreadsheet className="w-2.5 h-2.5" />
-                        <span>خروجی اکسل</span>
-                      </span>
-                    )}
-
-                    {user.permissions.canManageSalaryMatrix && (
-                      <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-medium">
-                        ✓ ماتریس حقوق
-                      </span>
-                    )}
-
-                    {user.permissions.canManageUsers && (
-                      <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-medium">
-                        ★ مدیریت کاربران
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Card Footer Actions */}
-              <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-1 text-xs">
-                
-                {/* Switch or Approve button */}
-                {user.status === 'pending' ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onUpdateUser(user.id, { status: 'active', roleTitle: user.roleTitle.replace('(در انتظار تایید)', '').trim() || 'کاربر فعال' });
-                      onShowToast(`حساب کاربری ${user.fullName} با موفقیت تایید و فعال شد.`);
-                    }}
-                    className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer shadow-xs"
-                    title="تایید و فعال‌سازی حساب کاربر"
-                  >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>تایید حساب کاربر</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSwitchUser(user);
-                      onShowToast(`با موفقیت به کاربر ${user.fullName} سوئیچ شدید.`);
-                    }}
-                    className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer ${
-                      isCurrentUser 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
-                    }`}
-                    title="ورود و تست سامانه با دسترسی‌های این کاربر"
-                  >
-                    <LogIn className="w-3.5 h-3.5" />
-                    <span>{isCurrentUser ? 'کاربر فعال' : 'ورود با این حساب'}</span>
-                  </button>
-                )}
-
-                <div className="flex items-center gap-1">
-                  {/* Reset Password */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPasswordModalUser(user);
-                      setNewPassword('');
-                    }}
-                    className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
-                    title="تغییر رمز عبور"
-                  >
-                    <KeyRound className="w-4 h-4" />
-                  </button>
-
-                  {/* Edit User */}
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditModal(user)}
-                    className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                    title="ویرایش مشخصات و دسترسی‌ها"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-
-                  {/* Delete User (Protected for super admin) */}
-                  {!isSuperAdminEmail ? (
-                    <button
-                      type="button"
-                      onClick={() => setDeletingUser(user)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                      title="حذف حساب کاربر"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <span 
-                      className="p-1.5 text-amber-500" 
-                      title="حساب مدیر کل سامانه غیرقابل حذف است"
-                    >
-                      <Crown className="w-4 h-4" />
-                    </span>
-                  )}
-                </div>
-
-              </div>
-
-            </div>
-          );
-        })}
-      </div>
-      </>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Add / Edit User Modal */}
@@ -643,16 +742,14 @@ export const UsersView: React.FC<UsersViewProps> = ({
             setEditingUser(null);
           }}
           userToEdit={editingUser}
-          onSave={(userData) => {
-            if (editingUser) {
-              onUpdateUser(editingUser.id, userData);
-              onShowToast(`مشخصات و دسترسی‌های ${userData.fullName} با موفقیت ذخیره شد.`);
-            } else {
-              onAddUser(userData);
-              onShowToast(`کاربر جدید ${userData.fullName} با موفقیت به سامانه افزوده شد.`);
+          onSave={async (userData) => {
+            const saved = editingUser
+              ? await onUpdateUser(editingUser.id, userData)
+              : await onAddUser(userData);
+            if (saved) {
+              setIsModalOpen(false);
+              setEditingUser(null);
             }
-            setIsModalOpen(false);
-            setEditingUser(null);
           }}
         />
       )}
@@ -660,20 +757,30 @@ export const UsersView: React.FC<UsersViewProps> = ({
       {/* Change Password Modal */}
       {passwordModalUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200" dir="rtl">
+          <div
+            className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200"
+            dir="rtl"
+          >
             <div className="flex items-center gap-2 text-amber-600 font-bold mb-2">
               <KeyRound className="w-5 h-5" />
               <span>تغییر کلمه عبور کاربر</span>
             </div>
             <p className="text-xs text-slate-500 mb-3">
-              کاربر: <strong className="text-slate-800">{passwordModalUser.fullName}</strong> ({passwordModalUser.email})
+              کاربر:{" "}
+              <strong className="text-slate-800">
+                {passwordModalUser.fullName}
+              </strong>{" "}
+              ({passwordModalUser.email})
             </p>
 
             {/* Current Password Security Notice */}
             <div className="mb-4 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs flex items-center justify-between">
               <span className="text-slate-500">وضعیت امنیت رمز:</span>
-              <span className="font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px]" dir="ltr">
-                {passwordModalUser.password ? 'هش‌شده (SHA-256)' : 'تعریف نشده'}
+              <span
+                className="font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px]"
+                dir="ltr"
+              >
+                {"رمز سرور قابل مشاهده نیست"}
               </span>
             </div>
 
@@ -684,21 +791,27 @@ export const UsersView: React.FC<UsersViewProps> = ({
                 </label>
                 <div className="relative">
                   <input
-                    type={showResetPassword ? 'text' : 'password'}
+                    type={showResetPassword ? "text" : "password"}
                     dir="ltr"
                     required
-                    placeholder="حداقل ۴ کاراکتر"
+                    placeholder="حداقل ۱۲ کاراکتر"
                     value={newPassword}
-                    onChange={(e) => setNewPassword(toEnglishDigits(e.target.value))}
+                    onChange={(e) =>
+                      setNewPassword(toEnglishDigits(e.target.value))
+                    }
                     className="w-full pl-10 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none font-mono text-left"
                   />
                   <button
                     type="button"
                     onClick={() => setShowResetPassword(!showResetPassword)}
                     className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
-                    title={showResetPassword ? 'مخفی کردن' : 'نمایش رمز'}
+                    title={showResetPassword ? "مخفی کردن" : "نمایش رمز"}
                   >
-                    {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showResetPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
                 <span className="text-[10px] text-slate-400 mt-1 block">
@@ -711,7 +824,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   type="button"
                   onClick={() => {
                     setPasswordModalUser(null);
-                    setNewPassword('');
+                    setNewPassword("");
                     setShowResetPassword(false);
                   }}
                   className="px-4 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-xl font-medium cursor-pointer"
@@ -734,7 +847,9 @@ export const UsersView: React.FC<UsersViewProps> = ({
       <ConfirmDeleteModal
         isOpen={!!deletingUser}
         title="حذف حساب کاربر"
-        itemName={deletingUser ? `${deletingUser.fullName} (${deletingUser.email})` : ''}
+        itemName={
+          deletingUser ? `${deletingUser.fullName} (${deletingUser.email})` : ""
+        }
         warningText="آیا از حذف این کاربر اطمینان دارید؟ با حذف کاربر، دسترسی وی به سامانه قطع می‌شود ولی اسناد مالی قبلی ثبت‌شده با نام او در سیستم باقی خواهد ماند."
         onConfirm={() => {
           if (deletingUser) {
@@ -745,7 +860,6 @@ export const UsersView: React.FC<UsersViewProps> = ({
         }}
         onCancel={() => setDeletingUser(null)}
       />
-
     </div>
   );
 };
@@ -758,7 +872,7 @@ interface UserModalProps {
   isOpen: boolean;
   onClose: () => void;
   userToEdit: AppUser | null;
-  onSave: (data: Omit<AppUser, 'id' | 'createdAt'>) => void;
+  onSave: (data: Omit<AppUser, "id" | "createdAt">) => void;
 }
 
 const UserModal: React.FC<UserModalProps> = ({
@@ -767,48 +881,57 @@ const UserModal: React.FC<UserModalProps> = ({
   userToEdit,
   onSave,
 }) => {
-  const [firstName, setFirstName] = useState(userToEdit?.firstName || '');
-  const [lastName, setLastName] = useState(userToEdit?.lastName || '');
-  const [email, setEmail] = useState(userToEdit?.email || '');
-  const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState(userToEdit?.firstName || "");
+  const [lastName, setLastName] = useState(userToEdit?.lastName || "");
+  const [email, setEmail] = useState(userToEdit?.email || "");
+  const [password, setPassword] = useState("");
   const [showModalPassword, setShowModalPassword] = useState(false);
-  const [roleTitle, setRoleTitle] = useState(userToEdit?.roleTitle || 'کارشناس حسابداری');
-  const [role, setRole] = useState<UserRole>(userToEdit?.role || 'accountant');
-  const [status, setStatus] = useState<'active' | 'pending' | 'inactive'>(userToEdit?.status || 'active');
-  const [phone, setPhone] = useState(userToEdit?.phone || '');
-  const [notes, setNotes] = useState(userToEdit?.notes || '');
+  const [roleTitle, setRoleTitle] = useState(
+    userToEdit?.roleTitle || "کارشناس حسابداری",
+  );
+  const [role, setRole] = useState<UserRole>(userToEdit?.role || "accountant");
+  const [status, setStatus] = useState<"active" | "pending" | "inactive">(
+    userToEdit?.status || "active",
+  );
+  const [phone, setPhone] = useState(userToEdit?.phone || "");
+  const [notes, setNotes] = useState(userToEdit?.notes || "");
 
   // Permissions state
   const [permissions, setPermissions] = useState<UserPermissions>(
-    userToEdit ? { ...userToEdit.permissions } : getPermissionsByRole('accountant')
+    userToEdit
+      ? { ...userToEdit.permissions }
+      : getPermissionsByRole("accountant"),
   );
 
-  const isSuperAdminEmail = userToEdit?.email.toLowerCase() === 'vahidkamali03@gmail.com';
+  const isSuperAdminEmail =
+    userToEdit?.email.toLowerCase() === "vahidkamali03@gmail.com";
 
   // Handle preset role change
   const handleRoleChange = (newRole: UserRole) => {
     setRole(newRole);
-    if (newRole !== 'custom') {
+    if (newRole !== "custom") {
       const preset = getPermissionsByRole(newRole);
       setPermissions(preset);
 
       // Suggest suitable title
       if (!userToEdit) {
-        if (newRole === 'super_admin') setRoleTitle('مدیر ارشد سامانه');
-        else if (newRole === 'finance_manager') setRoleTitle('مدیر مالی');
-        else if (newRole === 'accountant') setRoleTitle('کارشناس حسابداری و ثبت اسناد');
-        else if (newRole === 'viewer') setRoleTitle('ناظر و حسابرس (فقط خواندنی)');
+        if (newRole === "super_admin") setRoleTitle("مدیر ارشد سامانه");
+        else if (newRole === "finance_manager") setRoleTitle("مدیر مالی");
+        else if (newRole === "accountant")
+          setRoleTitle("کارشناس حسابداری و ثبت اسناد");
+        else if (newRole === "viewer")
+          setRoleTitle("ناظر و حسابرس (فقط خواندنی)");
       }
     }
   };
 
   // Toggle individual permission
   const handleTogglePermission = (key: keyof UserPermissions) => {
-    if (isSuperAdminEmail && key === 'canManageUsers') return; // Cannot revoke manage users from root super admin
-    setPermissions(prev => {
+    if (isSuperAdminEmail && key === "canManageUsers") return; // Cannot revoke manage users from root super admin
+    setPermissions((prev) => {
       const next = { ...prev, [key]: !prev[key] };
       // If user toggles individual permissions, mark role as custom if it doesn't match presets
-      setRole('custom');
+      setRole("custom");
       return next;
     });
   };
@@ -822,15 +945,17 @@ const UserModal: React.FC<UserModalProps> = ({
     const cleanPhone = toEnglishDigits(phone).trim() || undefined;
 
     if (!cleanFirst || !cleanLast) {
-      alert('لطفاً نام و نام خانوادگی را وارد نمایید.');
+      alert("لطفاً نام و نام خانوادگی را وارد نمایید.");
       return;
     }
     if (!cleanEmail) {
-      alert('لطفاً نشانی ایمیل را وارد نمایید.');
+      alert("لطفاً نشانی ایمیل را وارد نمایید.");
       return;
     }
-    if (!userToEdit && (!cleanPassword || cleanPassword.length < 4)) {
-      alert('لطفاً برای کاربر جدید یک کلمه عبور با حداقل ۴ کاراکتر وارد نمایید.');
+    if (!userToEdit && (!cleanPassword || cleanPassword.length < 12)) {
+      alert(
+        "لطفاً برای کاربر جدید یک کلمه عبور با حداقل ۱۲ کاراکتر وارد نمایید.",
+      );
       return;
     }
 
@@ -843,7 +968,7 @@ const UserModal: React.FC<UserModalProps> = ({
       email: cleanEmail,
       ...(cleanPassword ? { password: cleanPassword } : {}),
       role,
-      roleTitle: roleTitle.trim() || 'کاربر سامانه',
+      roleTitle: roleTitle.trim() || "کاربر سامانه",
       status,
       permissions,
       phone: cleanPhone,
@@ -856,13 +981,16 @@ const UserModal: React.FC<UserModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
       <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden my-auto">
-        
         {/* Modal Header */}
         <div className="p-5 sm:p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
           <div>
             <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-blue-600" />
-              <span>{userToEdit ? 'ویرایش مشخصات و دسترسی‌های کاربر' : 'تعریف کاربر جدید برای ورود به سامانه'}</span>
+              <span>
+                {userToEdit
+                  ? "ویرایش مشخصات و دسترسی‌های کاربر"
+                  : "تعریف کاربر جدید برای ورود به سامانه"}
+              </span>
             </h3>
             <p className="text-xs text-slate-500 mt-1">
               تعیین اطلاعات کاربری، نقش و تعیین دسترسی خواندن/نوشتن و ثبت اسناد
@@ -878,8 +1006,10 @@ const UserModal: React.FC<UserModalProps> = ({
         </div>
 
         {/* Modal Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 text-xs">
-          
+        <form
+          onSubmit={handleSubmit}
+          className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 text-xs"
+        >
           {/* First & Last Name */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -939,7 +1069,7 @@ const UserModal: React.FC<UserModalProps> = ({
               <div className="relative">
                 <Lock className="w-4 h-4 absolute right-3 top-3 text-slate-400" />
                 <input
-                  type={showModalPassword ? 'text' : 'password'}
+                  type={showModalPassword ? "text" : "password"}
                   required
                   dir="ltr"
                   placeholder="••••••••"
@@ -951,9 +1081,13 @@ const UserModal: React.FC<UserModalProps> = ({
                   type="button"
                   onClick={() => setShowModalPassword(!showModalPassword)}
                   className="absolute left-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  title={showModalPassword ? 'مخفی کردن' : 'نمایش کلمه عبور'}
+                  title={showModalPassword ? "مخفی کردن" : "نمایش کلمه عبور"}
                 >
-                  {showModalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showModalPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               </div>
               <span className="text-[10px] text-slate-400 mt-1 block">
@@ -998,71 +1132,77 @@ const UserModal: React.FC<UserModalProps> = ({
               انتخاب الگوی نقش کاربری (Preset Role)
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              
               <button
                 type="button"
-                onClick={() => handleRoleChange('super_admin')}
+                onClick={() => handleRoleChange("super_admin")}
                 className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                  role === 'super_admin' 
-                    ? 'border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-400/30' 
-                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                  role === "super_admin"
+                    ? "border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-400/30"
+                    : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
                 }`}
               >
                 <div className="flex items-center gap-1.5 font-bold mb-1">
                   <Crown className="w-4 h-4 text-amber-600" />
                   <span>مدیر کل سامانه</span>
                 </div>
-                <p className="text-[10px] text-slate-500 leading-tight">دسترسی نامحدود و مدیریت کاربران</p>
+                <p className="text-[10px] text-slate-500 leading-tight">
+                  دسترسی نامحدود و مدیریت کاربران
+                </p>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleRoleChange('finance_manager')}
+                onClick={() => handleRoleChange("finance_manager")}
                 className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                  role === 'finance_manager' 
-                    ? 'border-blue-500 bg-blue-50 text-blue-900 ring-2 ring-blue-400/30' 
-                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                  role === "finance_manager"
+                    ? "border-blue-500 bg-blue-50 text-blue-900 ring-2 ring-blue-400/30"
+                    : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
                 }`}
               >
                 <div className="flex items-center gap-1.5 font-bold mb-1">
                   <Briefcase className="w-4 h-4 text-blue-600" />
                   <span>مدیر مالی</span>
                 </div>
-                <p className="text-[10px] text-slate-500 leading-tight">کلیه تراکنش‌ها و ماتریس حقوق</p>
+                <p className="text-[10px] text-slate-500 leading-tight">
+                  کلیه تراکنش‌ها و ماتریس حقوق
+                </p>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleRoleChange('accountant')}
+                onClick={() => handleRoleChange("accountant")}
                 className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                  role === 'accountant' 
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-400/30' 
-                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                  role === "accountant"
+                    ? "border-emerald-500 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-400/30"
+                    : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
                 }`}
               >
                 <div className="flex items-center gap-1.5 font-bold mb-1">
                   <Calculator className="w-4 h-4 text-emerald-600" />
                   <span>حسابدار (ثبت و ویرایش)</span>
                 </div>
-                <p className="text-[10px] text-slate-500 leading-tight">ثبت درآمد و هزینه + اکسل</p>
+                <p className="text-[10px] text-slate-500 leading-tight">
+                  ثبت درآمد و هزینه + اکسل
+                </p>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleRoleChange('viewer')}
+                onClick={() => handleRoleChange("viewer")}
                 className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                  role === 'viewer' 
-                    ? 'border-slate-700 bg-slate-100 text-slate-900 ring-2 ring-slate-400/30' 
-                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                  role === "viewer"
+                    ? "border-slate-700 bg-slate-100 text-slate-900 ring-2 ring-slate-400/30"
+                    : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
                 }`}
               >
                 <div className="flex items-center gap-1.5 font-bold mb-1">
                   <Eye className="w-4 h-4 text-slate-600" />
                   <span>ناظر / فقط خواندنی</span>
                 </div>
-                <p className="text-[10px] text-slate-500 leading-tight">مشاهده گزارش‌ها و دریافت اکسل</p>
+                <p className="text-[10px] text-slate-500 leading-tight">
+                  مشاهده گزارش‌ها و دریافت اکسل
+                </p>
               </button>
-
             </div>
           </div>
 
@@ -1077,7 +1217,7 @@ const UserModal: React.FC<UserModalProps> = ({
                   type="button"
                   onClick={() => {
                     setPermissions({ ...ALL_PERMISSIONS_GRANTED });
-                    setRole('super_admin');
+                    setRole("super_admin");
                   }}
                   className="text-[11px] text-blue-600 hover:underline cursor-pointer"
                 >
@@ -1087,8 +1227,8 @@ const UserModal: React.FC<UserModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setPermissions(getPermissionsByRole('viewer'));
-                    setRole('viewer');
+                    setPermissions(getPermissionsByRole("viewer"));
+                    setRole("viewer");
                   }}
                   className="text-[11px] text-slate-500 hover:underline cursor-pointer"
                 >
@@ -1105,7 +1245,9 @@ const UserModal: React.FC<UserModalProps> = ({
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                {PERMISSION_DEFINITIONS.filter(p => p.category === 'financial').map(p => (
+                {PERMISSION_DEFINITIONS.filter(
+                  (p) => p.category === "financial",
+                ).map((p) => (
                   <label
                     key={p.key}
                     className="flex items-start gap-2.5 p-2 rounded-xl bg-white border border-slate-200/60 hover:border-slate-300 cursor-pointer transition-colors"
@@ -1117,8 +1259,12 @@ const UserModal: React.FC<UserModalProps> = ({
                       className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                     />
                     <div>
-                      <span className="font-semibold text-slate-800 block">{p.title}</span>
-                      <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">{p.description}</span>
+                      <span className="font-semibold text-slate-800 block">
+                        {p.title}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                        {p.description}
+                      </span>
                     </div>
                   </label>
                 ))}
@@ -1133,23 +1279,29 @@ const UserModal: React.FC<UserModalProps> = ({
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                {PERMISSION_DEFINITIONS.filter(p => p.category === 'hr').map(p => (
-                  <label
-                    key={p.key}
-                    className="flex items-start gap-2.5 p-2 rounded-xl bg-white border border-slate-200/60 hover:border-slate-300 cursor-pointer transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={permissions[p.key]}
-                      onChange={() => handleTogglePermission(p.key)}
-                      className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <div>
-                      <span className="font-semibold text-slate-800 block">{p.title}</span>
-                      <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">{p.description}</span>
-                    </div>
-                  </label>
-                ))}
+                {PERMISSION_DEFINITIONS.filter((p) => p.category === "hr").map(
+                  (p) => (
+                    <label
+                      key={p.key}
+                      className="flex items-start gap-2.5 p-2 rounded-xl bg-white border border-slate-200/60 hover:border-slate-300 cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={permissions[p.key]}
+                        onChange={() => handleTogglePermission(p.key)}
+                        className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <div>
+                        <span className="font-semibold text-slate-800 block">
+                          {p.title}
+                        </span>
+                        <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                          {p.description}
+                        </span>
+                      </div>
+                    </label>
+                  ),
+                )}
               </div>
             </div>
 
@@ -1161,7 +1313,9 @@ const UserModal: React.FC<UserModalProps> = ({
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                {PERMISSION_DEFINITIONS.filter(p => p.category === 'system').map(p => (
+                {PERMISSION_DEFINITIONS.filter(
+                  (p) => p.category === "system",
+                ).map((p) => (
                   <label
                     key={p.key}
                     className="flex items-start gap-2.5 p-2 rounded-xl bg-white border border-slate-200/60 hover:border-slate-300 cursor-pointer transition-colors"
@@ -1169,37 +1323,45 @@ const UserModal: React.FC<UserModalProps> = ({
                     <input
                       type="checkbox"
                       checked={permissions[p.key]}
-                      disabled={isSuperAdminEmail && p.key === 'canManageUsers'}
+                      disabled={isSuperAdminEmail && p.key === "canManageUsers"}
                       onChange={() => handleTogglePermission(p.key)}
                       className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
                     />
                     <div>
-                      <span className="font-semibold text-slate-800 block">{p.title}</span>
-                      <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">{p.description}</span>
+                      <span className="font-semibold text-slate-800 block">
+                        {p.title}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                        {p.description}
+                      </span>
                     </div>
                   </label>
                 ))}
               </div>
             </div>
-
           </div>
 
           {/* User Status Selection */}
           <div className="pt-2 p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="font-bold text-slate-800 block text-xs">وضعیت حساب کاربری</span>
-                <span className="text-[11px] text-slate-500 block mt-0.5">کاربران فقط در وضعیت «فعال» امکان ورود به سامانه را خواهند داشت</span>
+                <span className="font-bold text-slate-800 block text-xs">
+                  وضعیت حساب کاربری
+                </span>
+                <span className="text-[11px] text-slate-500 block mt-0.5">
+                  کاربران فقط در وضعیت «فعال» امکان ورود به سامانه را خواهند
+                  داشت
+                </span>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => setStatus('active')}
+                onClick={() => setStatus("active")}
                 className={`py-2 px-2.5 rounded-xl font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 border ${
-                  status === 'active'
-                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  status === "active"
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
                 }`}
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1208,11 +1370,11 @@ const UserModal: React.FC<UserModalProps> = ({
 
               <button
                 type="button"
-                onClick={() => setStatus('pending')}
+                onClick={() => setStatus("pending")}
                 className={`py-2 px-2.5 rounded-xl font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 border ${
-                  status === 'pending'
-                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  status === "pending"
+                    ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
                 }`}
               >
                 <Clock className="w-3.5 h-3.5" />
@@ -1221,11 +1383,11 @@ const UserModal: React.FC<UserModalProps> = ({
 
               <button
                 type="button"
-                onClick={() => setStatus('inactive')}
+                onClick={() => setStatus("inactive")}
                 className={`py-2 px-2.5 rounded-xl font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 border ${
-                  status === 'inactive'
-                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  status === "inactive"
+                    ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
                 }`}
               >
                 <XCircle className="w-3.5 h-3.5" />
@@ -1249,12 +1411,12 @@ const UserModal: React.FC<UserModalProps> = ({
               className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs transition-colors cursor-pointer flex items-center gap-2"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{userToEdit ? 'ذخیره تغییرات کاربر' : 'ایجاد و ثبت کاربر'}</span>
+              <span>
+                {userToEdit ? "ذخیره تغییرات کاربر" : "ایجاد و ثبت کاربر"}
+              </span>
             </button>
           </div>
-
         </form>
-
       </div>
     </div>
   );

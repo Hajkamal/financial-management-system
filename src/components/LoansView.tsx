@@ -23,15 +23,15 @@ interface LoansViewProps {
   transactions: FinancialTransaction[];
   selectedYear: number;
   currencyMode: CurrencyMode;
-  onSaveLoan: (loan: Loan) => void;
-  onDeleteLoan: (id: string) => void;
+  onSaveLoan: (loan: Loan) => boolean | void | Promise<boolean | void>;
+  onDeleteLoan: (id: string) => boolean | void | Promise<boolean | void>;
   onPayInstallment: (params: {
     loanId: string;
     amount: number;
     month: PersianMonthNumber;
     title: string;
     description?: string;
-  }) => void;
+  }) => boolean | void | Promise<boolean | void>;
   companyName?: string;
   onShowToast?: (msg: string) => void;
   canEdit?: boolean;
@@ -102,7 +102,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSubmitLoan = (e: React.FormEvent) => {
+  const handleSubmitLoan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
@@ -120,7 +120,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
       notes: notes.trim() || undefined,
     };
 
-    onSaveLoan(newLoan);
+    if ((await onSaveLoan(newLoan)) === false) return;
     setIsModalOpen(false);
   };
 
@@ -130,20 +130,20 @@ export const LoansView: React.FC<LoansViewProps> = ({
     setPayDesc(`قسط شماره ${l.paidInstallments + 1}`);
   };
 
-  const handleConfirmPayInstallment = (e: React.FormEvent) => {
+  const handleConfirmPayInstallment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payModalLoan) return;
 
     const nextInstallmentNum = payModalLoan.paidInstallments + 1;
     const monthName = PERSIAN_MONTHS.find(m => m.num === payMonth)?.name || payMonth;
 
-    onPayInstallment({
+    if ((await onPayInstallment({
       loanId: payModalLoan.id,
       amount: payModalLoan.installmentAmount,
       month: payMonth,
       title: `پرداخت قسط ${toPersianDigits(nextInstallmentNum)} ${payModalLoan.title} (ماه ${monthName})`,
       description: payDesc.trim() || undefined,
-    });
+    })) === false) return;
 
     setPayModalLoan(null);
   };
@@ -581,9 +581,9 @@ export const LoansView: React.FC<LoansViewProps> = ({
         title="حذف تسهیلات مالی"
         itemName={deletingLoan?.title}
         warningText="آیا از حذف این پرونده تسهیلات اطمینان دارید؟ اقساط ثبت شده قبلی حذف نخواهند شد اما وام از لیست تعهدات خارج می‌شود."
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deletingLoan) {
-            onDeleteLoan(deletingLoan.id);
+            if ((await onDeleteLoan(deletingLoan.id)) === false) return;
             setDeletingLoan(null);
           }
         }}

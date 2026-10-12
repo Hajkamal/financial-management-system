@@ -1,3 +1,4 @@
+import { apiFetch, setServerRevision, sessionRequest } from "./request";
 /**
  * کلاینت ارتباط بلادرنگ با دیتابیس متمرکز سرور
  * تضمین می‌کند اطلاعات وارد شده در تمامی مرورگرها، دستگاه‌ها و برای کلیه کاربران یکپارچه و به روز باشد.
@@ -15,11 +16,12 @@ import {
   FiscalYear,
   AppUser,
   CustomCategoryDefinition,
-  SyncAuditLog
-} from '../types';
+  SyncAuditLog,
+} from "../types";
 
 export interface ServerFullData {
   version: number;
+  revision: number;
   lastUpdated: string;
   selectedYear: number;
   users: AppUser[];
@@ -37,37 +39,23 @@ export interface ServerFullData {
   syncLogs?: SyncAuditLog[];
 }
 
-let currentUserContext: { fullName?: string; email?: string; roleTitle?: string; role?: string } | null = null;
-
-export const setCurrentUserContext = (user: AppUser | null) => {
-  if (user) {
-    currentUserContext = {
-      fullName: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-      email: user.email,
-      roleTitle: user.roleTitle || user.role,
-      role: user.role,
-    };
-  } else {
-    currentUserContext = null;
-  }
-};
-
-const getHeaders = (): Record<string, string> => {
-  // Legacy JSON/shared-token API is disabled, including in AI Studio development.
-  throw new Error('API قدیمی فایل JSON غیرفعال است؛ از Supabase استفاده کنید.');
-};
-
+export const setCurrentUserContext = (_user: AppUser | null) => {};
+const getHeaders = () => ({ "Content-Type": "application/json" });
 
 export const serverApi = {
   // دریافت تمامی داده‌ها از دیتابیس سرور
   async getFinancialData(): Promise<ServerFullData | null> {
     try {
-      const res = await fetch('/api/financial-data', { headers: getHeaders() });
+      const res = await apiFetch("/api/financial-data", {
+        headers: getHeaders(),
+      });
       if (!res.ok) return null;
       const json = await res.json();
+      if (Number.isSafeInteger(json.data?.revision))
+        setServerRevision(json.data.revision);
       return json.data || null;
     } catch (err) {
-      console.warn('Network call to /api/financial-data failed:', err);
+      console.warn("Network call to /api/financial-data failed:", err);
       return null;
     }
   },
@@ -75,8 +63,8 @@ export const serverApi = {
   // تراکنش‌ها
   async saveTransaction(tx: FinancialTransaction): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/transaction', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/transaction", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(tx),
       });
@@ -86,10 +74,12 @@ export const serverApi = {
     }
   },
 
-  async saveTransactions(transactions: FinancialTransaction[]): Promise<boolean> {
+  async saveTransactions(
+    transactions: FinancialTransaction[],
+  ): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/transactions', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/transactions", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify({ transactions }),
       });
@@ -101,9 +91,13 @@ export const serverApi = {
 
   async deleteTransaction(id: string): Promise<boolean> {
     try {
-      const res = await fetch(`/api/financial-data/transaction/${encodeURIComponent(id)}`, {
-        method: 'DELETE', headers: getHeaders(),
-      });
+      const res = await apiFetch(
+        `/api/financial-data/transaction/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          headers: getHeaders(),
+        },
+      );
       return res.ok;
     } catch {
       return false;
@@ -113,8 +107,8 @@ export const serverApi = {
   // کارمندان
   async saveEmployee(emp: Employee): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/employee', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/employee", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(emp),
       });
@@ -126,9 +120,13 @@ export const serverApi = {
 
   async deleteEmployee(id: string): Promise<boolean> {
     try {
-      const res = await fetch(`/api/financial-data/employee/${encodeURIComponent(id)}`, {
-        method: 'DELETE', headers: getHeaders(),
-      });
+      const res = await apiFetch(
+        `/api/financial-data/employee/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          headers: getHeaders(),
+        },
+      );
       return res.ok;
     } catch {
       return false;
@@ -138,8 +136,8 @@ export const serverApi = {
   // ماتریس حقوق
   async saveSalaryCell(item: SalaryMatrixItem): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/salary-cell', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/salary-cell", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(item),
       });
@@ -151,8 +149,8 @@ export const serverApi = {
 
   async saveSalaryMatrixBatch(items: SalaryMatrixItem[]): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/salary-matrix-batch', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/salary-matrix-batch", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify({ items }),
       });
@@ -165,8 +163,8 @@ export const serverApi = {
   // اعضا و سهامداران
   async saveMember(member: CompanyMember): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/member', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/member", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(member),
       });
@@ -178,9 +176,13 @@ export const serverApi = {
 
   async deleteMember(id: string): Promise<boolean> {
     try {
-      const res = await fetch(`/api/financial-data/member/${encodeURIComponent(id)}`, {
-        method: 'DELETE', headers: getHeaders(),
-      });
+      const res = await apiFetch(
+        `/api/financial-data/member/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          headers: getHeaders(),
+        },
+      );
       return res.ok;
     } catch {
       return false;
@@ -190,8 +192,8 @@ export const serverApi = {
   // وام‌ها
   async saveLoan(loan: Loan): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/loan', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/loan", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(loan),
       });
@@ -203,9 +205,13 @@ export const serverApi = {
 
   async deleteLoan(id: string): Promise<boolean> {
     try {
-      const res = await fetch(`/api/financial-data/loan/${encodeURIComponent(id)}`, {
-        method: 'DELETE', headers: getHeaders(),
-      });
+      const res = await apiFetch(
+        `/api/financial-data/loan/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          headers: getHeaders(),
+        },
+      );
       return res.ok;
     } catch {
       return false;
@@ -215,8 +221,8 @@ export const serverApi = {
   // حساب‌های بانکی
   async saveBankAccount(acc: BankAccount): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/bank-account', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/bank-account", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(acc),
       });
@@ -228,9 +234,13 @@ export const serverApi = {
 
   async deleteBankAccount(id: string): Promise<boolean> {
     try {
-      const res = await fetch(`/api/financial-data/bank-account/${encodeURIComponent(id)}`, {
-        method: 'DELETE', headers: getHeaders(),
-      });
+      const res = await apiFetch(
+        `/api/financial-data/bank-account/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          headers: getHeaders(),
+        },
+      );
       return res.ok;
     } catch {
       return false;
@@ -240,8 +250,8 @@ export const serverApi = {
   // صورتحساب‌های ارزش افزوده
   async saveVatInvoice(inv: VatInvoice): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/vat-invoice', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/vat-invoice", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(inv),
       });
@@ -253,9 +263,13 @@ export const serverApi = {
 
   async deleteVatInvoice(id: string): Promise<boolean> {
     try {
-      const res = await fetch(`/api/financial-data/vat-invoice/${encodeURIComponent(id)}`, {
-        method: 'DELETE', headers: getHeaders(),
-      });
+      const res = await apiFetch(
+        `/api/financial-data/vat-invoice/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          headers: getHeaders(),
+        },
+      );
       return res.ok;
     } catch {
       return false;
@@ -265,8 +279,8 @@ export const serverApi = {
   // تعرفه‌های خدمت
   async saveServiceTariff(tariff: ServiceTariff): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/service-tariff', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/service-tariff", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(tariff),
       });
@@ -279,8 +293,8 @@ export const serverApi = {
   // سال‌های مالی
   async saveFiscalYear(fy: FiscalYear): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/fiscal-year', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/fiscal-year", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(fy),
       });
@@ -292,8 +306,9 @@ export const serverApi = {
 
   async deleteFiscalYear(year: number): Promise<boolean> {
     try {
-      const res = await fetch(`/api/financial-data/fiscal-year/${year}`, {
-        method: 'DELETE', headers: getHeaders(),
+      const res = await apiFetch(`/api/financial-data/fiscal-year/${year}`, {
+        method: "DELETE",
+        headers: getHeaders(),
       });
       return res.ok;
     } catch {
@@ -304,8 +319,8 @@ export const serverApi = {
   // کاربران سامانه
   async saveUser(user: AppUser): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/user', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/user", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(user),
       });
@@ -317,9 +332,13 @@ export const serverApi = {
 
   async deleteUser(id: string): Promise<boolean> {
     try {
-      const res = await fetch(`/api/financial-data/user/${encodeURIComponent(id)}`, {
-        method: 'DELETE', headers: getHeaders(),
-      });
+      const res = await apiFetch(
+        `/api/financial-data/user/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          headers: getHeaders(),
+        },
+      );
       return res.ok;
     } catch {
       return false;
@@ -327,23 +346,49 @@ export const serverApi = {
   },
 
   // تغییر قطعی رمز عبور در سرور
-  async changePassword(userId: string, newPasswordHash: string): Promise<boolean> {
+  async changePassword(
+    userId: string,
+    newPassword: string,
+    currentPassword: string,
+  ): Promise<boolean> {
+    await sessionRequest("/api/auth/change-password", {
+      userId,
+      currentPassword,
+      newPassword,
+    });
+    return true;
+  },
+  async atomic(
+    operations: { resource: string; data: any; action?: "save" | "delete" }[],
+  ): Promise<boolean> {
     try {
-      const res = await fetch('/api/auth/change-password', {
-        method: 'POST',
+      await apiFetch("/api/financial-data/atomic", {
+        method: "POST",
         headers: getHeaders(),
-        body: JSON.stringify({ userId, newPasswordHash }),
+        body: JSON.stringify({ operations }),
       });
-      return res.ok;
+      return true;
     } catch {
       return false;
     }
+  },
+  async listBackups():Promise<any[]> {const r=await apiFetch('/api/financial-data/backups');const data=await r.json();if(!r.ok)throw Error(data.error||'فهرست بکاپ‌ها دریافت نشد.');return data.backups;},
+  async getHistoricalBackup(id:string):Promise<any> {const r=await apiFetch('/api/financial-data/backup-history/'+encodeURIComponent(id));const data=await r.json();if(!r.ok)throw Error(data.error||'بکاپ دریافت نشد.');return data;},
+  async getBackup(): Promise<any> {
+    const res = await apiFetch("/api/financial-data/backup");
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "دریافت بکاپ ناموفق بود");
+    return json;
   },
 
   // بازنشانی کامل در سرور
   async resetData(): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/reset', { method: 'POST', headers: getHeaders() });
+      const res = await apiFetch("/api/financial-data/reset", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ confirm: "RESET" }),
+      });
       return res.ok;
     } catch {
       return false;
@@ -353,10 +398,10 @@ export const serverApi = {
   // بازیابی کامل بکاپ در سرور
   async restoreData(backup: any): Promise<{ ok: boolean; error?: string }> {
     try {
-      const res = await fetch('/api/financial-data/restore', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/restore", {
+        method: "POST",
         headers: getHeaders(),
-        body: JSON.stringify(backup),
+        body: JSON.stringify({ backup, confirm: "RESTORE" }),
       });
       if (!res.ok) {
         let errMsg = `خطای سرور (${res.status})`;
@@ -364,21 +409,23 @@ export const serverApi = {
           const json = await res.json();
           if (json.error) errMsg = json.error;
         } catch {}
-        console.warn('serverApi.restoreData HTTP status:', res.status, errMsg);
+        console.warn("serverApi.restoreData HTTP status:", res.status, errMsg);
         return { ok: false, error: errMsg };
       }
       return { ok: true };
     } catch (err: any) {
-      console.warn('serverApi.restoreData fetch exception:', err);
-      return { ok: false, error: err?.message || 'خطای اتصال به سرور' };
+      console.warn("serverApi.restoreData fetch exception:", err);
+      return { ok: false, error: err?.message || "خطای اتصال به سرور" };
     }
   },
 
   // ذخیره دسته‌بندی‌های اختصاصی
-  async saveCustomCategories(customCategories: CustomCategoryDefinition[]): Promise<boolean> {
+  async saveCustomCategories(
+    customCategories: CustomCategoryDefinition[],
+  ): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/custom-categories', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/custom-categories", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify({ customCategories }),
       });
@@ -391,8 +438,8 @@ export const serverApi = {
   // ذخیره لوگوی شرکت
   async saveCompanyLogo(companyLogo: string | null): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/company-logo', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/company-logo", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify({ companyLogo }),
       });
@@ -405,27 +452,32 @@ export const serverApi = {
   // ارسال کلیه داده‌های دستگاه جاری به سرور برای دریافت فوری در گوشی و لپ‌تاپ دیگر
   async pushAllData(payload: any): Promise<{ ok: boolean; message?: string }> {
     try {
-      const res = await fetch('/api/financial-data/push-all', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/push-all", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => ({}));
-      return { ok: res.ok, message: json.message };
+      return { ok: res.ok, message: json.message || json.error };
     } catch (err: any) {
-      return { ok: false, message: err?.message || 'خطا در برقراری ارتباط با سرور' };
+      return {
+        ok: false,
+        message: err?.message || "خطا در برقراری ارتباط با سرور",
+      };
     }
   },
 
   // دریافت تاریخچه و لاگ‌های همگام‌سازی سرور
   async getSyncLogs(): Promise<SyncAuditLog[]> {
     try {
-      const res = await fetch('/api/financial-data/sync-logs', { headers: getHeaders() });
+      const res = await apiFetch("/api/financial-data/sync-logs", {
+        headers: getHeaders(),
+      });
       if (!res.ok) return [];
       const json = await res.json();
       return Array.isArray(json.logs) ? json.logs : [];
     } catch (err) {
-      console.warn('Failed to fetch sync logs from server:', err);
+      console.warn("Failed to fetch sync logs from server:", err);
       return [];
     }
   },
@@ -433,8 +485,8 @@ export const serverApi = {
   // ثبت دستی رویداد همگام‌سازی در سرور (مانند دریافت یا بارگیری داده‌ها توسط کاربر)
   async logSyncAction(log: Partial<SyncAuditLog>): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/sync-log', {
-        method: 'POST',
+      const res = await apiFetch("/api/financial-data/sync-log", {
+        method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(log),
       });
@@ -447,14 +499,13 @@ export const serverApi = {
   // پاکسازی لاگ‌های تاریخچه همگام‌سازی (مدیر ارشد)
   async clearSyncLogs(): Promise<boolean> {
     try {
-      const res = await fetch('/api/financial-data/sync-logs', {
-        method: 'DELETE',
+      const res = await apiFetch("/api/financial-data/sync-logs", {
+        method: "DELETE",
         headers: getHeaders(),
       });
       return res.ok;
     } catch {
       return false;
     }
-  }
+  },
 };
-

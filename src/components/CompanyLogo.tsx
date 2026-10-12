@@ -5,7 +5,7 @@ interface CompanyLogoProps {
   className?: string;
   size?: 'sm' | 'md' | 'lg';
   canUpload?: boolean;
-  onLogoChange?: (logoDataUrl: string | null) => void;
+  onLogoChange?: (logoDataUrl: string | null) => boolean | void | Promise<boolean | void>;
   currentLogo?: string | null;
 }
 
@@ -40,11 +40,7 @@ export const CompanyLogo: React.FC<CompanyLogoProps> = ({
 }) => {
   const [logo, setLogo] = useState<string | null>(() => {
     if (currentLogo !== undefined) return currentLogo;
-    try {
-      return localStorage.getItem(STORAGE_KEY);
-    } catch {
-      return null;
-    }
+    return null;
   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -67,8 +63,8 @@ export const CompanyLogo: React.FC<CompanyLogoProps> = ({
     if (!file) return;
 
     // Check size limit (max 4MB)
-    if (file.size > 4 * 1024 * 1024) {
-      alert('حجم فایل انتخابی بیش از ۴ مگابایت است. لطفاً فایل کوچک‌تری انتخاب کنید.');
+    if (!["image/png","image/jpeg","image/webp"].includes(file.type) || file.size > 700 * 1024) {
+      alert('فقط PNG، JPEG یا WebP با حجم حداکثر ۷۰۰ کیلوبایت مجاز است.');
       return;
     }
 
@@ -80,22 +76,12 @@ export const CompanyLogo: React.FC<CompanyLogoProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
-    setLogo(previewUrl);
-    updateDocumentFavicon(previewUrl);
-    try {
-      if (previewUrl) {
-        localStorage.setItem(STORAGE_KEY, previewUrl);
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    } catch (e) {
-      console.warn('Could not save logo to localStorage:', e);
-    }
-    if (onLogoChange) {
-      onLogoChange(previewUrl);
-    }
-    setIsModalOpen(false);
+  const [isSaving,setIsSaving]=useState(false);
+  const handleSave = async () => {
+    if(isSaving || !onLogoChange) return;
+    setIsSaving(true);
+    try {if((await onLogoChange(previewUrl))===false)return;setLogo(previewUrl);updateDocumentFavicon(previewUrl);setIsModalOpen(false);}
+    finally {setIsSaving(false);}
   };
 
   const handleRemove = () => {
@@ -245,7 +231,7 @@ export const CompanyLogo: React.FC<CompanyLogoProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={handleSave}
+                  disabled={isSaving} onClick={handleSave}
                   className="px-5 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />

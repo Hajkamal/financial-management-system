@@ -65,7 +65,7 @@ interface TransactionsViewProps {
   currencyMode: CurrencyMode;
   onOpenNewTransaction: () => void;
   onEditTransaction: (tx: FinancialTransaction) => void;
-  onDeleteTransaction: (id: string) => void;
+  onDeleteTransaction: (id: string) => boolean | void | Promise<boolean | void>;
   companyName?: string;
   onShowToast?: (msg: string) => void;
   currentUser?: AppUser | null;
@@ -1278,9 +1278,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         title="حذف سند مالی"
         itemName={deletingTransaction?.title}
         warningText="آیا از حذف این سند مالی اطمینان دارید؟ مبلغ این سند از تراز و گزارش‌های شرکت کسر خواهد شد."
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deletingTransaction) {
-            onDeleteTransaction(deletingTransaction.id);
+            if ((await onDeleteTransaction(deletingTransaction.id)) === false) return;
             if (onShowToast) onShowToast(`سند "${deletingTransaction.title}" با موفقیت حذف شد.`);
             setDeletingTransaction(null);
           }

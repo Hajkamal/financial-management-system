@@ -1,222 +1,77 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { INITIAL_CUSTOM_CATEGORIES } from './src/data/initialData';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const DATA_DIR = path.resolve(__dirname, 'data');
-const DB_FILE = path.resolve(DATA_DIR, 'server_db.json');
-
-// Default initial state
-const DEFAULT_SUPER_ADMIN = {
-  id: 'user-vahid',
-  email: 'vahidkamali03@gmail.com',
-  firstName: 'وحید',
-  lastName: 'کمالی',
-  fullName: 'وحید کمالی',
-  // Default password: admin (SHA-256)
-  password: 'sha256:8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
-  role: 'super_admin',
-  roleTitle: 'مدیر کل سامانه',
-  status: 'active',
-  permissions: {
-    canViewDashboard: true,
-    canViewTransactions: true,
-    canCreateTransactions: true,
-    canEditTransactions: true,
-    canDeleteTransactions: true,
-    canViewSalary: true,
-    canEditSalary: true,
-    canManageEmployees: true,
-    canManageMembers: true,
-    canManageLoans: true,
-    canManageFiscalYears: true,
-    canManageUsers: true,
-    canExportExcel: true,
-    canBackupRestore: true,
-  },
-  avatarColor: 'from-amber-500 to-yellow-600',
-  createdAt: '۱۴۰۵/۰۱/۰۱',
-  lastLogin: 'امروز',
-  phone: '۰۹۱۲۳۴۵۶۷۸۹',
-  notes: 'مدیر ارشد و مالک سامانه',
-};
-
-const DEFAULT_FISCAL_YEAR = {
-  year: 1405,
-  title: 'سال مالی ۱۴۰۵ (جاری)',
-  startDate: '۱۴۰۵/۰۱/۰۱',
-  endDate: '۱۴۰۵/۱۲/۲۹',
-  isClosed: false,
-  notes: 'سال مالی جدید',
-  openingBalance: 0,
-};
-
+import { createCipheriv,createDecipheriv,randomBytes } from 'node:crypto';
+import { adminClient } from './server-security/supabase-admin';
+import * as convert from './src/lib/databaseConverters';
+import { getPermissionsByRole } from './src/utils/permissions';
+import { fail,canonical,validateRelations } from './security/validation';
 export interface ServerDatabase {
-  version: number;
-  lastUpdated: string;
-  selectedYear: number;
-  users: any[];
-  fiscalYears: any[];
-  transactions: any[];
-  employees: any[];
-  salaryMatrix: any[];
-  members: any[];
-  loans: any[];
-  bankAccounts: any[];
-  vatInvoices: any[];
-  serviceTariffs: any[];
-  customCategories?: any[];
-  companyLogo?: string | null;
-  syncLogs?: any[];
+  version:number;revision:number;lastUpdated:string;selectedYear:number;
+  users:any[];fiscalYears:any[];transactions:any[];employees:any[];salaryMatrix:any[];
+  members:any[];loans:any[];bankAccounts:any[];vatInvoices:any[];serviceTariffs:any[];
+  customCategories:any[];companyLogo?:string|null;syncLogs:any[];[key:string]:any;
 }
-
-function getDefaultDb(): ServerDatabase {
-  return {
-    version: 1,
-    lastUpdated: new Date().toISOString(),
-    selectedYear: 1405,
-    users: [DEFAULT_SUPER_ADMIN],
-    fiscalYears: [DEFAULT_FISCAL_YEAR],
-    transactions: [],
-    employees: [],
-    salaryMatrix: [],
-    members: [],
-    loans: [],
-    bankAccounts: [],
-    vatInvoices: [],
-    serviceTariffs: [],
-    customCategories: INITIAL_CUSTOM_CATEGORIES,
-    companyLogo: null,
-    syncLogs: [],
-  };
-}
-
-let inMemoryDb: ServerDatabase | null = null;
-
-export function loadDatabase(): ServerDatabase {
-  if (inMemoryDb) return inMemoryDb;
-
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-
-    if (fs.existsSync(DB_FILE)) {
-      const content = fs.readFileSync(DB_FILE, 'utf-8');
-      const parsed = JSON.parse(content);
-      
-      // Reconcile customCategories to ensure all system categories exist
-      const storedCategories = Array.isArray(parsed.customCategories) ? parsed.customCategories : [];
-      const mergedMap = new Map<string, any>();
-      INITIAL_CUSTOM_CATEGORIES.forEach(cat => {
-        mergedMap.set(cat.id, {
-          ...cat,
-          subCategories: Array.isArray(cat.subCategories) ? cat.subCategories.map(s => ({ ...s })) : []
-        });
-      });
-      storedCategories.forEach((item: any) => {
-        if (!item || !item.id) return;
-        if (mergedMap.has(item.id)) {
-          const existing = mergedMap.get(item.id)!;
-          const subMap = new Map<string, any>();
-          (existing.subCategories || []).forEach((s: any) => subMap.set(s.id, s));
-          (item.subCategories || []).forEach((s: any) => {
-            if (s && s.id) subMap.set(s.id, s);
-          });
-          mergedMap.set(item.id, {
-            ...existing,
-            ...item,
-            subCategories: Array.from(subMap.values()),
-          });
-        } else {
-          mergedMap.set(item.id, item);
-        }
-      });
-      const finalCustomCategories = Array.from(mergedMap.values());
-
-      // Validate schema has all arrays
-      inMemoryDb = {
-        version: parsed.version || 1,
-        lastUpdated: parsed.lastUpdated || new Date().toISOString(),
-        selectedYear: parsed.selectedYear || 1405,
-        users: Array.isArray(parsed.users) && parsed.users.length > 0 ? parsed.users : [DEFAULT_SUPER_ADMIN],
-        fiscalYears: Array.isArray(parsed.fiscalYears) && parsed.fiscalYears.length > 0 ? parsed.fiscalYears : [DEFAULT_FISCAL_YEAR],
-        transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
-        employees: Array.isArray(parsed.employees) ? parsed.employees : [],
-        salaryMatrix: Array.isArray(parsed.salaryMatrix) ? parsed.salaryMatrix : [],
-        members: Array.isArray(parsed.members) ? parsed.members : [],
-        loans: Array.isArray(parsed.loans) ? parsed.loans : [],
-        bankAccounts: Array.isArray(parsed.bankAccounts) ? parsed.bankAccounts : [],
-        vatInvoices: Array.isArray(parsed.vatInvoices) ? parsed.vatInvoices : [],
-        serviceTariffs: Array.isArray(parsed.serviceTariffs) ? parsed.serviceTariffs : [],
-        customCategories: finalCustomCategories,
-        companyLogo: parsed.companyLogo || null,
-        syncLogs: Array.isArray(parsed.syncLogs) ? parsed.syncLogs : [],
-      };
-      return inMemoryDb;
-    }
-  } catch (err) {
-    console.error('Error loading database, using default:', err);
+const tables = {
+  fiscalYears:['fiscal_years',convert.dbToFiscalYear,convert.fiscalYearToDb],
+  transactions:['transactions',convert.dbToTransaction,convert.transactionToDb],
+  employees:['employees',convert.dbToEmployee,convert.employeeToDb],
+  salaryMatrix:['salary_matrix',convert.dbToSalaryMatrix,convert.salaryMatrixToDb],
+  members:['members',convert.dbToMember,convert.memberToDb],loans:['loans',convert.dbToLoan,convert.loanToDb],
+  bankAccounts:['bank_accounts',convert.dbToBankAccount,convert.bankAccountToDb],
+  vatInvoices:['vat_invoices',convert.dbToVatInvoice,convert.vatInvoiceToDb],
+  serviceTariffs:['service_tariffs',convert.dbToServiceTariff,convert.serviceTariffToDb],
+} as const;
+export function snapshotFromRows(raw:any):ServerDatabase {
+  if(!raw || !Number.isSafeInteger(raw.revision)) fail('پاسخ دیتابیس معتبر نیست.',503);
+  const db:any={version:4,revision:raw.revision,lastUpdated:raw.lastUpdated,selectedYear:raw.settings?.selectedYear||1405,
+    customCategories:raw.settings?.customCategories||[],companyLogo:raw.settings?.companyLogo||null,syncLogs:raw.sync_logs||[]};
+  for(const [key,[table,from]] of Object.entries(tables)) {
+    if(!Array.isArray(raw[table])) fail('بخشی از اطلاعات دیتابیس دریافت نشد.',503);
+    db[key]=raw[table].map((row:any)=>(from as (r:any)=>any)(row));
   }
-
-  inMemoryDb = getDefaultDb();
-  saveDatabase(inMemoryDb);
-  return inMemoryDb;
+  db.users=(raw.app_users||[]).map((row:any)=>{
+    const u:any=convert.dbToAppUser(row);u.authUserId=row.auth_user_id;u.profileStamp=row.db_updated_at;u.sessionsValidAfter=row.sessions_valid_after;
+    const defaults=getPermissionsByRole(u.role);
+    u.permissions=Object.fromEntries(Object.keys(defaults).map(k=>[k,u.role==='super_admin'||(Object.prototype.hasOwnProperty.call(row.permissions||{},k)?row.permissions[k]===true:(defaults as any)[k]===true)]));
+    return u;
+  });
+  return db;
+}
+export function snapshotToRows(db:ServerDatabase) {
+  const raw:any={settings:{selectedYear:db.selectedYear,customCategories:db.customCategories,companyLogo:db.companyLogo||null}};
+  for(const [key,[table,,to]] of Object.entries(tables)) raw[table]=db[key].map(to as any);
+  return raw;
+}
+export async function loadDatabase():Promise<ServerDatabase> {
+  const {data,error}=await adminClient().rpc('get_server_snapshot');
+  if(error) fail('دریافت کامل اطلاعات از Supabase ناموفق است.',503);
+  return snapshotFromRows(data);
+}
+export function encryptBackup(data:unknown) {
+  const key=Buffer.from(process.env.BACKUP_ENCRYPTION_KEY||'','base64');
+  if(key.length!==32) fail('کلید رمزنگاری بکاپ روی سرور تنظیم نشده است.',503);
+  const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,iv);
+  const bytes=Buffer.concat([cipher.update(canonical(data),'utf8'),cipher.final()]);
+  return JSON.stringify({v:1,iv:iv.toString('base64'),tag:cipher.getAuthTag().toString('base64'),data:bytes.toString('base64')});
+}
+export async function saveDatabase(db:ServerDatabase,expectedRevision:number,actor:any) {
+  validateRelations(db);
+  const before=await loadDatabase();
+  if(before.revision!==expectedRevision) fail('اطلاعات تغییر کرده است؛ دوباره دریافت کنید.',409);
+  const log=db.syncLogs.at(-1);
+  const {data,error}=await adminClient().rpc('commit_financial_snapshot',{
+    p_data:snapshotToRows(db),p_expected_revision:expectedRevision,p_actor_auth_id:actor.authUserId,
+    p_actor_stamp:actor.profileStamp,p_encrypted_backup:encryptBackup(before),p_audit:log
+  });
+  if(error) fail(error.code==='40001'?'نسخه داده تغییر کرده است؛ دوباره دریافت کنید.':error.code==='42501'?'مجوز یا وضعیت حساب تغییر کرده است.':'ذخیره اطلاعات و بکاپ در Supabase انجام نشد.',error.code==='40001'?409:error.code==='42501'?403:503);
+  db.revision=Number(data);db.lastUpdated=new Date().toISOString();
+}
+export async function resetDatabaseToClean() {
+  const db=await loadDatabase();
+  for(const key of Object.keys(tables)) if(key!=='fiscalYears') db[key]=[];
+  return db;
 }
 
-export function saveDatabase(db: ServerDatabase): boolean {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    db.lastUpdated = new Date().toISOString();
-    inMemoryDb = db;
-    
-    // Write atomically via tmp file
-    const tmpFile = `${DB_FILE}.tmp`;
-    fs.writeFileSync(tmpFile, JSON.stringify(db, null, 2), 'utf-8');
-    fs.renameSync(tmpFile, DB_FILE);
-    return true;
-  } catch (err) {
-    console.error('Error saving database:', err);
-    return false;
-  }
-}
-
-export function resetDatabaseToClean(): ServerDatabase {
-  const currentDb = loadDatabase();
-  // Retain existing users (so admin password remains intact) or keep super_admin
-  const existingUsers = currentDb.users && currentDb.users.length > 0 ? currentDb.users : [DEFAULT_SUPER_ADMIN];
-  
-  const freshDb: ServerDatabase = {
-    version: 1,
-    lastUpdated: new Date().toISOString(),
-    selectedYear: 1405,
-    users: existingUsers,
-    fiscalYears: [DEFAULT_FISCAL_YEAR],
-    transactions: [],
-    employees: [],
-    salaryMatrix: [],
-    members: [],
-    loans: [],
-    bankAccounts: [],
-    vatInvoices: [],
-    serviceTariffs: [],
-    customCategories: INITIAL_CUSTOM_CATEGORIES,
-    companyLogo: currentDb.companyLogo || null,
-    syncLogs: Array.isArray(currentDb.syncLogs) ? currentDb.syncLogs : [],
-  };
-
-  saveDatabase(freshDb);
-  return freshDb;
-}
-
-// اطمینان از ایجاد فایل پایگاه داده در دایرکتوری سرور به هنگام استارت
-try {
-  loadDatabase();
-} catch (e) {
-  console.warn('Initial serverDb load warning:', e);
+export function decryptBackup(payload:string) {
+ const key=Buffer.from(process.env.BACKUP_ENCRYPTION_KEY||'','base64');if(key.length!==32) fail('کلید رمزنگاری بکاپ تنظیم نشده است.',503);
+ try {const x=JSON.parse(payload);if(x.v!==1)throw Error('version');const cipher=createDecipheriv('aes-256-gcm',key,Buffer.from(x.iv,'base64'));cipher.setAuthTag(Buffer.from(x.tag,'base64'));return JSON.parse(Buffer.concat([cipher.update(Buffer.from(x.data,'base64')),cipher.final()]).toString('utf8'));}
+ catch {fail('رمزگشایی بکاپ ناموفق است؛ کلید یا فایل صحیح نیست.',409);}
 }

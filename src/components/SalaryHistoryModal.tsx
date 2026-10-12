@@ -24,7 +24,7 @@ interface SalaryHistoryModalProps {
   onClose: () => void;
   employee: Employee;
   currencyMode: CurrencyMode;
-  onUpdateEmployee: (updated: Employee) => void;
+  onUpdateEmployee: (updated: Employee) => boolean | void | Promise<boolean | void>;
   onShowToast?: (msg: string) => void;
   canEdit?: boolean;
 }
@@ -84,7 +84,7 @@ export const SalaryHistoryModal: React.FC<SalaryHistoryModalProps> = ({
     setNewNotes('');
   };
 
-  const handleSaveHistoryItem = (e: React.FormEvent) => {
+  const handleSaveHistoryItem = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetSalary = Number(newSalary) || 0;
     if (targetSalary <= 0) return;
@@ -128,19 +128,19 @@ export const SalaryHistoryModal: React.FC<SalaryHistoryModalProps> = ({
       salaryHistory: updatedHistory,
     };
 
-    onUpdateEmployee(updatedEmployee);
+    if ((await onUpdateEmployee(updatedEmployee)) === false) return;
     setIsAddingNew(false);
     setEditingItemId(null);
     if (onShowToast) onShowToast(`حکم حقوق جدید با موفقیت برای «${employee.name}» ثبت شد.`);
   };
 
-  const handleDeleteHistoryItem = (id: string) => {
+  const handleDeleteHistoryItem = async (id: string) => {
     const updatedHistory = (employee.salaryHistory || []).filter(h => h.id !== id);
     const updatedEmployee: Employee = {
       ...employee,
       salaryHistory: updatedHistory,
     };
-    onUpdateEmployee(updatedEmployee);
+    if ((await onUpdateEmployee(updatedEmployee)) === false) return;
     if (onShowToast) onShowToast('رکورد سابقه حقوق حذف شد.');
   };
 

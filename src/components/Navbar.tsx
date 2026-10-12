@@ -30,6 +30,8 @@ import { CompanyLogo } from './CompanyLogo';
 import { MenuReorderModal, NavTabItem } from './MenuReorderModal';
 
 interface NavigationProps {
+  companyLogo?:string|null;
+  onSaveCompanyLogo?:(logo:string|null)=>Promise<boolean>;
   companyName: string;
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
@@ -167,6 +169,8 @@ export const Sidebar: React.FC<NavigationProps> = ({
   onOpenChangePassword,
   fiscalYears,
   currentUser,
+  companyLogo,
+  onSaveCompanyLogo,
 }) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [orderedTabs, setOrderedTabs] = useState<NavTabItem[]>(getStoredMenuTabs);
@@ -208,7 +212,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
       {/* Brand Header */}
       <div className="p-5 border-b border-slate-800 text-center">
         <div className="flex items-center justify-center gap-2.5 mb-1.5">
-          <CompanyLogo size="md" canUpload={true} />
+          <CompanyLogo size="md" currentLogo={companyLogo||null} canUpload={currentUser?.permissions.canManageUsers===true} onLogoChange={onSaveCompanyLogo} />
           <div className="text-lg font-bold tracking-tight text-white leading-tight">{companyName}</div>
         </div>
         <div className="text-[11px] text-slate-400 mt-1 tracking-wider font-medium flex items-center justify-center gap-1">
@@ -396,7 +400,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
       {/* Enhanced Mobile Top Bar */}
       <div className="md:hidden bg-slate-900 text-white px-3 py-2 border-b border-slate-800 flex items-center justify-between sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-2 min-w-0">
-          <CompanyLogo size="sm" canUpload={true} />
+          <CompanyLogo size="sm" currentLogo={companyLogo||null} canUpload={currentUser?.permissions.canManageUsers===true} onLogoChange={onSaveCompanyLogo} />
           <div className="min-w-0">
             <div className="text-xs font-bold truncate max-w-[140px] text-white">{companyName}</div>
             <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
@@ -468,7 +472,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
           <aside className="relative w-72 max-w-[85vw] bg-slate-900 text-white flex flex-col border-l border-slate-800 z-10 shadow-2xl animate-in slide-in-from-right duration-200 h-full">
             <div className="flex items-center justify-between p-3.5 border-b border-slate-800 bg-slate-950/80 shrink-0">
               <div className="flex items-center gap-2">
-                <CompanyLogo size="sm" canUpload={false} />
+                <CompanyLogo size="sm" currentLogo={companyLogo||null} canUpload={false} />
                 <div className="flex flex-col">
                   <span className="text-xs font-bold text-white truncate max-w-[150px]">{companyName}</span>
                   <span className="text-[10px] text-slate-400">سامانه مدیریت مالی</span>

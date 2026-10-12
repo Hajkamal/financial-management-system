@@ -32,9 +32,9 @@ import { AmountInput } from './AmountInput';
 
 interface BankAccountsViewProps {
   bankAccounts: BankAccount[];
-  onAddAccount: (account: Omit<BankAccount, 'id' | 'createdAt'>) => void;
-  onUpdateAccount: (account: BankAccount) => void;
-  onDeleteAccount: (id: string) => void;
+  onAddAccount: (account: Omit<BankAccount, 'id' | 'createdAt'>) => boolean | void | Promise<boolean | void>;
+  onUpdateAccount: (account: BankAccount) => boolean | void | Promise<boolean | void>;
+  onDeleteAccount: (id: string) => boolean | void | Promise<boolean | void>;
   currencyMode: CurrencyMode;
   currentUser?: AppUser;
   onShowToast: (msg: string) => void;
@@ -259,7 +259,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
   };
 
   // Handle Form Submit
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bankName.trim()) {
       onShowToast('نام بانک الزامی است.');
@@ -282,7 +282,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
     const finalAccountType: BankAccountType = accountCategory === 'petty_cash' ? 'petty_cash' : accountType;
 
     if (editingAccount) {
-      onUpdateAccount({
+      if ((await onUpdateAccount({
         ...editingAccount,
         bankName: bankName.trim(),
         accountNumber: accountNumber.trim(),
@@ -302,10 +302,10 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
         colorTheme,
         notes: notes.trim() || undefined,
         updatedAt: 'امروز',
-      });
+      })) === false) return;
       onShowToast(`اطلاعات ${accountCategory === 'petty_cash' ? 'کارت تنخواه' : 'حساب'} ${bankName} با موفقیت ویرایش شد.`);
     } else {
-      onAddAccount({
+      if ((await onAddAccount({
         bankName: bankName.trim(),
         accountNumber: accountNumber.trim(),
         cardNumber: cleanCard,
@@ -324,7 +324,7 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
         internetBankingId: internetBankingId.trim() || undefined,
         colorTheme,
         notes: notes.trim() || undefined,
-      });
+      })) === false) return;
       onShowToast(`${accountCategory === 'petty_cash' ? 'کارت تنخواه گردان' : 'حساب بانکی'} جدید (${bankName}) با موفقیت ایجاد گردید.`);
     }
 
@@ -1032,8 +1032,8 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
                 انصراف
               </button>
               <button
-                onClick={() => {
-                  onDeleteAccount(deletingId);
+                onClick={async () => {
+                  if ((await onDeleteAccount(deletingId)) === false) return;
                   setDeletingId(null);
                   onShowToast('مورد انتخابی با موفقیت حذف گردید.');
                 }}
