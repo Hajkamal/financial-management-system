@@ -38,6 +38,8 @@ interface BankAccountsViewProps {
   currencyMode: CurrencyMode;
   currentUser?: AppUser;
   onShowToast: (msg: string) => void;
+  isCloudConnected?: boolean;
+  cloudError?: string | null;
 }
 
 const BANK_NAMES_SUGGESTIONS = [
@@ -85,6 +87,8 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
   currencyMode,
   currentUser,
   onShowToast,
+  isCloudConnected = true,
+  cloudError = null,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -383,6 +387,20 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
         </div>
       </div>
 
+      {!isCloudConnected && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl flex items-center justify-between gap-3 text-xs mb-4" role="alert">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <div>
+              <p className="font-bold text-sm">ارتباط با API دیتابیس مالی برقرار نیست</p>
+              <p className="text-rose-600 mt-0.5">
+                {cloudError || 'اطلاعات حساب‌ها از سرور دریافت نشد. جهت جلوگیری از نمایش اطلاعات نادرست، موجودی‌ها صفر نشان داده نمی‌شوند.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Overview Stat Cards with Opening & Closing Balances */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Current Balance */}
@@ -393,10 +411,12 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
             <Wallet className="w-4 h-4 text-blue-400" />
           </div>
           <div className="text-2xl font-black tracking-tight text-white mb-1">
-            {formatCurrency(stats.totalCurrent, currencyMode)}
+            {isCloudConnected ? formatCurrency(stats.totalCurrent, currencyMode) : (
+              <span className="text-sm font-bold text-blue-200">عدم دسترسی به سرور</span>
+            )}
           </div>
           <div className="text-[11px] text-blue-300">
-            موجودی نقدینگی حاضر در کلیه حساب‌ها و تنخواه‌ها
+            {isCloudConnected ? 'موجودی نقدینگی حاضر در کلیه حساب‌ها و تنخواه‌ها' : 'وضعیت: نامشخص'}
           </div>
         </div>
 
@@ -407,10 +427,12 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
             <Banknote className="w-4 h-4 text-amber-500" />
           </div>
           <div className="text-xl font-extrabold text-slate-900 mb-1">
-            {formatCurrency(stats.totalOpening, currencyMode)}
+            {isCloudConnected ? formatCurrency(stats.totalOpening, currencyMode) : (
+              <span className="text-sm font-bold text-rose-500">عدم دسترسی به سرور</span>
+            )}
           </div>
           <div className="text-[11px] text-slate-500">
-            مانده افتتاحیه ثبت‌شده در ابتدای دوره مالی
+            {isCloudConnected ? 'مانده افتتاحیه ثبت‌شده در ابتدای دوره مالی' : 'وضعیت: نامشخص'}
           </div>
         </div>
 
@@ -421,10 +443,12 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           </div>
           <div className="text-xl font-extrabold text-slate-900 mb-1">
-            {formatCurrency(stats.totalClosing, currencyMode)}
+            {isCloudConnected ? formatCurrency(stats.totalClosing, currencyMode) : (
+              <span className="text-sm font-bold text-rose-500">عدم دسترسی به سرور</span>
+            )}
           </div>
           <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
-            <span>مانده تسویه‌شده پایانی</span>
+            <span>{isCloudConnected ? 'مانده تسویه‌شده پایانی' : 'وضعیت: نامشخص'}</span>
           </div>
         </div>
 
@@ -435,12 +459,12 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
             <Layers className="w-4 h-4 text-purple-500" />
           </div>
           <div className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2">
-            <span>{toPersianDigits(stats.activeCount)} واحد فعال</span>
+            <span>{isCloudConnected ? `${toPersianDigits(stats.activeCount)} واحد فعال` : 'نامشخص'}</span>
           </div>
           <div className="text-[11px] text-slate-500 flex items-center gap-2">
-            <span>بانکی: {toPersianDigits(stats.bankCount)}</span>
+            <span>بانکی: {isCloudConnected ? toPersianDigits(stats.bankCount) : '—'}</span>
             <span>•</span>
-            <span className="text-emerald-700 font-bold">تنخواه: {toPersianDigits(stats.pettyCashCount)}</span>
+            <span className="text-emerald-700 font-bold">تنخواه: {isCloudConnected ? toPersianDigits(stats.pettyCashCount) : '—'}</span>
           </div>
         </div>
       </div>

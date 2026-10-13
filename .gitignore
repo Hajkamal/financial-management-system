@@ -6,3 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Private legacy data and generated test bundles
+/data/
+/tests/.tmp-*

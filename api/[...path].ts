@@ -998,6 +998,28 @@ function decryptBackup(payload) {
 
 // security/auth.ts
 import { createClient as createClient3 } from "@supabase/supabase-js";
+
+// src/utils/authFailure.ts
+function isDefinitiveAuthFailure(error) {
+  if (!error || typeof error !== "object") return false;
+  const e = error;
+  if (e.status !== void 0 && (e.status >= 500 || e.status === 408 || e.status === 429)) return false;
+  if (e.status === 401 || e.status === 403) return true;
+  return e.name === "AuthSessionMissingError" || (/* @__PURE__ */ new Set([
+    "bad_jwt",
+    "jwt_expired",
+    "session_not_found",
+    "refresh_token_not_found",
+    "refresh_token_already_used",
+    "user_not_found",
+    "user_banned",
+    "PGRST301",
+    "PGRST303",
+    "42501"
+  ])).has(e.code || "");
+}
+
+// security/auth.ts
 function publicUser(user) {
   const { password, authVersion, profileStamp, ...safe } = user;
   return safe;
@@ -1009,8 +1031,17 @@ async function requireAuth(req, res, next) {
     const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_ANON_KEY;
     if (!url || !key) fail("\u0627\u062D\u0631\u0627\u0632 \u0647\u0648\u06CC\u062A \u0633\u0631\u0648\u0631 \u062A\u0646\u0638\u06CC\u0645 \u0646\u0634\u062F\u0647 \u0627\u0633\u062A.", 503);
     const client = createClient3(url, key, { global: { headers: { Authorization: "Bearer " + token } }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
-    const verified = await client.auth.getUser(token);
-    if (verified.error || !verified.data.user) fail("\u0646\u0634\u0633\u062A \u0645\u0646\u0642\u0636\u06CC \u06CC\u0627 \u0646\u0627\u0645\u0639\u062A\u0628\u0631 \u0627\u0633\u062A.", 401);
+    let verified;
+    try {
+      verified = await client.auth.getUser(token);
+    } catch {
+      fail("\u0628\u0631\u0631\u0633\u06CC \u0646\u0634\u0633\u062A \u0645\u0648\u0642\u062A\u0627\u064B \u062F\u0631 \u062F\u0633\u062A\u0631\u0633 \u0646\u06CC\u0633\u062A\u061B \u062F\u0648\u0628\u0627\u0631\u0647 \u062A\u0644\u0627\u0634 \u06A9\u0646\u06CC\u062F.", 503);
+    }
+    if (verified.error) {
+      if (isDefinitiveAuthFailure(verified.error)) fail("\u0646\u0634\u0633\u062A \u0645\u0646\u0642\u0636\u06CC \u06CC\u0627 \u0646\u0627\u0645\u0639\u062A\u0628\u0631 \u0627\u0633\u062A.", 401);
+      fail("\u0628\u0631\u0631\u0633\u06CC \u0646\u0634\u0633\u062A \u0645\u0648\u0642\u062A\u0627\u064B \u062F\u0631 \u062F\u0633\u062A\u0631\u0633 \u0646\u06CC\u0633\u062A\u061B \u062F\u0648\u0628\u0627\u0631\u0647 \u062A\u0644\u0627\u0634 \u06A9\u0646\u06CC\u062F.", 503);
+    }
+    if (!verified.data.user) fail("\u0646\u0634\u0633\u062A \u0645\u0646\u0642\u0636\u06CC \u06CC\u0627 \u0646\u0627\u0645\u0639\u062A\u0628\u0631 \u0627\u0633\u062A.", 401);
     const db = await loadDatabase(), actor = db.users.find((u) => u.authUserId === verified.data.user.id);
     if (!actor || actor.status !== "active") fail("\u062D\u0633\u0627\u0628 \u0641\u0639\u0627\u0644 \u0648 \u0645\u062A\u0635\u0644 \u0628\u0647 \u0633\u0627\u0645\u0627\u0646\u0647 \u0644\u0627\u0632\u0645 \u0627\u0633\u062A.", 403);
     const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());

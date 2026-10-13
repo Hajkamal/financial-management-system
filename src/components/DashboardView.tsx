@@ -47,6 +47,8 @@ interface DashboardViewProps {
   companyName?: string;
   onShowToast?: (msg: string) => void;
   customCategories?: CustomCategoryDefinition[];
+  isCloudConnected?: boolean;
+  cloudError?: string | null;
 }
 
 type PeriodFilter = 'all' | 'q1' | 'q2' | 'q3' | 'q4' | 'custom_month';
@@ -61,6 +63,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   companyName = 'آینده نگاران خلاق',
   onShowToast,
   customCategories = [],
+  isCloudConnected = true,
+  cloudError = null,
 }) => {
   const [period, setPeriod] = useState<PeriodFilter>('all');
   const [selectedMonth, setSelectedMonth] = useState<PersianMonthNumber>(1);
@@ -233,6 +237,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div className="space-y-6" id="dashboard-view">
       
+      {!isCloudConnected && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl flex items-center justify-between gap-3 text-xs" role="alert">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <div>
+              <p className="font-bold text-sm">ارتباط با API دیتابیس مالی برقرار نیست</p>
+              <p className="text-rose-600 mt-0.5">
+                {cloudError || 'داده‌های مالی از سرور دریافت نشد. جهت جلوگیری از نمایش اطلاعات غلط، مقادیر عملکرد و سود صفر نشان داده نمی‌شوند.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Filter and Period Selection Bar */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div className="flex items-center gap-2.5">
@@ -334,7 +352,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="text-2xl font-black text-slate-900 tracking-tight mt-1">
-            {formatCurrency(stats.totalIncome, currencyMode)}
+            {isCloudConnected ? formatCurrency(stats.totalIncome, currencyMode) : (
+              <span className="text-sm font-bold text-rose-500">عدم دسترسی به سرور</span>
+            )}
           </div>
           {stats.vatSalesInPeriod > 0 ? (
             <div className="mt-2 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 font-medium">
@@ -356,7 +376,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="text-2xl font-black text-rose-600 tracking-tight mt-1">
-            {formatCurrency(stats.totalExpense, currencyMode)}
+            {isCloudConnected ? formatCurrency(stats.totalExpense, currencyMode) : (
+              <span className="text-sm font-bold text-rose-500">عدم دسترسی به سرور</span>
+            )}
           </div>
           <p className="text-xs text-slate-400 mt-2">
             حقوق، مارکتینگ، زیرساخت، اقساط
@@ -376,10 +398,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className={`text-2xl font-black tracking-tight mt-1 ${
             stats.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'
           }`}>
-            {formatCurrency(stats.netProfit, currencyMode)}
+            {isCloudConnected ? formatCurrency(stats.netProfit, currencyMode) : (
+              <span className="text-sm font-bold text-rose-500">عدم دسترسی به سرور</span>
+            )}
           </div>
           <p className="text-xs text-slate-400 mt-2">
-            حاشیه سود دوره: {toPersianDigits(stats.profitMargin)}%
+            {isCloudConnected ? `حاشیه سود دوره: ${toPersianDigits(stats.profitMargin)}%` : 'وضعیت: نامشخص'}
           </p>
         </div>
 
@@ -392,7 +416,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="text-2xl font-black text-indigo-900 tracking-tight mt-1">
-            {formatCurrency(stats.guaranteeActiveBalance, currencyMode)}
+            {isCloudConnected ? formatCurrency(stats.guaranteeActiveBalance, currencyMode) : (
+              <span className="text-sm font-bold text-rose-500">عدم دسترسی به سرور</span>
+            )}
           </div>
           {stats.guaranteeDepositsRefunded > 0 ? (
             <div className="mt-2 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 font-medium">
@@ -414,10 +440,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="text-2xl font-black text-orange-600 tracking-tight mt-1">
-            {formatCurrency(stats.totalLoanRemaining, currencyMode)}
+            {isCloudConnected ? formatCurrency(stats.totalLoanRemaining, currencyMode) : (
+              <span className="text-sm font-bold text-rose-500">عدم دسترسی به سرور</span>
+            )}
           </div>
           <p className="text-xs text-slate-400 mt-2">
-            حقوق پرسنل: {formatCurrency(stats.totalSalaries, currencyMode)}
+            {isCloudConnected ? `حقوق پرسنل: ${formatCurrency(stats.totalSalaries, currencyMode)}` : 'وضعیت: نامشخص'}
           </p>
         </div>
 

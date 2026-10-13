@@ -49,13 +49,35 @@ export const serverApi = {
       const res = await apiFetch("/api/financial-data", {
         headers: getHeaders(),
       });
-      if (!res.ok) return null;
+      const cType = res.headers.get("content-type") || "";
+      if (!cType.includes("application/json")) {
+        const errMsg = "پاسخ سرور با فرمت JSON دریافت نشد (صفحه HTML دریافت شد). مسیر API به درستی به سرور Express هدایت نشده است.";
+        console.warn(errMsg);
+        window.dispatchEvent(new CustomEvent('financial-api-error', { detail: errMsg }));
+        return null;
+      }
+      if (!res.ok) {
+        let errMsg = `خطای سرور (${res.status})`;
+        try {
+          const errData = await res.json();
+          if (errData?.error) errMsg = errData.error;
+        } catch {}
+        console.warn("Server returned error for /api/financial-data:", errMsg);
+        window.dispatchEvent(new CustomEvent('financial-api-error', { detail: errMsg }));
+        return null;
+      }
       const json = await res.json();
-      if (Number.isSafeInteger(json.data?.revision))
-        setServerRevision(json.data.revision);
-      return json.data || null;
-    } catch (err) {
-      console.warn("Network call to /api/financial-data failed:", err);
+      const data = json.data;
+      const arrays = ['users', 'fiscalYears', 'transactions', 'employees', 'salaryMatrix', 'members', 'loans', 'bankAccounts', 'vatInvoices', 'serviceTariffs'];
+      if (!data || !Number.isSafeInteger(data.revision) || data.revision < 0 || arrays.some(key => !Array.isArray(data[key]))) {
+        throw new Error('ساختار داده مالی دریافت‌شده معتبر نیست؛ اطلاعات بارگذاری نشد.');
+      }
+      setServerRevision(data.revision);
+      return data;
+    } catch (err: any) {
+      const errMsg = err?.message || "خطا در برقراری ارتباط با سرور مالی.";
+      console.warn("Network call to /api/financial-data failed:", errMsg);
+      window.dispatchEvent(new CustomEvent('financial-api-error', { detail: errMsg }));
       return null;
     }
   },
