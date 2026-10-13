@@ -386,6 +386,7 @@ export function useFinancialData({
   const [selectedYear, setSelectedYear] = useState(1405),
     [isCloudLoading, setIsCloudLoading] = useState(false),
     [isCloudConnected, setIsCloudConnected] = useState(false),
+    [cloudError, setCloudError] = useState<string | null>(null),
     [isLoadingSyncLogs, setIsLoadingSyncLogs] = useState(false);
   const {
     users,
@@ -412,10 +413,12 @@ export function useFinancialData({
     if (liveUser.current !== userId || hasPendingWrites()) return false;
     if (!snapshot) {
       setIsCloudConnected(false);
+      setCloudError((prev) => prev || 'عدم دسترسی به داده‌های مالی از سرور.');
       return false;
     }
     setData(snapshot);
     setIsCloudConnected(true);
+    setCloudError(null);
     setSelectedYear((y) =>
       snapshot.fiscalYears.some((f) => f.year === y)
         ? y
@@ -426,6 +429,7 @@ export function useFinancialData({
   useEffect(() => {
     setData(d=>({...d,users:[],fiscalYears:[],transactions:[],employees:[],salaryMatrix:[],members:[],loans:[],bankAccounts:[],vatInvoices:[],serviceTariffs:[],syncLogs:[],customCategories:INITIAL_CUSTOM_CATEGORIES,companyLogo:null}));
     setIsCloudConnected(false);
+    setCloudError(null);
     if (!userId) return;
     let cancelled = false;
     setIsCloudLoading(true);
@@ -437,11 +441,19 @@ export function useFinancialData({
       onShowToast((event as CustomEvent<string>).detail);
       setTimeout(reload, 150);
     };
+    const onApiError = (event: Event) => {
+      const msg = (event as CustomEvent<string>).detail;
+      setCloudError(msg);
+      setIsCloudConnected(false);
+      onShowToast(msg);
+    };
     window.addEventListener("financial-error", error);
+    window.addEventListener("financial-api-error", onApiError);
     return () => {
       cancelled = true;
       clearInterval(timer);
       window.removeEventListener("financial-error", error);
+      window.removeEventListener("financial-api-error", onApiError);
     };
   }, [userId, reload]);
   const execute = async (
@@ -903,6 +915,7 @@ export function useFinancialData({
     handleSaveTransactions,
     isCloudLoading,
     isCloudConnected,
+    cloudError,
     syncLogs,
     isLoadingSyncLogs,
     fetchSyncLogs,

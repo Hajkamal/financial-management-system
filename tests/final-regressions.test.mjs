@@ -1,0 +1,23 @@
+import {test,before,after,beforeEach} from 'node:test';
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import fs from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
+let client,events,calls,responses;const file='tests/.tmp-final-regressions.mjs';
+before(async()=>{
+ const out=await build({entryPoints:['src/lib/request.ts'],bundle:true,platform:'node',format:'esm',write:false,plugins:[{name:'synthetic-session',setup(b){b.onResolve({filter:/^\.\/supabase$/},()=>({path:'session',namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},()=>({contents:"export const supabase={auth:{getSession:async()=>({data:{session:{user:{id:'synthetic-user'},access_token:'synthetic-test-token'}}})}}",loader:'js'}));}}]});
+ await fs.writeFile(file,out.outputFiles[0].text);client=await import(pathToFileURL(process.cwd()+'/'+file));
+});
+after(async()=>{await fs.unlink(file);delete globalThis.window;delete globalThis.fetch;});
+beforeEach(()=>{events=[];calls=[];responses=[];globalThis.window={location:{href:'https://app.example.invalid/dashboard',origin:'https://app.example.invalid'},dispatchEvent:e=>events.push(e.type)};globalThis.fetch=async(path,init)=>{calls.push({path,init});if(!responses.length)throw Error('Unexpected request');return responses.shift();};client.clearRequestState();client.setAuthenticatedIdentity('synthetic-user');});
+const json=data=>new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
+const html=()=>new Response('<!doctype html><title>SPA</title>',{headers:{'Content-Type':'text/html'}});
+const write=()=>client.apiFetch('/api/financial-data/transaction',{method:'POST',body:'{}'});
+test('HTML 200 financial read is rejected',async()=>{responses.push(html());await assert.rejects(client.apiFetch('/api/financial-data'),/JSON/);});
+test('HTML 200 write cannot announce financial-saved',async()=>{client.setServerRevision(3);responses.push(html());await assert.rejects(write(),/JSON/);assert.ok(!events.includes('financial-saved'));assert.equal(client.hasPendingWrites(),false);});
+test('Malformed JSON cannot announce financial-saved',async()=>{client.setServerRevision(3);responses.push(new Response('{',{headers:{'Content-Type':'application/json'}}));await assert.rejects(write(),/JSON/);assert.ok(!events.includes('financial-saved'));});
+test('Missing or invalid initial revision blocks POST',async()=>{for(const revision of [undefined,null,-1,'3',1.5]){client.clearRequestState();client.setAuthenticatedIdentity('synthetic-user');calls=[];responses.push(json({data:{revision}}));await assert.rejects(write(),/نسخه/);assert.equal(calls.length,1);assert.equal(calls[0].path,'/api/financial-data');assert.ok(!events.includes('financial-saved'));}});
+test('Invalid write acknowledgement cannot announce success',async()=>{for(const data of [{},{success:false,revision:4},{success:true},{success:true,revision:-1}]){client.setServerRevision(3);responses.push(json(data));await assert.rejects(write(),/تأیید/);assert.ok(!events.includes('financial-saved'));}});
+test('Confirmed JSON write uses revision and leaves response readable',async()=>{responses.push(json({data:{revision:3}}),json({success:true,revision:4}));const r=await write();assert.deepEqual(await r.json(),{success:true,revision:4});assert.equal(new Headers(calls[1].init.headers).get('If-Match'),'3');assert.equal(events.filter(x=>x==='financial-saved').length,1);});
+test('Valid application +json error is preserved without announcing success',async()=>{client.setServerRevision(3);responses.push(new Response(JSON.stringify({error:'synthetic conflict'}),{status:409,headers:{'Content-Type':'application/problem+json'}}));await assert.rejects(write(),/synthetic conflict/);assert.ok(!events.includes('financial-saved'));});
+test('Account/session operations reject HTML response too',async()=>{responses.push(html());await assert.rejects(client.sessionRequest('/api/auth/me'),/JSON/);});

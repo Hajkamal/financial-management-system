@@ -162,6 +162,8 @@ export default function App() {
   const {
     user,
     isAuthLoading,
+    sessionCheckError,
+    retrySessionValidation,
     impersonatedUser,
     currentAppUser,
     handleLogout,
@@ -235,6 +237,7 @@ export default function App() {
     handlePullAllDataFromServer,
     isCloudLoading,
     isCloudConnected,
+    cloudError,
     syncLogs,
     isLoadingSyncLogs,
     fetchSyncLogs,
@@ -305,6 +308,10 @@ export default function App() {
   // احراز هویت اولیه
   if (!user || !currentAppUser) {
     return (
+      <>
+      {sessionCheckError && <div className="bg-amber-100 text-amber-900 p-4 text-sm" dir="rtl" role="alert">
+        {sessionCheckError} <button type="button" onClick={retrySessionValidation} className="underline font-bold">تلاش مجدد بررسی نشست</button>
+      </div>}
       <AuthScreen 
         users={users}
         onRegisterUser={handleAddUser}
@@ -312,11 +319,18 @@ export default function App() {
           showToast('ورود با موفقیت انجام شد.');
         }} 
       />
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col md:flex-row overflow-x-hidden selection:bg-blue-100 selection:text-blue-900 font-sans" dir="rtl" id="main-app">
+    <>
+    {sessionCheckError && <div className="bg-amber-100 text-amber-900 px-4 py-3 text-sm" dir="rtl" role="alert">
+      {sessionCheckError}
+      <button type="button" onClick={retrySessionValidation} className="underline font-bold mx-3">تلاش مجدد بررسی نشست</button>
+      <button type="button" onClick={handleLogout} className="underline">خروج از این دستگاه</button>
+    </div>}
+    <div inert={Boolean(sessionCheckError)} className="min-h-screen bg-slate-50 text-slate-900 flex flex-col md:flex-row overflow-x-hidden selection:bg-blue-100 selection:text-blue-900 font-sans" dir="rtl" id="main-app">
       
       {/* منوی کناری (Sidebar) */}
       <Sidebar
@@ -344,6 +358,7 @@ export default function App() {
 
       {/* ستون اصلی محتوا */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+
         
         <div className="bg-amber-100 text-amber-900 px-4 py-3 text-sm" role="status">
           داده‌های مالی روی سرور ذخیره می‌شوند؛ پشتیبان مستقل را خارج از سامانه نگه دارید.
@@ -374,15 +389,34 @@ export default function App() {
           </div>
         )}
 
+        {/* نوار وضعیت خطا در صورت عدم دسترسی به API */}
+        {!isCloudConnected && !isCloudLoading && (
+          <div className="bg-rose-950/90 border-b border-rose-800 text-rose-200 px-3 sm:px-4 py-2.5 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 z-20" role="alert">
+            <div className="flex items-center gap-2">
+              <CloudOff className="w-4 h-4 text-rose-400 shrink-0" />
+              <div>
+                <span className="font-bold text-white">خطا در برقراری ارتباط با API مالی: </span>
+                <span>{cloudError || 'دسترسی به سرور داده‌های مالی برقرار نیست. مقادیر موجودی جهت جلوگیری از خطای محاسباتی صفر نشان داده نمی‌شوند.'}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => handlePullAllDataFromServer()}
+              className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition shrink-0 cursor-pointer self-start sm:self-auto"
+            >
+              تلاش مجدد اتصال
+            </button>
+          </div>
+        )}
+
         {/* نوار وضعیت و ابزار همگام‌سازی بین لپ‌تاپ و گوشی */}
         <div className="bg-slate-900 border-b border-slate-800 text-white px-3 sm:px-4 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 z-20">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isCloudConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`}></span>
             <span className="font-bold text-slate-200 text-xs">
-              همگام‌سازی متمرکز فعال است
+              {isCloudConnected ? 'همگام‌سازی متمرکز فعال است' : 'ارتباط با سرور متمرکز قطع است'}
             </span>
             <span className="text-[11px] text-slate-400 hidden lg:inline">
-              (تغییرات شما به صورت خودکار با دیتابیس همگام می‌شود)
+              {isCloudConnected ? '(تغییرات شما به صورت خودکار با دیتابیس همگام می‌شود)' : '(امکان بارگذاری اطلاعات از API وجود ندارد)'}
             </span>
           </div>
 
@@ -513,6 +547,8 @@ export default function App() {
               onNavigateToSalaryMatrix={() => setActiveTab('salary-matrix')}
               companyName={companyName}
               onShowToast={showToast}
+              isCloudConnected={isCloudConnected}
+              cloudError={cloudError}
             />
           )}
 
@@ -575,6 +611,8 @@ export default function App() {
               currencyMode={currencyMode}
               currentUser={currentAppUser}
               onShowToast={showToast}
+              isCloudConnected={isCloudConnected}
+              cloudError={cloudError}
             />
           )}
 
@@ -847,5 +885,6 @@ export default function App() {
       )}
 
     </div>
+    </>
   );
 }

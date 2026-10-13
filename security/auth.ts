@@ -2,6 +2,7 @@ import type {Request,Response,NextFunction,Express} from 'express';
 import {createClient} from '@supabase/supabase-js';
 import {loadDatabase} from '../serverDb';
 import {fail} from './validation';
+import {isDefinitiveAuthFailure} from '../src/utils/authFailure';
 declare global { namespace Express { interface Request { actor?:any;loginSession?:{issued:number};authToken?:string; } } }
 export function publicUser(user:any) {const {password,authVersion,profileStamp,...safe}=user;return safe;}
 export async function requireAuth(req:Request,res:Response,next:NextFunction) {
@@ -11,9 +12,15 @@ export async function requireAuth(req:Request,res:Response,next:NextFunction) {
     const url=process.env.SUPABASE_URL,key=process.env.SUPABASE_ANON_KEY;
     if(!url||!key) fail('احراز هویت سرور تنظیم نشده است.',503);
     const client=createClient(url,key,{global:{headers:{Authorization:'Bearer '+token}},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
-    const verified=await client.auth.getUser(token);
-    if(verified.error||!verified.data.user) fail('نشست منقضی یا نامعتبر است.',401);
-    const db=await loadDatabase(),actor=db.users.find(u=>u.authUserId===verified.data.user.id);
+    let verified;
+    try { verified=await client.auth.getUser(token); }
+    catch { fail('بررسی نشست موقتاً در دسترس نیست؛ دوباره تلاش کنید.',503); }
+    if(verified!.error) {
+      if(isDefinitiveAuthFailure(verified!.error)) fail('نشست منقضی یا نامعتبر است.',401);
+      fail('بررسی نشست موقتاً در دسترس نیست؛ دوباره تلاش کنید.',503);
+    }
+    if(!verified!.data.user) fail('نشست منقضی یا نامعتبر است.',401);
+    const db=await loadDatabase(),actor=db.users.find(u=>u.authUserId===verified!.data.user.id);
     if(!actor||actor.status!=='active') fail('حساب فعال و متصل به سامانه لازم است.',403);
     // Decode reserved claims only after validating the exact token with Auth.
     const claims=JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString());
