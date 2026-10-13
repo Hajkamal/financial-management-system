@@ -1,3 +1,5 @@
+import { saveBackupFile, canChooseBackupLocation } from '../lib/saveBackupFile';
+import { getSessionGeneration } from '../lib/request';
 import { verifyBackupPassword, type BackupAuthProof } from '../lib/backupReauth';
 import React, { useState, useEffect, useRef } from "react";
 import { serverApi } from "../lib/serverApi";
@@ -51,11 +53,13 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   const [history,setHistory]=useState<any[]>([]);
   const [password,setPassword]=useState('');
   const [authAction,setAuthAction]=useState<{kind:'download'|'history';id?:string}|null>(null);
+  const [saveReady,setSaveReady]=useState(false),[saveMessage,setSaveMessage]=useState('');
+  const prepared=useRef<{blob:Blob;name:string;generation:number;created:number}|null>(null);
   const alive=useRef(true),epoch=useRef(0);
-  useEffect(()=>{alive.current=true;return()=>{alive.current=false;epoch.current++;};},[]);
-  useEffect(()=>{if(!isOpen){epoch.current++;setPassword('');setAuthAction(null);}},[isOpen]);
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;epoch.current++;prepared.current=null;};},[]);
+  useEffect(()=>{if(!isOpen){epoch.current++;setPassword('');setAuthAction(null);prepared.current=null;setSaveReady(false);setSaveMessage('');}},[isOpen]);
   if (!isOpen) return null;
-  const requestConfirmation=(kind:'download'|'history',id?:string)=>{setError('');setPassword('');setAuthAction({kind,id});};
+  const requestConfirmation=(kind:'download'|'history',id?:string)=>{prepared.current=null;setSaveReady(false);setSaveMessage('');setError('');setPassword('');setAuthAction({kind,id});};
   const confirmPassword=async(e:React.FormEvent)=>{
     e.preventDefault();if(busy||!authAction)return;
     const action=authAction,version=epoch.current,secret=password;
@@ -78,21 +82,33 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     try {
       const data = id ? await serverApi.getHistoricalBackup(id,proof) : await serverApi.getBackup(proof);
       if(!alive.current||version!==epoch.current)return;
-      const url = URL.createObjectURL(
-          new Blob([JSON.stringify(data, null, 2)], {
-            type: "application/json",
-          }),
-        );
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `financial-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+      const name=`financial-backup-${new Date().toISOString().slice(0,10)}.json`;
+      if(canChooseBackupLocation()){
+        prepared.current={blob,name,generation:getSessionGeneration(),created:Date.now()};
+        setSaveReady(true);setSaveMessage('پشتیبان دریافت شد؛ برای انتخاب پوشه و نام فایل، دکمه ذخیره را بزنید.');
+      }else{
+        await saveBackupFile(blob,name,()=>{if(!alive.current||version!==epoch.current)throw new Error('درخواست لغو شد.');},false);
+        setSaveMessage('دانلود به مرورگر سپرده شد. برای انتخاب پوشه، گزینه پرسیدن محل ذخیره هر فایل را در تنظیمات دانلود مرورگر فعال کنید.');
+      }
     } catch (e) {
       throw e;
     } finally {
       if(alive.current&&version===epoch.current)setBusy(false);
     }
+  };
+  const savePrepared=async(chooseLocation=true)=>{
+    const file=prepared.current,version=epoch.current;if(!file||busy)return;
+    const assertCurrent=()=>{if(!alive.current||version!==epoch.current||file.generation!==getSessionGeneration()||Date.now()-file.created>2*60000)throw new Error('اعتبار فایل آماده پایان یافته است؛ دوباره پشتیبان را دریافت کنید.');};
+    setBusy(true);setError('');
+    try{
+      const result=await saveBackupFile(file.blob,file.name,assertCurrent,chooseLocation);
+      if(!alive.current||version!==epoch.current)return;
+      if(result==='cancelled'){setSaveMessage('ذخیره لغو شد؛ فایلی توسط برنامه نوشته نشد.');return;}
+      prepared.current=null;setSaveReady(false);
+      setSaveMessage(result==='saved'?'فایل پشتیبان در محل انتخاب‌شده ذخیره شد.':'دانلود به مرورگر سپرده شد.');
+    }catch(e){if(alive.current&&version===epoch.current)setError(e instanceof Error?e.message:'ذخیره فایل ناموفق بود.');}
+    finally{if(alive.current&&version===epoch.current)setBusy(false);}
   };
   const upload = async (file?: File) => {
     if (!file) return;
@@ -155,6 +171,11 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         >
           دانلود بکاپ کامل و تازه
         </button>
+        {saveMessage && <p role="status" className="text-sm text-slate-700">{saveMessage}</p>}
+        {saveReady && <div className="border border-green-200 rounded p-3 space-y-2">
+          <button disabled={busy} onClick={()=>savePrepared()} className="bg-green-700 text-white rounded p-3">انتخاب پوشه و ذخیره پشتیبان</button>
+          <button disabled={busy} onClick={()=>savePrepared(false)} className="block text-blue-700 text-sm">دانلود عادی با تنظیمات مرورگر</button>
+        </div>}
         {authAction && <form onSubmit={confirmPassword} className="border rounded p-4 space-y-3" aria-label="تأیید رمز برای پشتیبان">
           <h3 className="font-bold">تأیید مجدد رمز عبور</h3>
           <p className="text-sm">رمز همین حساب را تأیید کنید. از حساب خارج نمی‌شوید؛ رمز فقط برای سرویس احراز هویت ارسال می‌شود.</p>
