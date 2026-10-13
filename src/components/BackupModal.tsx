@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { verifyBackupPassword, type BackupAuthProof } from '../lib/backupReauth';
+import React, { useState, useEffect, useRef } from "react";
 import { serverApi } from "../lib/serverApi";
 import {
   FinancialTransaction,
@@ -48,13 +49,36 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     [error, setError] = useState(""),
     [confirmation, setConfirmation] = useState("");
   const [history,setHistory]=useState<any[]>([]);
+  const [password,setPassword]=useState('');
+  const [authAction,setAuthAction]=useState<{kind:'download'|'history';id?:string}|null>(null);
+  const alive=useRef(true),epoch=useRef(0);
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;epoch.current++;};},[]);
+  useEffect(()=>{if(!isOpen){epoch.current++;setPassword('');setAuthAction(null);}},[isOpen]);
   if (!isOpen) return null;
-  const download = async (id?:string) => {
+  const requestConfirmation=(kind:'download'|'history',id?:string)=>{setError('');setPassword('');setAuthAction({kind,id});};
+  const confirmPassword=async(e:React.FormEvent)=>{
+    e.preventDefault();if(busy||!authAction)return;
+    const action=authAction,version=epoch.current,secret=password;
+    setPassword('');setBusy(true);setError('');
+    try{
+      const proof=await verifyBackupPassword(secret);
+      if(!alive.current||version!==epoch.current)return;
+      if(action.kind==='history'){
+        const list=await serverApi.listBackups(proof);
+        if(!alive.current||version!==epoch.current)return;
+        setHistory(list);
+      }else await download(action.id,proof,version);
+      if(alive.current&&version===epoch.current)setAuthAction(null);
+    }catch(e){if(alive.current&&version===epoch.current)setError(e instanceof Error?e.message:'تأیید رمز ناموفق بود.');}
+    finally{if(alive.current&&version===epoch.current)setBusy(false);}
+  };
+  const download = async (id?:string,proof?:BackupAuthProof,version=epoch.current) => {
     setBusy(true);
     setError("");
     try {
-      const data = id ? await serverApi.getHistoricalBackup(id) : await serverApi.getBackup(),
-        url = URL.createObjectURL(
+      const data = id ? await serverApi.getHistoricalBackup(id,proof) : await serverApi.getBackup(proof);
+      if(!alive.current||version!==epoch.current)return;
+      const url = URL.createObjectURL(
           new Blob([JSON.stringify(data, null, 2)], {
             type: "application/json",
           }),
@@ -65,9 +89,9 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "خطای دریافت بکاپ");
+      throw e;
     } finally {
-      setBusy(false);
+      if(alive.current&&version===epoch.current)setBusy(false);
     }
   };
   const upload = async (file?: File) => {
@@ -117,8 +141,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           کاربران را شامل نمی‌شود. فایل دانلودی محرمانه و بدون رمزنگاری است؛ آن
           را در محل امن نگهداری کنید. نسخه قبلی پیش از هر ذخیره، رمزنگاری‌شده در دیتابیس نگهداری می‌شود. این فایل بکاپ مالی است، نه بکاپ حساب‌های Supabase Auth یا فایل‌های Storage.
         </p>
-        <button disabled={busy} onClick={async()=>{setBusy(true);setError('');try{setHistory(await serverApi.listBackups());}catch(e){setError(e instanceof Error?e.message:'خطای فهرست بکاپ');}finally{setBusy(false);}}} className="text-blue-700 text-sm">نمایش ۵۰ بکاپ خودکار اخیر</button>
-        {history.length>0 && <div className="max-h-36 overflow-y-auto text-xs space-y-2">{history.map(b=><div key={b.id} className="flex justify-between"><span>نسخه {b.revision} — {new Date(b.created_at).toLocaleString('fa-IR')}</span><button disabled={busy} onClick={()=>download(b.id)}>دانلود نسخه قبلی</button></div>)}</div>}
+        <button disabled={busy} onClick={()=>requestConfirmation('history')} className="text-blue-700 text-sm">نمایش ۵۰ بکاپ خودکار اخیر</button>
+        {history.length>0 && <div className="max-h-36 overflow-y-auto text-xs space-y-2">{history.map(b=><div key={b.id} className="flex justify-between"><span>نسخه {b.revision} — {new Date(b.created_at).toLocaleString('fa-IR')}</span><button disabled={busy} onClick={()=>requestConfirmation('download',b.id)}>دانلود نسخه قبلی</button></div>)}</div>}
         {error && (
           <p role="alert" className="text-red-700">
             {error}
@@ -126,11 +150,18 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         )}
         <button
           disabled={busy}
-          onClick={()=>download()}
+          onClick={()=>requestConfirmation('download')}
           className="bg-blue-700 text-white rounded p-3"
         >
           دانلود بکاپ کامل و تازه
         </button>
+        {authAction && <form onSubmit={confirmPassword} className="border rounded p-4 space-y-3" aria-label="تأیید رمز برای پشتیبان">
+          <h3 className="font-bold">تأیید مجدد رمز عبور</h3>
+          <p className="text-sm">رمز همین حساب را تأیید کنید. از حساب خارج نمی‌شوید؛ رمز فقط برای سرویس احراز هویت ارسال می‌شود.</p>
+          <label className="block">رمز عبور فعلی<input autoFocus type="password" autoComplete="current-password" maxLength={1024} value={password} onChange={e=>setPassword(e.target.value)} disabled={busy} className="block border rounded p-2 w-full" required /></label>
+          <button type="submit" disabled={busy||!password} className="bg-blue-700 text-white rounded p-2">{busy?'در حال تأیید…':'تأیید و ادامه'}</button>
+          <button type="button" disabled={busy} onClick={()=>{epoch.current++;setPassword('');setAuthAction(null);setError('');}} className="mr-3">انصراف</button>
+        </form>}
         <label className="block">
           انتخاب فایل بازیابی
           <input

@@ -1,4 +1,5 @@
-import { apiFetch, setServerRevision, sessionRequest } from "./request";
+import type { BackupAuthProof } from './backupReauth';
+import { apiFetch, backupReadWithProof, setServerRevision, sessionRequest } from "./request";
 /**
  * کلاینت ارتباط بلادرنگ با دیتابیس متمرکز سرور
  * تضمین می‌کند اطلاعات وارد شده در تمامی مرورگرها، دستگاه‌ها و برای کلیه کاربران یکپارچه و به روز باشد.
@@ -394,10 +395,10 @@ export const serverApi = {
       return false;
     }
   },
-  async listBackups():Promise<any[]> {const r=await apiFetch('/api/financial-data/backups');const data=await r.json();if(!r.ok)throw Error(data.error||'فهرست بکاپ‌ها دریافت نشد.');return data.backups;},
-  async getHistoricalBackup(id:string):Promise<any> {const r=await apiFetch('/api/financial-data/backup-history/'+encodeURIComponent(id));const data=await r.json();if(!r.ok)throw Error(data.error||'بکاپ دریافت نشد.');return data;},
-  async getBackup(): Promise<any> {
-    const res = await apiFetch("/api/financial-data/backup");
+  async listBackups(proof?:BackupAuthProof):Promise<any[]> {const r=proof?await backupReadWithProof('/api/financial-data/backups',proof):await apiFetch('/api/financial-data/backups');const data=await r.json();if(!r.ok)throw Error(data.error||'فهرست بکاپ‌ها دریافت نشد.');return data.backups;},
+  async getHistoricalBackup(id:string,proof?:BackupAuthProof):Promise<any> {const path='/api/financial-data/backup-history/'+encodeURIComponent(id);const r=proof?await backupReadWithProof(path,proof):await apiFetch(path);const data=await r.json();if(!r.ok)throw Error(data.error||'بکاپ دریافت نشد.');return data;},
+  async getBackup(proof?:BackupAuthProof): Promise<any> {
+    const res = proof?await backupReadWithProof("/api/financial-data/backup",proof):await apiFetch("/api/financial-data/backup");
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "دریافت بکاپ ناموفق بود");
     return json;

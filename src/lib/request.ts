@@ -77,3 +77,14 @@ export async function apiFetch(path:string,init:RequestInit={}):Promise<Response
  const task=queue.then(operation);queue=task.catch(()=>{});
  try{return await task;}catch(e){window.dispatchEvent(new CustomEvent('financial-error',{detail:e instanceof Error?e.message:'ذخیره ناموفق بود.'}));throw e;}finally{pending--;}
 }
+
+// Fresh-password bearer can only read backup endpoints; never financial mutations.
+export async function backupReadWithProof(path:string,proof:{token:string;userId:string;generation:number}):Promise<Response>{
+ const targetUrl=new URL(path, window.location.href);
+ if(targetUrl.origin !== window.location.origin || !/^\/api\/financial-data\/(backup|backups|backup-history\/[0-9a-f-]{36})$/i.test(targetUrl.pathname) || targetUrl.search || targetUrl.hash)throw new Error('مسیر تأیید رمز مجاز نیست.');
+ const check=()=>{if(sessionVerificationPending||proof.generation!==generation||!identity||proof.userId!==identity)throw new Error('نشست تغییر کرده است؛ درخواست لغو شد.');};
+ check();await tokenHeaders();check();
+ const response=await fetch(targetUrl.href,{method:'GET',headers:{Authorization:'Bearer '+proof.token},cache:'no-store',credentials:'same-origin',redirect:'error'});
+ // Invalid isolated proof must not log out the main application session.
+ await readJsonResponse(response);check();return response;
+}
