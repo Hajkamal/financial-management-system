@@ -1,3 +1,4 @@
+import {financialSummary,isOperatingTransaction,OPERATING_RESULT_NOTE} from '../utils/financialMetrics';
 import React, { useState, useMemo } from 'react';
 import {
   ResponsiveContainer,
@@ -52,6 +53,7 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
   companyName = 'آینده نگاران خلاق',
   onShowToast,
 }) => {
+  const [reportMode,setReportMode]=useState<'operating'|'cash'>('operating');
   const [catFilter, setCatFilter] = useState<CategoryFilterType>('all');
   const [quarterFilter, setQuarterFilter] = useState<QuarterFilterType>('all');
   const [chartLayout, setChartLayout] = useState<'grouped' | 'balance_only'>('grouped');
@@ -83,7 +85,7 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
         return t.category === 'loan_installment';
       }
       if (catFilter === 'guarantee') {
-        return t.category === 'guarantee_deposit' || t.category === 'guarantee_refund' || (t.title && (t.title.includes('حسن انجام تعهدات') || t.title.includes('پیش‌پرداخت')));
+        return t.category === 'guarantee_deposit' || t.category === 'guarantee_refund';
       }
 
       return true;
@@ -103,12 +105,9 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
 
     return targetMonths.map((m) => {
       const monthTxs = filteredTxs.filter((t) => t.month === m.num);
-      const income = monthTxs
-        .filter((t) => t.type === 'income')
-        .reduce((sum, t) => sum + t.amount, 0);
-      const expense = monthTxs
-        .filter((t) => t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0);
+      const summary=financialSummary(monthTxs);
+      const income=reportMode==='cash'?summary.cashIncome:summary.operatingIncome;
+      const expense=reportMode==='cash'?summary.cashExpense:summary.operatingExpense;
       const netBalance = income - expense;
 
       return {
@@ -120,7 +119,7 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
         isPositive: netBalance >= 0,
       };
     });
-  }, [filteredTxs, quarterFilter]);
+  }, [filteredTxs, quarterFilter,reportMode]);
 
   // Overall totals
   const totals = useMemo(() => {
@@ -149,7 +148,7 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
     exportTransactionsToExcel(
       companyName,
       selectedYear,
-      filteredTxs
+      reportMode==='cash'?filteredTxs:filteredTxs.filter(isOperatingTransaction)
     );
     if (onShowToast) {
       onShowToast('گزارش اکسل درآمد و هزینه با موفقیت دانلود شد.');
@@ -182,14 +181,14 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
 
         <div className="space-y-1.5 pt-1">
           <div className="flex justify-between text-slate-300">
-            <span className="text-emerald-400 font-semibold">درآمد محقق‌شده:</span>
+            <span className="text-emerald-400 font-semibold">دریافت / درآمد انتخابی:</span>
             <span className="font-bold text-emerald-400">
               {formatCurrency(item.income, currencyMode)}
             </span>
           </div>
 
           <div className="flex justify-between text-slate-300">
-            <span className="text-rose-400 font-semibold">هزینه ثبت‌شده:</span>
+            <span className="text-rose-400 font-semibold">پرداخت / هزینه انتخابی:</span>
             <span className="font-bold text-rose-400">
               {formatCurrency(item.expense, currencyMode)}
             </span>
@@ -217,13 +216,13 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
           </div>
           <div>
             <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-              گزارش‌ساز پیشرفته مقایسه ماه به ماه درآمد و هزینه
+              گزارش‌ساز عملیاتی و جریان نقدی
               <span className="text-[11px] font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full">
                 نمودار ستونی تراز
               </span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              ترسیم دقیق ستون‌های درآمد، هزینه و تراز نهایی هر ماه جهت تحلیل وضعیت نقدینگی {companyName}
+              تفکیک عملکرد عملیاتی از دریافت و پرداخت نقدی {companyName}
             </p>
           </div>
         </div>
@@ -301,14 +300,14 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
       {/* Summary KPI Highlights */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 sm:p-5 border-b border-slate-100 bg-white">
         <div className="p-3 rounded-xl bg-emerald-50/50 border border-emerald-100">
-          <span className="text-[11px] font-bold text-emerald-800 block mb-1">جمع درآمد دوره انتخابی</span>
+          <span className="text-[11px] font-bold text-emerald-800 block mb-1">جمع دریافت / درآمد انتخابی</span>
           <div className="text-base font-black text-emerald-700">
             {formatCurrency(totals.totalIncome, currencyMode)}
           </div>
         </div>
 
         <div className="p-3 rounded-xl bg-rose-50/50 border border-rose-100">
-          <span className="text-[11px] font-bold text-rose-800 block mb-1">جمع کل هزینه‌های دوره</span>
+          <span className="text-[11px] font-bold text-rose-800 block mb-1">جمع پرداخت / هزینه انتخابی</span>
           <div className="text-base font-black text-rose-700">
             {formatCurrency(totals.totalExpense, currencyMode)}
           </div>
@@ -331,6 +330,10 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
         </div>
       </div>
 
+      <div className="px-4 text-xs space-y-2">
+        <label>مبنای گزارش: <select value={reportMode} onChange={e=>setReportMode(e.target.value as 'operating'|'cash')} className="border rounded p-2"><option value="operating">نتیجه عملیاتی ثبت‌ها</option><option value="cash">گردش نقدی؛ شامل سپرده و سرمایه و اقساط</option></select></label>
+        <p>{reportMode==='operating'?OPERATING_RESULT_NOTE:'خالص گردش نقدی، سود حسابداری نیست. برای مشاهده گردش سپرده‌ها و اقساط از این حالت استفاده کنید.'}</p>
+      </div>
       {/* Recharts Bar Chart */}
       <div className="p-4 sm:p-6 w-full h-[360px] sm:h-[400px]" dir="ltr">
         <ResponsiveContainer width="100%" height="100%">
@@ -410,7 +413,7 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
           <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
             <tr>
               <th className="p-3">ماه</th>
-              <th className="p-3 text-emerald-700">درآمد محقق‌شده</th>
+              <th className="p-3 text-emerald-700">دریافت / درآمد انتخابی</th>
               <th className="p-3 text-rose-700">هزینه کل</th>
               <th className="p-3">تراز نهایی ماه</th>
               <th className="p-3">وضعیت عملکرد</th>
@@ -437,7 +440,7 @@ export const AdvancedFinancialReporter: React.FC<AdvancedFinancialReporterProps>
                         : 'bg-slate-100 text-slate-600'
                     }`}
                   >
-                    {r.netBalance > 0 ? 'مازاد سود' : r.netBalance < 0 ? 'کسری نقدینگی' : 'تراز صفر'}
+                    {r.netBalance > 0 ? 'تراز مثبت مبنای انتخابی' : r.netBalance < 0 ? 'کسری نقدینگی' : 'تراز صفر'}
                   </span>
                 </td>
               </tr>

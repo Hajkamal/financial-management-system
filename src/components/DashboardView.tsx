@@ -1,3 +1,4 @@
+import {financialSummary,OPERATING_RESULT_NOTE} from '../utils/financialMetrics';
 import React, { useState, useMemo } from 'react';
 import { 
   TrendingUp, 
@@ -23,7 +24,7 @@ import {
   PersianMonthNumber, 
   IncomeCategory, 
   ExpenseCategory, 
-  Loan 
+  Loan, Employee, SalaryMatrixItem 
 } from '../types';
 import { MonthlyFinanceChart } from './MonthlyFinanceChart';
 import { CashFlowForecast } from './CashFlowForecast';
@@ -42,6 +43,8 @@ interface DashboardViewProps {
   selectedYear: number;
   currencyMode: CurrencyMode;
   loans: Loan[];
+  employees: Employee[];
+  salaryMatrix: SalaryMatrixItem[];
   onOpenNewTransaction: () => void;
   onNavigateToSalaryMatrix: () => void;
   companyName?: string;
@@ -58,6 +61,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   selectedYear,
   currencyMode,
   loans,
+  employees,
+  salaryMatrix,
   onOpenNewTransaction,
   onNavigateToSalaryMatrix,
   companyName = 'آینده نگاران خلاق',
@@ -93,8 +98,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .filter(t => t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const netProfit = totalIncome - totalExpense;
-    const profitMargin = totalIncome > 0 ? ((netProfit / totalIncome) * 100).toFixed(1) : '۰';
+    const operating=financialSummary(filteredTxs);
+    const netProfit = operating.operatingResult;
+    const profitMargin = operating.operatingIncome > 0 ? ((netProfit / operating.operatingIncome) * 100).toFixed(1) : '۰';
 
     // Employee salary total in period
     const totalSalaries = filteredTxs
@@ -171,11 +177,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
     // Prepayments & Guarantee Deposits (سپرده‌های حسن انجام تعهدات و پیش‌پرداخت‌ها در تراز مالی)
     const guaranteeDepositsPaid = filteredTxs
-      .filter(t => t.type === 'expense' && (t.category === 'guarantee_deposit' || t.title?.includes('حسن انجام تعهدات') || t.title?.includes('سپرده قرارداد') || t.title?.includes('پیش‌پرداخت')))
+      .filter(t => t.type === 'expense' && t.category === 'guarantee_deposit')
       .reduce((sum, t) => sum + t.amount, 0);
 
     const guaranteeDepositsRefunded = filteredTxs
-      .filter(t => t.type === 'income' && (t.category === 'guarantee_refund' || t.title?.includes('استرداد سپرده') || t.title?.includes('برگشت سپرده') || t.title?.includes('برگشت پیش‌پرداخت')))
+      .filter(t => t.type === 'income' && t.category === 'guarantee_refund')
       .reduce((sum, t) => sum + t.amount, 0);
 
     // مانده خالص پیش‌پرداخت‌ها و سپرده‌ها در تراز مالی شرکت
@@ -184,10 +190,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     // لیست تراکنش‌های مرتبط با پیش‌پرداخت‌ها و سپرده‌های تعهدات
     const guaranteeTransactions = filteredTxs.filter(t => 
       t.category === 'guarantee_deposit' || 
-      t.category === 'guarantee_refund' || 
-      t.title?.includes('حسن انجام تعهدات') || 
-      t.title?.includes('سپرده قرارداد') || 
-      t.title?.includes('پیش‌پرداخت')
+      t.category === 'guarantee_refund'
     );
 
     return {
@@ -346,7 +349,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Total Income (Net Sales Before Tax) */}
         <div className="bg-white border-2 border-slate-100 p-5 rounded-xl flex flex-col items-start shadow-xs hover:border-slate-200 transition-colors relative">
           <div className="w-full flex items-center justify-between mb-1">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">کل درآمدها (فروش خالص)</span>
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">کل دریافت‌های نقدی (فروش خالص)</span>
             <div className="w-6 h-6 rounded bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <TrendingUp className="w-3.5 h-3.5" />
             </div>
@@ -362,7 +365,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           ) : (
             <p className="text-xs text-slate-400 mt-2">
-              فروش خالص باسینا، سپید، سرمایه و درگاه
+              دریافت‌های نقدی؛ شامل فروش، سرمایه و استرداد سپرده
             </p>
           )}
         </div>
@@ -370,7 +373,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Total Expense */}
         <div className="bg-white border-2 border-slate-100 p-5 rounded-xl flex flex-col items-start shadow-xs hover:border-slate-200 transition-colors relative">
           <div className="w-full flex items-center justify-between mb-1">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">کل هزینه‌ها</span>
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">کل پرداخت‌های نقدی</span>
             <div className="w-6 h-6 rounded bg-rose-50 text-rose-600 flex items-center justify-center">
               <TrendingDown className="w-3.5 h-3.5" />
             </div>
@@ -388,7 +391,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Net Profit */}
         <div className="bg-white border-2 border-slate-100 p-5 rounded-xl flex flex-col items-start shadow-xs hover:border-slate-200 transition-colors relative">
           <div className="w-full flex items-center justify-between mb-1">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">سود خالص</span>
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">نتیجه عملیاتی ثبت‌ها</span>
             <div className={`w-6 h-6 rounded flex items-center justify-center ${
               stats.netProfit >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
             }`}>
@@ -403,7 +406,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             )}
           </div>
           <p className="text-xs text-slate-400 mt-2">
-            {isCloudConnected ? `حاشیه سود دوره: ${toPersianDigits(stats.profitMargin)}%` : 'وضعیت: نامشخص'}
+            {isCloudConnected ? `حاشیه نتیجه عملیاتی: ${toPersianDigits(stats.profitMargin)}%` : 'وضعیت: نامشخص'}
           </p>
         </div>
 
@@ -451,6 +454,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       </div>
 
+      <p className="text-xs p-3 bg-amber-50 rounded">{OPERATING_RESULT_NOTE}</p>
       {/* Advanced Visual Reporter: Month-by-Month Bar Chart with Net Balance */}
       <AdvancedFinancialReporter
         transactions={transactions}
@@ -462,6 +466,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Cash Flow Forecast for Upcoming Months */}
       <CashFlowForecast
+        employees={employees}
+        salaryMatrix={salaryMatrix}
         transactions={transactions}
         loans={loans}
         selectedYear={selectedYear}
@@ -521,7 +527,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       ? 'bg-rose-100 text-rose-800' 
                       : 'bg-slate-200 text-slate-600'
                   }`}>
-                    {item.profit === 0 ? 'بدون داده' : `${item.profit > 0 ? '+' : ''}${formatCurrency(item.profit, currencyMode)}`}
+                    {item.profit === 0 ? 'خالص گردش صفر' : `${item.profit > 0 ? '+' : ''}${formatCurrency(item.profit, currencyMode)}`}
                   </span>
                 </div>
 

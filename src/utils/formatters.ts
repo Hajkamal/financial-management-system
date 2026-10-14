@@ -1,3 +1,4 @@
+import {financialSummary,OPERATING_RESULT_NOTE} from './financialMetrics';
 import * as XLSX from 'xlsx';
 import { 
   CurrencyMode, 
@@ -816,14 +817,17 @@ export function exportToExcel(
   // شیت خلاصه عملکرد مالی سال
   const totalIncome = yearTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const totalExpense = yearTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-  const netProfit = totalIncome - totalExpense;
+  const operating=financialSummary(yearTransactions);
+  const netProfit = operating.operatingResult;
 
   const summaryData = [
     { 'عنوان شاخص': `گزارش جامع مالی شرکت ${companyName} در سال مالی ${year}`, 'مقدار (ریال)': '', 'مقدار (تومان)': '' },
-    { 'عنوان شاخص': 'کل درآمدهای سال', 'مقدار (ریال)': totalIncome, 'مقدار (تومان)': Math.round(totalIncome / 10) },
-    { 'عنوان شاخص': 'کل هزینه‌های سال', 'مقدار (ریال)': totalExpense, 'مقدار (تومان)': Math.round(totalExpense / 10) },
-    { 'عنوان شاخص': 'سود / تراز خالص سال مالی', 'مقدار (ریال)': netProfit, 'مقدار (تومان)': Math.round(netProfit / 10) },
-    { 'عنوان شاخص': 'وضعیت تراز سال', 'مقدار (ریال)': netProfit >= 0 ? 'سودده (+) ' : 'زیان‌ده (-)', 'مقدار (تومان)': '' },
+    { 'عنوان شاخص': 'کل دریافت‌های نقدی سال', 'مقدار (ریال)': totalIncome, 'مقدار (تومان)': Math.round(totalIncome / 10) },
+    { 'عنوان شاخص': 'کل پرداخت‌های نقدی سال', 'مقدار (ریال)': totalExpense, 'مقدار (تومان)': Math.round(totalExpense / 10) },
+    { 'عنوان شاخص': 'نتیجه عملیاتی ثبت‌ها؛ نه سود خالص تعهدی', 'مقدار (ریال)': netProfit, 'مقدار (تومان)': Math.round(netProfit / 10) },
+    { 'عنوان شاخص':'خالص گردش نقدی','مقدار (ریال)':operating.cashNet,'مقدار (تومان)':Math.round(operating.cashNet/10)},
+    { 'عنوان شاخص':'محدودیت حسابداری','مقدار (ریال)':OPERATING_RESULT_NOTE,'مقدار (تومان)':''},
+    { 'عنوان شاخص': 'وضعیت نتیجه عملیاتی', 'مقدار (ریال)': netProfit >= 0 ? 'نتیجه مثبت (+) ' : 'نتیجه منفی (-)', 'مقدار (تومان)': '' },
     { 'عنوان شاخص': 'تعداد کل اسناد و تراکنش‌های ثبت‌شده', 'مقدار (ریال)': yearTransactions.length, 'مقدار (تومان)': '' },
   ];
   const summaryWs = XLSX.utils.json_to_sheet(summaryData);
