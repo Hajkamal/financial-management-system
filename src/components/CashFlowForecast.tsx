@@ -1,3 +1,4 @@
+import { buildCashFlow } from '../utils/cashFlow';
 import React, { useState, useMemo } from 'react';
 import {
   ResponsiveContainer,
@@ -26,13 +27,15 @@ import {
   ArrowDownRight,
   HelpCircle
 } from 'lucide-react';
-import { FinancialTransaction, Loan, CurrencyMode } from '../types';
+import { FinancialTransaction, Loan, CurrencyMode, Employee, SalaryMatrixItem } from '../types';
 import { PERSIAN_MONTHS, formatCurrency, toPersianDigits } from '../utils/formatters';
 import { getTodayJalali } from '../utils/jalali';
 
 interface CashFlowForecastProps {
   transactions: FinancialTransaction[];
   loans: Loan[];
+  employees: Employee[];
+  salaryMatrix: SalaryMatrixItem[];
   selectedYear: number;
   currencyMode: CurrencyMode;
 }
@@ -42,6 +45,8 @@ type ScenarioMode = 'conservative' | 'realistic' | 'optimistic';
 export const CashFlowForecast: React.FC<CashFlowForecastProps> = ({
   transactions,
   loans,
+  employees,
+  salaryMatrix,
   selectedYear,
   currencyMode,
 }) => {
@@ -49,127 +54,10 @@ export const CashFlowForecast: React.FC<CashFlowForecastProps> = ({
   const [growthAdjustment, setGrowthAdjustment] = useState<number>(0); // -20% to +30%
 
   const today = getTodayJalali();
-  const currentMonthNum = today.month; // 1 to 12
-
-  // 1. Analyze historical run-rates from transactions of this year
-  const historicalAverages = useMemo(() => {
-    const yearTxs = transactions.filter(t => t.year === selectedYear);
-    
-    // Find months that have recorded transactions so far
-    const recordedMonths = new Set(yearTxs.map(t => t.month));
-    const count = Math.max(recordedMonths.size, 1);
-
-    const totalIncome = yearTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const totalExpense = yearTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-
-    const basinaIncome = yearTxs
-      .filter(t => t.type === 'income' && t.category === 'sale_basina')
-      .reduce((s, t) => s + t.amount, 0);
-
-    const salaryExpense = yearTxs
-      .filter(t => t.type === 'expense' && t.category === 'salary')
-      .reduce((s, t) => s + t.amount, 0);
-
-    const infraExpense = yearTxs
-      .filter(t => t.type === 'expense' && t.category === 'infrastructure')
-      .reduce((s, t) => s + t.amount, 0);
-
-    return {
-      avgMonthlyIncome: Math.round(totalIncome / count),
-      avgMonthlyExpense: Math.round(totalExpense / count),
-      avgMonthlyBasina: Math.round(basinaIncome / count),
-      avgMonthlySalary: Math.round(salaryExpense / count),
-      avgMonthlyInfra: Math.round(infraExpense / count),
-      monthsRecorded: count,
-    };
-  }, [transactions, selectedYear]);
-
-  // 2. Active loan commitments per month
-  const monthlyLoanCommitments = useMemo(() => {
-    const commitments: Record<number, { amount: number; count: number; loansList: string[] }> = {};
-    for (let m = 1; m <= 12; m++) {
-      commitments[m] = { amount: 0, count: 0, loansList: [] };
-    }
-
-    loans.forEach(loan => {
-      const remainingInstallments = Math.max(0, loan.totalInstallments - loan.paidInstallments);
-      if (remainingInstallments > 0) {
-        // Distribute remaining installments to upcoming months
-        for (let i = 0; i < remainingInstallments; i++) {
-          const targetMonth = ((currentMonthNum - 1 + i) % 12) + 1;
-          if (commitments[targetMonth]) {
-            commitments[targetMonth].amount += loan.installmentAmount;
-            commitments[targetMonth].count += 1;
-            commitments[targetMonth].loansList.push(loan.title);
-          }
-        }
-      }
-    });
-
-    return commitments;
-  }, [loans, currentMonthNum]);
-
-  // 3. Scenario multipliers
-  const scenarioMultiplier = useMemo(() => {
-    let base = 1.0;
-    if (scenario === 'conservative') base = 0.85; // -15% income
-    if (scenario === 'optimistic') base = 1.20; // +20% income
-    return base * (1 + growthAdjustment / 100);
-  }, [scenario, growthAdjustment]);
-
-  // 4. Build 6-month forecast
-  const forecastMonths = useMemo(() => {
-    const list = [];
-    let runningLiquidity = 0;
-
-    // Project next 6 months starting from current month
-    for (let i = 0; i < 6; i++) {
-      const mNum = ((currentMonthNum - 1 + i) % 12) + 1;
-      const monthObj = PERSIAN_MONTHS.find(m => m.num === mNum)!;
-      
-      // Estimated Inflow: historical avg * multiplier
-      // If we have actual transaction data for this month, blend it
-      const actualInMonth = transactions.filter(t => t.year === selectedYear && t.month === mNum);
-      const actualIncome = actualInMonth.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-      const actualExpense = actualInMonth.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-
-      // Known fixed obligations
-      const loanInstallmentDue = monthlyLoanCommitments[mNum]?.amount || 0;
-      const fixedSalary = historicalAverages.avgMonthlySalary || 150000000;
-      const fixedInfra = historicalAverages.avgMonthlyInfra || 25000000;
-      const otherExpenses = Math.max(0, historicalAverages.avgMonthlyExpense - fixedSalary - fixedInfra);
-
-      let estimatedIncome = Math.round(historicalAverages.avgMonthlyIncome * scenarioMultiplier);
-      let estimatedExpense = fixedSalary + fixedInfra + loanInstallmentDue + otherExpenses;
-
-      // If month has actual data recorded and is current month or past, we use weighted/actual
-      const hasActuals = actualInMonth.length > 0;
-      if (hasActuals) {
-        estimatedIncome = actualIncome > 0 ? actualIncome : estimatedIncome;
-        estimatedExpense = actualExpense > 0 ? actualExpense : estimatedExpense;
-      }
-
-      const netCashFlow = estimatedIncome - estimatedExpense;
-      runningLiquidity += netCashFlow;
-
-      list.push({
-        monthNum: mNum,
-        monthName: monthObj.name,
-        estimatedIncome,
-        estimatedExpense,
-        loanDue: loanInstallmentDue,
-        salaryDue: fixedSalary,
-        infraDue: fixedInfra,
-        netCashFlow,
-        runningLiquidity,
-        hasActuals,
-        isDeficit: netCashFlow < 0,
-        coverageRatio: estimatedExpense > 0 ? (estimatedIncome / estimatedExpense) : 1,
-      });
-    }
-
-    return list;
-  }, [currentMonthNum, selectedYear, transactions, monthlyLoanCommitments, historicalAverages, scenarioMultiplier]);
+  const [historyStart,setHistoryStart]=useState(1);
+  const scenarioMultiplier=(scenario==='conservative'?0.85:scenario==='optimistic'?1.20:1)*(1+growthAdjustment/100);
+  const projection=useMemo(()=>buildCashFlow({transactions,loans,employees,salaryMatrix,year:selectedYear,today,startMonth:historyStart,multiplier:scenarioMultiplier}),[transactions,loans,employees,salaryMatrix,selectedYear,today.year,today.month,historyStart,scenarioMultiplier]);
+  const forecastMonths=projection.months.map(m=>({...m,monthName:PERSIAN_MONTHS.find(p=>p.num===m.month)!.name+' '+m.year}));
 
   // Overall liquidity health
   const totalForecastNet = forecastMonths.reduce((s, m) => s + m.netCashFlow, 0);
@@ -233,6 +121,7 @@ export const CashFlowForecast: React.FC<CashFlowForecastProps> = ({
     );
   };
 
+  if(selectedYear!==today.year)return <p className="border rounded p-4 text-sm">پیش‌بینی زنده فقط برای سال مالی جاری در دسترس است؛ گزارش سال انتخابی تاریخی است.</p>;
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
       {/* Header with Title and Scenario Switcher */}
@@ -296,18 +185,25 @@ export const CashFlowForecast: React.FC<CashFlowForecastProps> = ({
         </div>
       </div>
 
+      <div className="p-4 text-xs bg-amber-50 space-y-2">
+        <p>افق: شش ماه کامل از ماه آینده؛ ارقام، تغییر خالص وجه نقد هستند نه موجودی حساب یا سود خالص.</p>
+        <label>شروع بازه تاریخچهٔ کامل‌شده: <select value={historyStart} onChange={e=>setHistoryStart(Number(e.target.value))} className="border rounded p-1">{PERSIAN_MONTHS.map(m=><option key={m.num} value={m.num}>{m.name}</option>)}</select></label>
+        <p>ماه‌های کامل‌شدهٔ مبنا: {toPersianDigits(projection.baseline.months)}. ماه بدون ثبت در این بازه صفر فرض می‌شود؛ ماه جاری و آینده وارد میانگین نمی‌شوند.</p>
+        <p>حقوق از جدول ماه هدف و حکم پرسنل فعال/آزمایشی است؛ حقوق پرداخت‌شده یا صفر دوباره پیش‌بینی نمی‌شود. مبنای جایگزین، حقوق کامل ماه بدون تسهیم روزانه است. زیرساخت و سایر هزینه‌ها برآورد تاریخی‌اند. اسناد آینده کف برآوردند، نه جایگزین کامل تعهدات.</p>
+        {projection.warnings.map(w=><p role="status" key={w}>{w}</p>)}
+      </div>
       {/* KPI Cards for Cash Flow */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 sm:p-5 bg-slate-50/50 border-b border-slate-100 text-xs">
         <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="font-semibold">تراز انباشته نقدینگی ۶ ماه</span>
+            <span className="font-semibold">تغییر انباشته وجه نقد در ۶ ماه</span>
             <TrendingUp className="w-4 h-4 text-indigo-600" />
           </div>
           <div className={`text-base font-black ${totalForecastNet >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
             {totalForecastNet > 0 ? '+' : ''}{formatCurrency(totalForecastNet, currencyMode)}
           </div>
           <div className="text-[10px] text-slate-400 mt-1">
-            {totalForecastNet >= 0 ? 'جریان نقدینگی ورودی مثبت و پایدار است' : 'احتمال نیاز به شارژ حساب یا تسهیلات در گردش'}
+            {totalForecastNet >= 0 ? 'تغییر خالص وجه نقد در سناریوی انتخابی مثبت است' : 'احتمال نیاز به شارژ حساب یا تسهیلات در گردش'}
           </div>
         </div>
 
@@ -334,7 +230,7 @@ export const CashFlowForecast: React.FC<CashFlowForecastProps> = ({
             )}
           </div>
           <div className={`text-base font-black ${deficitMonthsCount === 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {deficitMonthsCount === 0 ? 'ایمن و بدون کسری' : `${toPersianDigits(deficitMonthsCount)} ماه با ریسک کسری`}
+            {projection.warnings.length ? 'برآورد دارای محدودیت داده' : deficitMonthsCount === 0 ? 'بدون کسری در سناریوی انتخابی' : `${toPersianDigits(deficitMonthsCount)} ماه با ریسک کسری`}
           </div>
           <div className="text-[10px] text-slate-400 mt-1">
             سناریوی انتخابی: {scenario === 'realistic' ? 'واقع‌بینانه' : scenario === 'conservative' ? 'محافظه‌کارانه' : 'خوش‌بینانه'}

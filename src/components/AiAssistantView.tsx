@@ -1,3 +1,6 @@
+import {financialSummary,OPERATING_RESULT_NOTE} from '../utils/financialMetrics';
+import {completedMonthBaseline} from '../utils/cashFlow';
+import {getTodayJalali} from '../utils/jalali';
 import { supabase } from '../lib/supabase';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
@@ -168,13 +171,8 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
   const compileFinancialContext = () => {
     try {
       const yearTransactions = transactions.filter((tx) => tx.year === selectedYear);
-      const totalIncome = yearTransactions
-        .filter((tx) => tx.type === 'income')
-        .reduce((sum, tx) => sum + (tx.amount || 0), 0);
-      const totalExpense = yearTransactions
-        .filter((tx) => tx.type === 'expense')
-        .reduce((sum, tx) => sum + (tx.amount || 0), 0);
-      const netProfit = totalIncome - totalExpense;
+      const summary=financialSummary(yearTransactions);
+      const totalIncome=summary.operatingIncome,totalExpense=summary.operatingExpense,netProfit=summary.operatingResult;
 
       // Monthly breakdown for all 12 months
       const monthlyBreakdown = PERSIAN_MONTHS.map((m) => {
@@ -251,7 +249,10 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
 پرونده جامع مالی شرکت ${companyName} در سال مالی ${selectedYear}:
 - کل درآمد سال: ${safeFmt(totalIncome)} ریال (${safeFmt(totalIncome / 10)} تومان)
 - کل هزینه‌های سال: ${safeFmt(totalExpense)} ریال (${safeFmt(totalExpense / 10)} تومان)
-- تراز نقدینگی و سود عملیاتی: ${safeFmt(netProfit)} ریال (${safeFmt(netProfit / 10)} تومان)
+- نتیجه عملیاتی ثبت‌ها (نه سود خالص تعهدی): ${safeFmt(netProfit)} ریال (${safeFmt(netProfit / 10)} تومان)
+- خالص گردش نقدی: ${safeFmt(summary.cashNet)} ریال
+- کل دریافت و پرداخت نقدی: ${safeFmt(summary.cashIncome)} / ${safeFmt(summary.cashExpense)} ریال
+- محدودیت حسابداری: ${OPERATING_RESULT_NOTE}
 - تعداد کل اسناد مالی سال: ${yearTransactions.length} سند
 
 وضعیت ماه به ماه سال ${selectedYear}:
@@ -329,9 +330,8 @@ ${(serviceTariffs || []).map(t => `- خدمت ${t.title}: کارمزد مصوب 
   const generateDynamicFinancialAnalysis = (query: string): string => {
     const q = query.toLowerCase().trim();
     const yearTransactions = transactions.filter((tx) => tx.year === selectedYear);
-    const totalIncome = yearTransactions.filter((tx) => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
-    const totalExpense = yearTransactions.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
-    const netProfit = totalIncome - totalExpense;
+    const summary=financialSummary(yearTransactions);
+    const totalIncome=summary.operatingIncome,totalExpense=summary.operatingExpense,netProfit=summary.operatingResult;
     const profitRate = totalIncome > 0 ? ((netProfit / totalIncome) * 100).toFixed(1) : '0';
 
     // ۱. بررسی اختصاصی درباره فرد یا کارمند خاص
@@ -489,15 +489,15 @@ ${loanDetails || 'هیچ تسهیلات فعالی در سیستم ثبت نشد
     if (q.includes('بانک') || q.includes('موجودی') || q.includes('حساب') || q.includes('نقدینگی') || q.includes('پول') || q.includes('جریان نقدی')) {
       const activeBanks = bankAccounts.filter((b) => b.isActive);
       const totalBankCash = activeBanks.reduce((s, b) => s + b.balance, 0);
-      const avgMonthlyExpense = totalExpense > 0 ? totalExpense / 12 : 1;
-      const runwayMonths = (totalBankCash / avgMonthlyExpense).toFixed(1);
+      const baseline=completedMonthBaseline(yearTransactions,selectedYear,getTodayJalali());
+      const runwayMonths=baseline.months>0&&baseline.cashExpense>0?(totalBankCash/baseline.cashExpense).toFixed(1):'نامشخص';
 
       return `### 💳 تحلیل نقدینگی و موجودی حساب‌های بانکی شرکت ${companyName}
 
 **۱. خلاصه وضعیت موجودی دفتری:**
 - **مجموع کل نقدینگی حساب‌های فعال:** ${formatCurrency(totalBankCash, currencyMode)}
 - **تعداد حساب‌های فعال بانکی:** ${toPersianDigits(activeBanks.length)} حساب
-- **شاخص پوشش هزینه‌ها (Runway نقدینگی):** حدود **${toPersianDigits(runwayMonths)} ماه** بر اساس میانگین هزینه‌های سالانه
+- **شاخص پوشش هزینه‌ها (Runway نقدینگی):** حدود **${toPersianDigits(runwayMonths)} ماه** بر اساس ماه‌های کامل‌شده؛ ماه بدون ثبت صفر فرض شده و ماه جاری حذف شده است
 
 **۲. تفکیک موجودی به تفکیک بانک‌ها:**
 ${activeBanks.map((b, idx) => `${idx + 1}. **بانک ${b.bankName}** (${b.accountNumber}):
@@ -505,7 +505,7 @@ ${activeBanks.map((b, idx) => `${idx + 1}. **بانک ${b.bankName}** (${b.accou
    - صاحب حساب: ${b.accountHolder}`).join('\n')}
 
 **۳. ارزیابی ریسک نقدینگی:**
-${Number(runwayMonths) >= 3 ? '✅ وضعیت نقدینگی در محدوده امن قرار دارد و توان پاسخگویی به هزینه‌های جاری عملیاتی ۳ ماه آینده وجود دارد.' : '⚠️ موجودی نقدی کمتر از آستانه ایمنی ۳ ماهه است؛ تسریع در وصول مطالبات و فاکتورهای پلتفرم باسینا ضروری است.'}`;
+${runwayMonths==='نامشخص'?'برای ارزیابی پوشش نقدی، تاریخچه کامل و هزینه مثبت لازم است.':baseline.monthsWithoutRecords?'بازه تاریخچه دارای ماه بدون ثبت است؛ پیش از اتکا، کامل‌بودن داده را بررسی کنید.':Number(runwayMonths) >= 3 ? '✅ وضعیت نقدینگی در محدوده امن قرار دارد و توان پاسخگویی به هزینه‌های جاری عملیاتی ۳ ماه آینده وجود دارد.' : '⚠️ موجودی نقدی کمتر از آستانه ایمنی ۳ ماهه است؛ تسریع در وصول مطالبات و فاکتورهای پلتفرم باسینا ضروری است.'}`;
     }
 
     // 4. Questions about Basina platform / Revenue streams
@@ -583,9 +583,12 @@ ${topInc.map((t, idx) => `${idx + 1}. **${t.title}**: ${formatCurrency(t.amount,
 **۱. خلاصه شاخص‌های عملکرد مالی:**
 - **مجموع درآمدها:** ${formatCurrency(totalIncome, currencyMode)}
 - **مجموع کل هزینه‌ها:** ${formatCurrency(totalExpense, currencyMode)}
-- **سود ناخالص عملیاتی:** ${formatCurrency(netProfit, currencyMode)}
-- **حاشیه سود شرکت:** %${toPersianDigits(profitRate)}
+- **نتیجه عملیاتی ثبت‌ها:** ${formatCurrency(netProfit, currencyMode)}
+- **حاشیه نتیجه عملیاتی:** %${toPersianDigits(profitRate)}
 - **کل اسناد مالی ثبت‌شده:** ${toPersianDigits(yearTransactions.length)} سند
+
+${OPERATING_RESULT_NOTE}
+- **خالص گردش نقدی (نه سود):** ${formatCurrency(summary.cashNet,currencyMode)}
 
 **۲. وضعیت دارایی‌های نقد و تعهدات:**
 - **موجودی دفتری حساب‌های فعال بانکی:** ${formatCurrency(bankAccounts.filter((b) => b.isActive).reduce((s, b) => s + b.balance, 0), currencyMode)}
@@ -593,7 +596,7 @@ ${topInc.map((t, idx) => `${idx + 1}. **${t.title}**: ${formatCurrency(t.amount,
 - **هزینه ماهانه حقوق و دستمزد:** ${formatCurrency(employees.filter((e) => e.status === 'active').reduce((s, e) => s + e.baseSalary, 0), currencyMode)}
 
 **۳. جمع‌بندی تحلیلی و راهبرد:**
-شرکت در حال حاضر دارای تراز ${netProfit >= 0 ? 'مثبت و رو به رشد' : 'منفی و نیازمند کنترل هزینه‌ها'} است. با تمرکز بر توسعه خطوط درآمدی پلتفرم باسینا و تثبیت هزینه‌های سرور ابری، چشم‌انداز تراز نقدینگی در سال آینده بسیار مساعد ارزیابی می‌گردد.`;
+نتیجه عملیاتی ثبت‌ها ${netProfit>=0?'مثبت':'منفی'} است؛ این عدد به‌تنهایی رشد، موجودی نقد یا سود خالص استاندارد را اثبات نمی‌کند.`;
   };
 
   const handleSendMessage = async (customPrompt?: string) => {

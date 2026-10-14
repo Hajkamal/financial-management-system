@@ -138,7 +138,7 @@ export const MonthlyFinanceChart: React.FC<MonthlyFinanceChartProps> = ({
             }`}
           >
             {currentItem.profit > 0
-              ? 'تراز سودآور'
+              ? 'خالص گردش مثبت'
               : currentItem.profit < 0
               ? 'تراز منفی'
               : 'سر به سر'}
@@ -169,7 +169,7 @@ export const MonthlyFinanceChart: React.FC<MonthlyFinanceChartProps> = ({
           <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-slate-200">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block shadow-xs shadow-blue-400/50"></span>
-              سود خالص ماه:
+              خالص گردش نقدی ماه:
             </span>
             <span
               className={`font-black ${
@@ -199,7 +199,7 @@ export const MonthlyFinanceChart: React.FC<MonthlyFinanceChartProps> = ({
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1 mr-10">
-            تحلیل جریان وجوه نقد ماه به ماه، ارزیابی تراز سوددهی و همپوشانی مخارج شرکت آینده نگاران خلاق
+            تحلیل جریان وجوه نقد ماه به ماه، ارزیابی خالص گردش نقدی و همپوشانی مخارج شرکت آینده نگاران خلاق
           </p>
         </div>
 
@@ -213,7 +213,7 @@ export const MonthlyFinanceChart: React.FC<MonthlyFinanceChartProps> = ({
                   ? 'bg-white text-blue-700 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
-              title="نمودار ستونی تفکیکی با خط سود خالص"
+              title="نمودار ستونی تفکیکی با خط خالص گردش نقدی"
             >
               <BarChart3 className="w-3.5 h-3.5" />
               <span>ستونی و روند</span>
@@ -289,7 +289,7 @@ export const MonthlyFinanceChart: React.FC<MonthlyFinanceChartProps> = ({
 
         <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 text-[11px] mb-1">
-            <span>ماه‌های سودآور (تراز +)</span>
+            <span>ماه‌های با خالص گردش مثبت (تراز +)</span>
             <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
           </div>
           <div className="text-sm sm:text-base font-black text-blue-600">
@@ -338,7 +338,7 @@ export const MonthlyFinanceChart: React.FC<MonthlyFinanceChartProps> = ({
             }`}
           >
             <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
-            <span>سود خالص (تراز)</span>
+            <span>خالص گردش نقدی (تراز)</span>
           </button>
         </div>
 
@@ -402,7 +402,7 @@ export const MonthlyFinanceChart: React.FC<MonthlyFinanceChartProps> = ({
                 <Line
                   type="monotone"
                   dataKey="profit"
-                  name="سود خالص"
+                  name="خالص گردش نقدی"
                   stroke="#2563eb"
                   strokeWidth={3}
                   dot={{ r: 4, fill: '#1d4ed8', stroke: '#ffffff', strokeWidth: 2 }}
@@ -470,7 +470,7 @@ export const MonthlyFinanceChart: React.FC<MonthlyFinanceChartProps> = ({
                 <Area
                   type="monotone"
                   dataKey="profit"
-                  name="سود خالص"
+                  name="خالص گردش نقدی"
                   stroke="#2563eb"
                   strokeWidth={2}
                   fillOpacity={1}
@@ -522,7 +522,7 @@ export const MonthlyFinanceChart: React.FC<MonthlyFinanceChartProps> = ({
                 <Line
                   type="monotone"
                   dataKey="profit"
-                  name="سود خالص"
+                  name="خالص گردش نقدی"
                   stroke="#2563eb"
                   strokeWidth={2.5}
                   strokeDasharray="4 4"

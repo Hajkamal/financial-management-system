@@ -536,6 +536,8 @@ export default function App() {
 
           {activeTab === 'dashboard' && (
             <DashboardView
+              employees={employees}
+              salaryMatrix={salaryMatrix}
               transactions={transactions}
               selectedYear={selectedYear}
               currencyMode={currencyMode}

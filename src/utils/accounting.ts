@@ -58,7 +58,7 @@ export const CHART_OF_ACCOUNTS: AccountDefinition[] = [
   { code: '4102', title: 'فروش خدمات سپید', group: 'revenue', nature: 'credit', parentCode: '4100', isActive: true, description: 'درآمد پلتفرم سپید' },
   { code: '4103', title: 'درآمد درگاه پرداخت آنلاین', group: 'revenue', nature: 'credit', parentCode: '4100', isActive: true, description: 'درآمد از درگاه زرین‌پال' },
   { code: '4200', title: 'سایر درآمدها', group: 'revenue', nature: 'credit', parentCode: '4000', isActive: true },
-  { code: '4201', title: 'استرداد سپرده و پیش‌پرداخت', group: 'revenue', nature: 'credit', parentCode: '4200', isActive: true, description: 'بازگشت سپرده حسن انجام تعهدات' },
+  { code: '4201', title: 'استرداد سپرده — سرفصل قدیمی غیرفعال', group: 'revenue', nature: 'credit', parentCode: '4200', isActive: false, description: 'ثبت جدید استرداد سپرده به حساب دارایی 1104 نگاشت می‌شود.' },
   { code: '4202', title: 'درآمد متفرقه', group: 'revenue', nature: 'credit', parentCode: '4200', isActive: true },
 
   // ─── هزینه‌ها (5xxx) ───
@@ -72,7 +72,7 @@ export const CHART_OF_ACCOUNTS: AccountDefinition[] = [
   { code: '5201', title: 'هزینه بازاریابی و تبلیغات', group: 'expenses', nature: 'debit', parentCode: '5200', isActive: true, description: 'تیم مارکتینگ علیزاده و سایر هزینه‌های تبلیغاتی' },
   { code: '5202', title: 'هزینه زیرساخت (سرور، پیامک، AI)', group: 'expenses', nature: 'debit', parentCode: '5200', isActive: true },
   { code: '5203', title: 'هزینه‌های سایت و اداری', group: 'expenses', nature: 'debit', parentCode: '5200', isActive: true },
-  { code: '5204', title: 'واریز سپرده حسن انجام تعهدات', group: 'expenses', nature: 'debit', parentCode: '5200', isActive: true },
+  { code: '5204', title: 'سپرده — سرفصل قدیمی غیرفعال', group: 'expenses', nature: 'debit', parentCode: '5200', isActive: false },
   { code: '5300', title: 'هزینه‌های مالی', group: 'expenses', nature: 'debit', parentCode: '5000', isActive: true },
   { code: '5301', title: 'اقساط تسهیلات و وام', group: 'expenses', nature: 'debit', parentCode: '5300', isActive: true },
   { code: '5302', title: 'پرداختی به اعضا و شرکا', group: 'expenses', nature: 'debit', parentCode: '5300', isActive: true, description: 'حقوق ماهانه و برداشت سود سهامداران' },
@@ -85,7 +85,7 @@ const INCOME_ACCOUNT_MAP: Record<IncomeCategory, { debitCode: string; creditCode
   shareholder_deposit: { debitCode: '1102', creditCode: '3101' },
   capital_raise:       { debitCode: '1102', creditCode: '3100' },
   zarinpal_gateway:    { debitCode: '1105', creditCode: '4103' },
-  guarantee_refund:    { debitCode: '1102', creditCode: '4201' },
+  guarantee_refund:    { debitCode: '1102', creditCode: '1104' },
   other_income:        { debitCode: '1102', creditCode: '4202' },
 };
 
@@ -99,7 +99,7 @@ const EXPENSE_ACCOUNT_MAP: Record<ExpenseCategory, { debitCode: string; creditCo
   insurance:            { debitCode: '5104', creditCode: '1102' },
   shareholder_payout:   { debitCode: '5302', creditCode: '1102' },
   loan_installment:     { debitCode: '5301', creditCode: '1102' },
-  guarantee_deposit:    { debitCode: '5204', creditCode: '1102' },
+  guarantee_deposit:    { debitCode: '1104', creditCode: '1102' },
   office_site:          { debitCode: '5203', creditCode: '1102' },
   ads_basina:           { debitCode: '5201', creditCode: '1102' },
 };
