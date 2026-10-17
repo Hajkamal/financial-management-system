@@ -1,6 +1,7 @@
 import {adminClient} from './server-security/supabase-admin';
 import { createAiHandler } from "./server-security/ai-handler";
 import { installAccountRoutes } from "./server-security/account-routes";
+import { installAccessRoutes } from "./server-security/access-routes";
 import express from "express";
 import path from "node:path";
 
@@ -89,6 +90,7 @@ app.use("/api/financial-data", (req,res,next) => {
  next();
 });
 installAccountRoutes(app);
+installAccessRoutes(app);
 const definitions: any = {
   transaction: ["transactions", "canCreateTransactions"],
   employee: ["employees", "canManageEmployees"],

@@ -1,91 +1,136 @@
-import { supabase } from '../lib/supabase';
+import { authenticatedFetch, readJsonResponse } from './request';
+import { supabase } from './supabase';
 
-export type AuthEventType =
-  | 'login_success'
-  | 'login_failed'
-  | 'logout'
-  | 'password_reset_by_admin'
-  | 'password_changed'
-  | 'session_revoked'
-  | 'account_locked';
+/**
+ * کلاینت مدیریت دسترسی کاربران.
+ * همهٔ عملیات حساس از طریق API سرور انجام می‌شود؛ این ماژول هرگز به
+ * توابع مدیریتی سرویس احراز هویت Supabase مستقیماً دسترسی ندارد.
+ */
 
 export interface AuthEvent {
   id: string;
-  user_id: string | null;
-  app_user_id: string | null;
-  event_type: AuthEventType;
+  authUserId: string | null;
+  appUserId: string | null;
+  attemptedEmail: string | null;
+  eventType: string;
   succeeded: boolean;
-  failure_reason: string | null;
-  ip_address: string | null;
-  user_agent: string | null;
-  created_at: string;
+  failureReason: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  userName: string | null;
+  userEmail: string | null;
 }
 
 export interface AdminNotification {
   id: string;
-  recipient_user_id: string;
   title: string;
-  body: string;
+  body: string | null;
   severity: 'info' | 'warning' | 'critical';
-  is_read: boolean;
-  created_at: string;
+  isRead: boolean;
+  relatedAppUserId: string | null;
+  createdAt: string;
 }
 
-function generateTemporaryPassword(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  const bytes = new Uint32Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, b => alphabet[b % alphabet.length]).join('');
+export interface ResetPasswordResult {
+  password: string;
+  generated: boolean;
 }
 
-export async function listAuthEvents(limit = 100): Promise<AuthEvent[]> {
-  const { data, error } = await supabase
-    .from('auth_events')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  return data as AuthEvent[];
+async function getJson(path: string): Promise<Record<string, any>> {
+  const response = await authenticatedFetch(path, { method: 'GET' });
+  const data = await readJsonResponse(response);
+  if (!response.ok) throw Object.assign(new Error(data.error || 'دریافت اطلاعات ناموفق بود.'), { status: response.status });
+  return data;
 }
 
-export async function listAdminNotifications(limit = 50): Promise<AdminNotification[]> {
-  const { data, error } = await supabase
-    .from('admin_notifications')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  return data as AdminNotification[];
+async function postJson(path: string, body?: unknown): Promise<Record<string, any>> {
+  const response = await authenticatedFetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  });
+  const data = await readJsonResponse(response);
+  if (!response.ok) throw Object.assign(new Error(data.error || 'عملیات ناموفق بود.'), { status: response.status });
+  return data;
+}
+
+export async function listAuthEvents(limit = 200): Promise<AuthEvent[]> {
+  const data = await getJson(`/api/access/events?limit=${Math.max(1, Math.min(500, limit))}`);
+  return (data.events as AuthEvent[]) || [];
+}
+
+export async function listAdminNotifications(): Promise<{ notifications: AdminNotification[]; unreadCount: number }> {
+  const data = await getJson('/api/access/notifications');
+  return {
+    notifications: (data.notifications as AdminNotification[]) || [],
+    unreadCount: Number(data.unreadCount) || 0,
+  };
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('admin_notifications')
-    .update({ is_read: true })
-    .eq('id', id);
-  if (error) throw error;
+  await postJson(`/api/access/notifications/${encodeURIComponent(id)}/read`);
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await postJson('/api/access/notifications/read-all');
+}
+
+export async function listPasswordHints(): Promise<Record<string, string>> {
+  const data = await getJson('/api/access/hints');
+  return (data.hints as Record<string, string>) || {};
 }
 
 export async function savePasswordHint(appUserId: string, hint: string): Promise<void> {
-  const trimmed = hint.trim();
-  if (trimmed.length > 120) throw new Error('راهنمای رمز باید حداکثر ۱۲۰ کاراکتر باشد.');
-  const { error } = await supabase
-    .from('app_users')
-    .update({ password_hint: trimmed || null })
-    .eq('id', appUserId);
-  if (error) throw error;
+  await postJson(`/api/access/users/${encodeURIComponent(appUserId)}/hint`, { hint });
 }
 
-export async function resetUserPassword(authUserId: string): Promise<string> {
-  const temporaryPassword = generateTemporaryPassword();
-  const { error } = await supabase.auth.admin.updateUserById(authUserId, {
-    password: temporaryPassword,
-  });
-  if (error) throw error;
-  return temporaryPassword;
+export async function resetUserPassword(authUserId: string, password?: string): Promise<ResetPasswordResult> {
+  const data = await postJson(
+    `/api/access/users/${encodeURIComponent(authUserId)}/reset-password`,
+    password ? { password } : {},
+  );
+  return { password: String(data.password || ''), generated: Boolean(data.generated) };
 }
 
-export async function revokeUserSessions(authUserId: string): Promise<void> {
-  const { error } = await supabase.auth.admin.signOut(authUserId);
-  if (error) throw error;
+export async function revokeUserSessions(authUserId: string): Promise<string | null> {
+  const data = await postJson(`/api/access/users/${encodeURIComponent(authUserId)}/revoke-sessions`);
+  return (data.warning as string) || null;
+}
+
+/**
+ * ثبت ورود موفق — از توکن نشست فعلی استفاده می‌کند و نباید مانع ورود شود.
+ */
+export async function recordLoginSuccess(): Promise<void> {
+  try {
+    const session = await supabase?.auth.getSession();
+    const token = session?.data.session?.access_token;
+    if (!token) return;
+    await fetch('/api/access/event/login-success', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: '{}',
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+  } catch {
+    /* لاگ‌گیری هرگز نباید ورود را مختل کند. */
+  }
+}
+
+/**
+ * ثبت ورود ناموفق — بدون نشست. سرور همیشه پاسخ موفق برمی‌گرداند
+ * تا وجود یا نبود ایمیل افشا نشود.
+ */
+export async function recordLoginFailure(email: string, reason?: string): Promise<void> {
+  try {
+    await fetch('/api/access/event/login-failed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, reason: reason || '' }),
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+  } catch {
+    /* نادیده گرفته می‌شود. */
+  }
 }

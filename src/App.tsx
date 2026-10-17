@@ -13,6 +13,7 @@ const MembersView = lazy(() => import('./components/MembersView').then(module =>
 const LoansView = lazy(() => import('./components/LoansView').then(module => ({ default: module.LoansView })));
 const FiscalYearsView = lazy(() => import('./components/FiscalYearsView').then(module => ({ default: module.FiscalYearsView })));
 const UsersView = lazy(() => import('./components/UsersView').then(module => ({ default: module.UsersView })));
+const UserAccessManagement = lazy(() => import('./components/UserAccessManagement').then(module => ({ default: module.UserAccessManagement })));
 const BankAccountsView = lazy(() => import('./components/BankAccountsView').then(module => ({ default: module.BankAccountsView })));
 const AiAssistantView = lazy(() => import('./components/AiAssistantView').then(module => ({ default: module.AiAssistantView })));
 const VatReportsView = lazy(() => import('./components/VatReportsView').then(module => ({ default: module.VatReportsView })));
@@ -725,22 +726,31 @@ export default function App() {
           )}
 
           {activeTab === 'users' && (
-            <UsersView
-              users={users}
-              currentUser={currentAppUser}
-              syncLogs={syncLogs}
-              isLoadingSyncLogs={isLoadingSyncLogs}
-              onRefreshSyncLogs={fetchSyncLogs}
-              onClearSyncLogs={handleClearSyncLogs}
-              onTriggerPush={handlePushAllDataToServer}
-              onTriggerPull={handlePullAllDataFromServer}
-              isCloudConnected={isCloudConnected}
-              onAddUser={handleAddUser}
-              onUpdateUser={handleUpdateUser}
-              onDeleteUser={handleDeleteUser}
-              onSwitchUser={handleSwitchUser}
-              onShowToast={showToast}
-            />
+            <>
+              {currentAppUser.permissions.canManageUsers && (
+                <UserAccessManagement
+                  users={users}
+                  currentAppUser={currentAppUser}
+                  onShowToast={showToast}
+                />
+              )}
+              <UsersView
+                users={users}
+                currentUser={currentAppUser}
+                syncLogs={syncLogs}
+                isLoadingSyncLogs={isLoadingSyncLogs}
+                onRefreshSyncLogs={fetchSyncLogs}
+                onClearSyncLogs={handleClearSyncLogs}
+                onTriggerPush={handlePushAllDataToServer}
+                onTriggerPull={handlePullAllDataFromServer}
+                isCloudConnected={isCloudConnected}
+                onAddUser={handleAddUser}
+                onUpdateUser={handleUpdateUser}
+                onDeleteUser={handleDeleteUser}
+                onSwitchUser={handleSwitchUser}
+                onShowToast={showToast}
+              />
+            </>
           )}
 
 

@@ -10,6 +10,8 @@ import {requireStrongPassword,normalizePassword} from '../security/passwords';
 function log(req:Request,action:string){return {id:randomUUID(),timestamp:new Date().toISOString(),direction:'upload',actionType:action,actionLabel:action,userName:req.actor.fullName,userEmail:req.actor.email,userRole:req.actor.role,status:'success',entityCount:1,deviceInfo:'verified JWT',details:''};}
 function checkRevision(req:Request,revision:number){if(req.get('If-Match')!==String(revision))fail('اطلاعات تغییر کرده است؛ دوباره دریافت کنید.',409);}
 function configuredWrites(){if(process.env.FINANCIAL_WRITES_ENABLED!=='true')fail('ثبت اطلاعات هنوز فعال نشده است.',503);}
+// ثبت رویداد احراز هویت (اگر جدول مهاجرت اجرا نشده باشد، هرگز عملیات اصلی را نمی‌شکند).
+async function recordAuthEvent(row:Record<string,unknown>){try{await adminClient().from('auth_events').insert(row);}catch{}}
 export function installAccountRoutes(app:Express){
  app.post('/api/financial-data/user',async(req,res,next)=>{
   let created:string|undefined;
@@ -60,7 +62,7 @@ export function installAccountRoutes(app:Express){
   }catch(e){next(e);}
  });
  app.post('/api/auth/logout',requireAuth,async(req,res,next)=>{
-  try{const result=await adminClient().rpc('invalidate_app_sessions',{p_auth_user_id:req.actor.authUserId,p_actor_auth_id:req.actor.authUserId,p_action:'session_revocation'});if(result.error)fail('لغو دسترسی نشست‌های سامانه تأیید نشد.',503);const provider=await adminClient().auth.admin.signOut(req.authToken!,'global');res.json({success:true,warning:provider.error?'لغو نشست Auth تأیید نشد؛ نشست‌های قدیمی سامانه مسدودند.':undefined});}catch(e){next(e);}
+  try{const result=await adminClient().rpc('invalidate_app_sessions',{p_auth_user_id:req.actor.authUserId,p_actor_auth_id:req.actor.authUserId,p_action:'session_revocation'});if(result.error)fail('لغو دسترسی نشست‌های سامانه تأیید نشد.',503);const provider=await adminClient().auth.admin.signOut(req.authToken!,'global');await recordAuthEvent({auth_user_id:req.actor.authUserId,app_user_id:req.actor.id,event_type:'logout',succeeded:true,user_agent:(req.get('user-agent')||'').slice(0,400)||null});res.json({success:true,warning:provider.error?'لغو نشست Auth تأیید نشد؛ نشست‌های قدیمی سامانه مسدودند.':undefined});}catch(e){next(e);}
  });
  app.post('/api/auth/change-password',requireAuth,async(req,res,next)=>{
   try{configuredWrites();recentAuth(req);if(req.body.userId!==req.actor.id)fail('فقط رمز خودتان از این مسیر قابل تغییر است.',403);
@@ -69,6 +71,7 @@ export function installAccountRoutes(app:Express){
    const verified=await client.auth.signInWithPassword({email:req.actor.email,password:current});if(verified.error||verified.data.user?.id!==req.actor.authUserId)fail('رمز فعلی نادرست است.',403);
    const admin=adminClient();const revoked=await admin.rpc('invalidate_app_sessions',{p_auth_user_id:req.actor.authUserId,p_actor_auth_id:req.actor.authUserId,p_action:'session_revocation'});if(revoked.error)fail('لغو نشست‌های قبلی تأیید نشد.',503);
    const changed=await admin.auth.admin.updateUserById(req.actor.authUserId,{password});if(changed.error)fail('رمز تغییر نکرد؛ برای ادامه دوباره وارد شوید.',503);
+   await recordAuthEvent({auth_user_id:req.actor.authUserId,app_user_id:req.actor.id,event_type:'password_changed',succeeded:true,user_agent:(req.get('user-agent')||'').slice(0,400)||null});
    const out=await admin.auth.admin.signOut(req.authToken!,'global');const fresh=await loadDatabase();res.json({success:true,revision:fresh.revision,requiresLogin:true,warning:out.error?'نشست‌های قدیمی سامانه مسدود شده‌اند، اما لغو Auth تأیید نشد.':undefined});
   }catch(e){next(e);}
  });

@@ -1,89 +1,87 @@
--- User access management: auth events, admin notifications, password hints
--- This migration is intentionally NOT applied automatically.
+-- =====================================================
+-- مدیریت دسترسی کاربران: رویدادهای ورود/خروج، اعلان‌های مدیر و راهنمای رمز
+-- این مهاجرت عمداً به‌صورت خودکار اعمال نمی‌شود؛ در محیط آزمایشی اجرا و تست کنید.
+-- پس از موفقیت تست‌ها، در محیط اصلی هم اجرا کنید.
+--
+-- اصل امنیتی مهم:
+--   رمز عبور در Supabase Auth با bcrypt هش می‌شود و «قابل خواندن» نیست.
+--   این طراحی عمدی است. در نتیجه فقط این‌ها پشتیبانی می‌شوند:
+--     ۱) بازنشانی رمز توسط مدیر (تعیین رمز جدید و نمایش یک‌باره)
+--     ۲) «راهنمای رمز» غیرمحرمانه (Hint) که مدیر ثبت می‌کند
+--   هیچ ستون/جدولی برای ذخیرهٔ رمز قابل بازیابی ساخته نمی‌شود.
+-- =====================================================
 
-create table if not exists public.auth_events (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete set null,
-  app_user_id text references public.app_users(id) on delete set null,
-  event_type text not null check (event_type in (
+-- ۱) رویدادهای احراز هویت (ورود، خروج، بازنشانی، لغو نشست و ...)
+CREATE TABLE IF NOT EXISTS public.auth_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  auth_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  app_user_id text,
+  attempted_email text,
+  event_type text NOT NULL CHECK (event_type IN (
     'login_success','login_failed','logout','password_reset_by_admin',
     'password_changed','session_revoked','account_locked'
   )),
-  succeeded boolean not null default true,
+  succeeded boolean NOT NULL DEFAULT true,
   failure_reason text,
   ip_address inet,
   user_agent text,
-  created_at timestamptz not null default now()
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
-create index if not exists auth_events_user_created_idx
-  on public.auth_events (user_id, created_at desc);
-create index if not exists auth_events_type_created_idx
-  on public.auth_events (event_type, created_at desc);
+CREATE INDEX IF NOT EXISTS auth_events_auth_user_created_idx
+  ON public.auth_events (auth_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS auth_events_type_created_idx
+  ON public.auth_events (event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS auth_events_created_idx
+  ON public.auth_events (created_at DESC);
 
-create table if not exists public.admin_notifications (
-  id uuid primary key default gen_random_uuid(),
-  recipient_user_id uuid not null references auth.users(id) on delete cascade,
-  related_auth_event_id uuid references public.auth_events(id) on delete set null,
-  title text not null,
-  body text not null,
-  severity text not null default 'info' check (severity in ('info','warning','critical')),
-  is_read boolean not null default false,
-  created_at timestamptz not null default now()
+-- ۲) اعلان‌های پنل مدیر (مثلاً خطای ورود کاربران)
+CREATE TABLE IF NOT EXISTS public.admin_notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  recipient_auth_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  related_auth_event_id uuid REFERENCES public.auth_events(id) ON DELETE SET NULL,
+  related_app_user_id text,
+  title text NOT NULL,
+  body text,
+  severity text NOT NULL DEFAULT 'info' CHECK (severity IN ('info','warning','critical')),
+  is_read boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
-create index if not exists admin_notifications_recipient_created_idx
-  on public.admin_notifications (recipient_user_id, created_at desc);
+CREATE INDEX IF NOT EXISTS admin_notifications_recipient_idx
+  ON public.admin_notifications (recipient_auth_user_id, is_read, created_at DESC);
 
-alter table public.app_users
-  add column if not exists password_hint text;
+-- ۳) راهنمای رمز (غیرمحرمانه) به‌ازای هر کاربر — جدول جدا تا رِویژن دادهٔ مالی دست نخورد
+CREATE TABLE IF NOT EXISTS public.password_hints (
+  app_user_id text PRIMARY KEY,
+  hint text NOT NULL DEFAULT '',
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid REFERENCES auth.users(id) ON DELETE SET NULL
+);
 
-alter table public.app_users
-  enable row level security;
+-- ۴) فعال‌سازی RLS (نوشتن فقط از طریق سرویس‌رول انجام می‌شود)
+ALTER TABLE public.auth_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.password_hints ENABLE ROW LEVEL SECURITY;
 
-create policy "Users manage own password hint"
-  on public.app_users for update
-  using (auth.uid() = auth_user_id)
-  with check (auth.uid() = auth_user_id);
+-- خواندن رویدادهای خودِ کاربر
+DROP POLICY IF EXISTS "Users read own auth events" ON public.auth_events;
+CREATE POLICY "Users read own auth events" ON public.auth_events
+  FOR SELECT TO authenticated USING (auth_user_id = auth.uid());
 
-create policy "Admins read password hints"
-  on public.app_users for select
-  using (
-    exists (
-      select 1 from public.app_users admin
-      where admin.auth_user_id = auth.uid()
-        and admin.role = 'super_admin'
-        and admin.status = 'active'
-    )
-  );
+-- خواندن همهٔ رویدادها توسط مدیران
+DROP POLICY IF EXISTS "Admins read all auth events" ON public.auth_events;
+CREATE POLICY "Admins read all auth events" ON public.auth_events
+  FOR SELECT TO authenticated USING (public.has_app_permission('canManageUsers'));
 
-create policy "Users read own auth events"
-  on public.auth_events for select
-  using (auth.uid() = user_id);
+-- خواندن اعلان‌های خودِ مدیر
+DROP POLICY IF EXISTS "Recipients read own notifications" ON public.admin_notifications;
+CREATE POLICY "Recipients read own notifications" ON public.admin_notifications
+  FOR SELECT TO authenticated USING (recipient_auth_user_id = auth.uid());
 
-create policy "Admins read all auth events"
-  on public.auth_events for select
-  using (
-    exists (
-      select 1 from public.app_users admin
-      where admin.auth_user_id = auth.uid()
-        and admin.role = 'super_admin'
-        and admin.status = 'active'
-    )
-  );
+-- خواندن راهنمای رمز توسط مدیران
+DROP POLICY IF EXISTS "Admins read password hints" ON public.password_hints;
+CREATE POLICY "Admins read password hints" ON public.password_hints
+  FOR SELECT TO authenticated USING (public.has_app_permission('canManageUsers'));
 
-create policy "Authenticated users insert auth events"
-  on public.auth_events for insert
-  with check (auth.uid() = user_id);
-
-create policy "Admins read all notifications"
-  on public.admin_notifications for select
-  using (auth.uid() = recipient_user_id);
-
-create policy "Users update own notifications"
-  on public.admin_notifications for update
-  using (auth.uid() = recipient_user_id)
-  with check (auth.uid() = recipient_user_id);
-
--- Security rule: never store recoverable passwords or password hints containing secrets.
--- Password reset must use Supabase Auth admin APIs and temporary credentials must be shown once.
+-- هیچ سیاست INSERT/UPDATE/DELETE تعریف نمی‌شود؛ فقط service_role (سرور) می‌نویسد.

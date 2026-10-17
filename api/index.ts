@@ -1102,6 +1102,12 @@ function checkRevision(req, revision2) {
 function configuredWrites() {
   if (process.env.FINANCIAL_WRITES_ENABLED !== "true") fail("\u062B\u0628\u062A \u0627\u0637\u0644\u0627\u0639\u0627\u062A \u0647\u0646\u0648\u0632 \u0641\u0639\u0627\u0644 \u0646\u0634\u062F\u0647 \u0627\u0633\u062A.", 503);
 }
+async function recordAuthEvent(row) {
+  try {
+    await adminClient().from("auth_events").insert(row);
+  } catch {
+  }
+}
 function installAccountRoutes(app2) {
   app2.post("/api/financial-data/user", async (req, res, next) => {
     let created;
@@ -1181,6 +1187,7 @@ function installAccountRoutes(app2) {
       const result = await adminClient().rpc("invalidate_app_sessions", { p_auth_user_id: req.actor.authUserId, p_actor_auth_id: req.actor.authUserId, p_action: "session_revocation" });
       if (result.error) fail("\u0644\u063A\u0648 \u062F\u0633\u062A\u0631\u0633\u06CC \u0646\u0634\u0633\u062A\u200C\u0647\u0627\u06CC \u0633\u0627\u0645\u0627\u0646\u0647 \u062A\u0623\u06CC\u06CC\u062F \u0646\u0634\u062F.", 503);
       const provider = await adminClient().auth.admin.signOut(req.authToken, "global");
+      await recordAuthEvent({ auth_user_id: req.actor.authUserId, app_user_id: req.actor.id, event_type: "logout", succeeded: true, user_agent: (req.get("user-agent") || "").slice(0, 400) || null });
       res.json({ success: true, warning: provider.error ? "\u0644\u063A\u0648 \u0646\u0634\u0633\u062A Auth \u062A\u0623\u06CC\u06CC\u062F \u0646\u0634\u062F\u061B \u0646\u0634\u0633\u062A\u200C\u0647\u0627\u06CC \u0642\u062F\u06CC\u0645\u06CC \u0633\u0627\u0645\u0627\u0646\u0647 \u0645\u0633\u062F\u0648\u062F\u0646\u062F." : void 0 });
     } catch (e) {
       next(e);
@@ -1202,6 +1209,7 @@ function installAccountRoutes(app2) {
       if (revoked.error) fail("\u0644\u063A\u0648 \u0646\u0634\u0633\u062A\u200C\u0647\u0627\u06CC \u0642\u0628\u0644\u06CC \u062A\u0623\u06CC\u06CC\u062F \u0646\u0634\u062F.", 503);
       const changed = await admin.auth.admin.updateUserById(req.actor.authUserId, { password });
       if (changed.error) fail("\u0631\u0645\u0632 \u062A\u063A\u06CC\u06CC\u0631 \u0646\u06A9\u0631\u062F\u061B \u0628\u0631\u0627\u06CC \u0627\u062F\u0627\u0645\u0647 \u062F\u0648\u0628\u0627\u0631\u0647 \u0648\u0627\u0631\u062F \u0634\u0648\u06CC\u062F.", 503);
+      await recordAuthEvent({ auth_user_id: req.actor.authUserId, app_user_id: req.actor.id, event_type: "password_changed", succeeded: true, user_agent: (req.get("user-agent") || "").slice(0, 400) || null });
       const out = await admin.auth.admin.signOut(req.authToken, "global");
       const fresh = await loadDatabase();
       res.json({ success: true, revision: fresh.revision, requiresLogin: true, warning: out.error ? "\u0646\u0634\u0633\u062A\u200C\u0647\u0627\u06CC \u0642\u062F\u06CC\u0645\u06CC \u0633\u0627\u0645\u0627\u0646\u0647 \u0645\u0633\u062F\u0648\u062F \u0634\u062F\u0647\u200C\u0627\u0646\u062F\u060C \u0627\u0645\u0627 \u0644\u063A\u0648 Auth \u062A\u0623\u06CC\u06CC\u062F \u0646\u0634\u062F." : void 0 });
@@ -1211,9 +1219,286 @@ function installAccountRoutes(app2) {
   });
 }
 
+// server-security/access-routes.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+var NOTIFY_WINDOW_MS = 20 * 60 * 1e3;
+var failedLoginHits = /* @__PURE__ */ new Map();
+function ipOrNull(value) {
+  if (!value) return null;
+  const first = value.split(",")[0].trim();
+  return first.length <= 45 && /^[0-9a-fA-F:.]+$/.test(first) ? first : null;
+}
+function clientIp(req) {
+  return ipOrNull(req.get("x-forwarded-for") || req.socket?.remoteAddress || void 0);
+}
+function userAgent(req) {
+  const value = req.get("user-agent");
+  return value ? value.slice(0, 400) : null;
+}
+function rateLimited(req) {
+  const key = clientIp(req) || "unknown";
+  const now = Date.now();
+  const hits = (failedLoginHits.get(key) || []).filter((t) => now - t < 6e4);
+  hits.push(now);
+  failedLoginHits.set(key, hits);
+  if (failedLoginHits.size > 5e3) failedLoginHits.clear();
+  return hits.length > 30;
+}
+function generateTemporaryPassword() {
+  return "Aa1!" + randomBytes2(10).toString("base64url");
+}
+async function insertAuthEvent(row) {
+  const { data, error } = await adminClient().from("auth_events").insert(row).select("id").single();
+  return error || !data ? null : data.id;
+}
+async function sendLoginFailureNotifications(req, appUserId, attemptedEmail, eventId) {
+  const admin = adminClient();
+  const { data: admins, error: adminsError } = await admin.from("app_users").select("auth_user_id").in("role", ["super_admin"]).eq("status", "active").eq("is_deleted", false);
+  if (adminsError || !Array.isArray(admins) || admins.length === 0) return;
+  for (const recipient of admins) {
+    const recipientId = recipient.auth_user_id;
+    if (!recipientId) continue;
+    if (appUserId) {
+      const since = new Date(Date.now() - NOTIFY_WINDOW_MS).toISOString();
+      const { data: recent } = await admin.from("admin_notifications").select("id").eq("recipient_auth_user_id", recipientId).eq("related_app_user_id", appUserId).gte("created_at", since).limit(1);
+      if (Array.isArray(recent) && recent.length > 0) continue;
+    }
+    await admin.from("admin_notifications").insert({
+      recipient_auth_user_id: recipientId,
+      related_auth_event_id: eventId,
+      related_app_user_id: appUserId,
+      title: "\u062A\u0644\u0627\u0634 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0631\u0627\u06CC \u0648\u0631\u0648\u062F",
+      body: appUserId ? `\u0648\u0631\u0648\u062F \u06CC\u06A9\u06CC \u0627\u0632 \u06A9\u0627\u0631\u0628\u0631\u0627\u0646 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F (\u0627\u06CC\u0645\u06CC\u0644 \u062A\u0644\u0627\u0634\u200C\u0634\u062F\u0647: ${attemptedEmail}).` : `\u062A\u0644\u0627\u0634 \u0646\u0627\u0645\u0648\u0641\u0642 \u0648\u0631\u0648\u062F \u0628\u0627 \u0627\u06CC\u0645\u06CC\u0644 \u0646\u0627\u0634\u0646\u0627\u0633: ${attemptedEmail}.`,
+      severity: "warning"
+    });
+  }
+}
+function installAccessRoutes(app2) {
+  app2.post("/api/access/event/login-success", requireAuth, async (req, res, next) => {
+    try {
+      await insertAuthEvent({
+        auth_user_id: req.actor.authUserId,
+        app_user_id: req.actor.id,
+        attempted_email: req.actor.email,
+        event_type: "login_success",
+        succeeded: true,
+        ip_address: clientIp(req),
+        user_agent: userAgent(req)
+      });
+      res.json({ success: true });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app2.post("/api/access/event/login-failed", async (req, res) => {
+    try {
+      if (rateLimited(req)) {
+        res.json({ success: true });
+        return;
+      }
+      object(req.body);
+      const email = typeof req.body.email === "string" ? req.body.email.toLowerCase().trim().slice(0, 254) : "";
+      const reason = typeof req.body.reason === "string" ? req.body.reason.slice(0, 200) : "";
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        res.json({ success: true });
+        return;
+      }
+      const admin = adminClient();
+      const { data: profile } = await admin.from("app_users").select("id,auth_user_id").eq("email", email).limit(1).maybeSingle();
+      const appUserId = profile ? profile.id : null;
+      const authUserId = profile ? profile.auth_user_id || null : null;
+      const eventId = await insertAuthEvent({
+        auth_user_id: authUserId,
+        app_user_id: appUserId,
+        attempted_email: email,
+        event_type: "login_failed",
+        succeeded: false,
+        failure_reason: reason || "invalid_credentials",
+        ip_address: clientIp(req),
+        user_agent: userAgent(req)
+      });
+      await sendLoginFailureNotifications(req, appUserId, email, eventId);
+    } catch {
+    }
+    res.json({ success: true });
+  });
+  app2.get("/api/access/events", requireAuth, async (req, res, next) => {
+    try {
+      requirePermission(req, "canManageUsers");
+      const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+      const admin = adminClient();
+      const { data: events, error } = await admin.from("auth_events").select("id,auth_user_id,app_user_id,attempted_email,event_type,succeeded,failure_reason,ip_address,created_at").order("created_at", { ascending: false }).limit(limit);
+      if (error) fail("\u062F\u0631\u06CC\u0627\u0641\u062A \u0631\u0648\u06CC\u062F\u0627\u062F\u0647\u0627\u06CC \u0648\u0631\u0648\u062F \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
+      const { data: profiles } = await admin.from("app_users").select("id,email,full_name");
+      const byId = /* @__PURE__ */ new Map();
+      for (const p of profiles || []) {
+        byId.set(p.id, {
+          email: p.email,
+          fullName: p.full_name
+        });
+      }
+      res.json({
+        success: true,
+        events: (events || []).map((row) => {
+          const profile = row.app_user_id ? byId.get(row.app_user_id) : void 0;
+          return {
+            id: row.id,
+            authUserId: row.auth_user_id,
+            appUserId: row.app_user_id,
+            attemptedEmail: row.attempted_email,
+            eventType: row.event_type,
+            succeeded: row.succeeded,
+            failureReason: row.failure_reason,
+            ipAddress: row.ip_address,
+            createdAt: row.created_at,
+            userName: profile?.fullName || null,
+            userEmail: profile?.email || row.attempted_email || null
+          };
+        })
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app2.get("/api/access/notifications", requireAuth, async (req, res, next) => {
+    try {
+      const admin = adminClient();
+      const { data, error } = await admin.from("admin_notifications").select("id,title,body,severity,is_read,related_app_user_id,created_at").eq("recipient_auth_user_id", req.actor.authUserId).order("created_at", { ascending: false }).limit(100);
+      if (error) fail("\u062F\u0631\u06CC\u0627\u0641\u062A \u0627\u0639\u0644\u0627\u0646\u200C\u0647\u0627 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
+      const notifications = (data || []).map((row) => ({
+        id: row.id,
+        title: row.title,
+        body: row.body,
+        severity: row.severity,
+        isRead: row.is_read,
+        relatedAppUserId: row.related_app_user_id,
+        createdAt: row.created_at
+      }));
+      res.json({
+        success: true,
+        notifications,
+        unreadCount: notifications.filter((n) => !n.isRead).length
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app2.post("/api/access/notifications/read-all", requireAuth, async (req, res, next) => {
+    try {
+      const { error } = await adminClient().from("admin_notifications").update({ is_read: true }).eq("recipient_auth_user_id", req.actor.authUserId).eq("is_read", false);
+      if (error) fail("\u0628\u0647\u200C\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0627\u0639\u0644\u0627\u0646\u200C\u0647\u0627 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
+      res.json({ success: true });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app2.post("/api/access/notifications/:id/read", requireAuth, async (req, res, next) => {
+    try {
+      const id = String(req.params.id || "");
+      if (!/^[0-9a-fA-F-]{36}$/.test(id)) fail("\u0634\u0646\u0627\u0633\u0647 \u0627\u0639\u0644\u0627\u0646 \u0646\u0627\u0645\u0639\u062A\u0628\u0631 \u0627\u0633\u062A.");
+      const { error } = await adminClient().from("admin_notifications").update({ is_read: true }).eq("id", id).eq("recipient_auth_user_id", req.actor.authUserId);
+      if (error) fail("\u0628\u0647\u200C\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0627\u0639\u0644\u0627\u0646 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
+      res.json({ success: true });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app2.get("/api/access/hints", requireAuth, async (req, res, next) => {
+    try {
+      requirePermission(req, "canManageUsers");
+      const { data, error } = await adminClient().from("password_hints").select("app_user_id,hint");
+      if (error) fail("\u062F\u0631\u06CC\u0627\u0641\u062A \u0631\u0627\u0647\u0646\u0645\u0627\u06CC \u0631\u0645\u0632 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
+      const hints = {};
+      for (const row of data || []) hints[row.app_user_id] = row.hint || "";
+      res.json({ success: true, hints });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app2.post("/api/access/users/:appUserId/hint", requireAuth, async (req, res, next) => {
+    try {
+      requirePermission(req, "canManageUsers");
+      const appUserId = String(req.params.appUserId || "");
+      text(appUserId, "\u0634\u0646\u0627\u0633\u0647 \u06A9\u0627\u0631\u0628\u0631", 160);
+      object(req.body);
+      const hint = typeof req.body.hint === "string" ? req.body.hint.trim().slice(0, 120) : "";
+      const { error } = await adminClient().from("password_hints").upsert(
+        {
+          app_user_id: appUserId,
+          hint,
+          updated_at: (/* @__PURE__ */ new Date()).toISOString(),
+          updated_by: req.actor.authUserId
+        },
+        { onConflict: "app_user_id" }
+      );
+      if (error) fail("\u0630\u062E\u06CC\u0631\u0647 \u0631\u0627\u0647\u0646\u0645\u0627\u06CC \u0631\u0645\u0632 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
+      res.json({ success: true });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app2.post("/api/access/users/:authUserId/reset-password", requireAuth, async (req, res, next) => {
+    try {
+      requirePermission(req, "canManageUsers");
+      recentAuth(req);
+      object(req.body);
+      const authUserId = String(req.params.authUserId || "");
+      if (!/^[0-9a-fA-F-]{36}$/.test(authUserId)) fail("\u0634\u0646\u0627\u0633\u0647 \u0647\u0648\u06CC\u062A \u0646\u0627\u0645\u0639\u062A\u0628\u0631 \u0627\u0633\u062A.");
+      const provided = typeof req.body.password === "string" && req.body.password.trim() ? normalizePassword(req.body.password) : "";
+      const password = provided ? requireStrongPassword(provided) : generateTemporaryPassword();
+      if (!provided) requireStrongPassword(password);
+      const admin = adminClient();
+      const invalidated = await admin.rpc("invalidate_app_sessions", {
+        p_auth_user_id: authUserId,
+        p_actor_auth_id: req.actor.authUserId,
+        p_action: "password_reset_by_admin"
+      });
+      if (invalidated.error) fail("\u0644\u063A\u0648 \u0646\u0634\u0633\u062A\u200C\u0647\u0627\u06CC \u0642\u0628\u0644\u06CC \u06A9\u0627\u0631\u0628\u0631 \u062A\u0623\u06CC\u06CC\u062F \u0646\u0634\u062F.", 503);
+      const updated = await admin.auth.admin.updateUserById(authUserId, { password });
+      if (updated.error) fail("\u062A\u063A\u06CC\u06CC\u0631 \u0631\u0645\u0632 \u062F\u0631 \u0633\u0631\u0648\u06CC\u0633 \u0627\u062D\u0631\u0627\u0632 \u0647\u0648\u06CC\u062A \u062A\u0623\u06CC\u06CC\u062F \u0646\u0634\u062F.", 503);
+      await insertAuthEvent({
+        auth_user_id: authUserId,
+        app_user_id: null,
+        event_type: "password_reset_by_admin",
+        succeeded: true,
+        ip_address: clientIp(req),
+        user_agent: userAgent(req)
+      });
+      res.json({ success: true, password, generated: !provided });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app2.post("/api/access/users/:authUserId/revoke-sessions", requireAuth, async (req, res, next) => {
+    try {
+      requirePermission(req, "canManageUsers");
+      recentAuth(req);
+      const authUserId = String(req.params.authUserId || "");
+      if (!/^[0-9a-fA-F-]{36}$/.test(authUserId)) fail("\u0634\u0646\u0627\u0633\u0647 \u0647\u0648\u06CC\u062A \u0646\u0627\u0645\u0639\u062A\u0628\u0631 \u0627\u0633\u062A.");
+      const admin = adminClient();
+      const invalidated = await admin.rpc("invalidate_app_sessions", {
+        p_auth_user_id: authUserId,
+        p_actor_auth_id: req.actor.authUserId,
+        p_action: "session_revoked"
+      });
+      if (invalidated.error) fail("\u0644\u063A\u0648 \u0646\u0634\u0633\u062A\u200C\u0647\u0627 \u062A\u0623\u06CC\u06CC\u062F \u0646\u0634\u062F.", 503);
+      await insertAuthEvent({
+        auth_user_id: authUserId,
+        event_type: "session_revoked",
+        succeeded: true,
+        ip_address: clientIp(req),
+        user_agent: userAgent(req)
+      });
+      res.json({ success: true });
+    } catch (e) {
+      next(e);
+    }
+  });
+}
+
 // serverApp.ts
 import express from "express";
-import { randomBytes as randomBytes2 } from "node:crypto";
+import { randomBytes as randomBytes3 } from "node:crypto";
 import dotenv from "dotenv";
 dotenv.config();
 var app = express();
@@ -1262,6 +1547,7 @@ app.use("/api/financial-data", (req, res, next) => {
   next();
 });
 installAccountRoutes(app);
+installAccessRoutes(app);
 var definitions = {
   transaction: ["transactions", "canCreateTransactions"],
   employee: ["employees", "canManageEmployees"],
@@ -1275,7 +1561,7 @@ var definitions = {
 };
 function audit(db, req, action, details = "") {
   db.syncLogs.push({
-    id: randomBytes2(16).toString("hex"),
+    id: randomBytes3(16).toString("hex"),
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     persianDate: new Intl.DateTimeFormat("fa-IR", {
       dateStyle: "short",
@@ -1380,7 +1666,7 @@ function financialView(db, actor) {
 app.get("/api/financial-data/readiness", async (req, res, next) => {
   try {
     requirePermission(req, "canBackupRestore");
-    const probe = { kind: "configuration-check", nonce: randomBytes2(16).toString("hex") };
+    const probe = { kind: "configuration-check", nonce: randomBytes3(16).toString("hex") };
     const encrypted = encryptBackup(probe);
     if (canonical(decryptBackup(encrypted)) !== canonical(probe)) fail("\u0628\u0631\u0631\u0633\u06CC \u0631\u0645\u0632\u0646\u06AF\u0627\u0631\u06CC \u0628\u06A9\u0627\u067E \u0646\u0627\u0645\u0648\u0641\u0642 \u0627\u0633\u062A.", 503);
     const db = await loadDatabase();
