@@ -266,6 +266,9 @@ export interface AppUser {
   lastLogin?: string;                // آخرین زمان ورود به سیستم
   phone?: string;                    // شماره تلفن
   notes?: string;                    // یادداشت‌ها
+  authUserId?: string | null;        // شناسه هویت Supabase Auth (فقط سمت سرور مقداردهی می‌شود)
+  profileStamp?: string;             // اثر انگشت نسخه پروفایل برای کنترل هم‌زمانی
+  sessionsValidAfter?: string;       // زمان ابطال نشست‌های قبلی
 }
 
 export type ActiveTab = 
