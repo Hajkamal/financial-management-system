@@ -1251,6 +1251,28 @@ async function insertAuthEvent(row) {
   const { data, error } = await adminClient().from("auth_events").insert(row).select("id").single();
   return error || !data ? null : data.id;
 }
+var AUTH_PAGE_SIZE = 200;
+async function listAuthUsers() {
+  const admin = adminClient();
+  const users = [];
+  for (let page = 1; page <= 10; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: AUTH_PAGE_SIZE });
+    if (error) fail("\u062F\u0631\u06CC\u0627\u0641\u062A \u0641\u0647\u0631\u0633\u062A \u0647\u0648\u06CC\u062A\u200C\u0647\u0627\u06CC \u0627\u062D\u0631\u0627\u0632 \u0647\u0648\u06CC\u062A \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
+    const batch = data?.users || [];
+    users.push(...batch);
+    if (batch.length < AUTH_PAGE_SIZE) break;
+  }
+  return users;
+}
+function authIdentity(user) {
+  return {
+    authUserId: String(user.id || ""),
+    email: String(user.email || ""),
+    emailConfirmed: Boolean(user.email_confirmed_at),
+    lastSignInAt: user.last_sign_in_at || null,
+    blocked: Boolean(user.banned_until && new Date(user.banned_until).getTime() > Date.now())
+  };
+}
 async function sendLoginFailureNotifications(req, appUserId, attemptedEmail, eventId) {
   const admin = adminClient();
   const { data: admins, error: adminsError } = await admin.from("app_users").select("auth_user_id").in("role", ["super_admin"]).eq("status", "active").eq("is_deleted", false);
@@ -1433,6 +1455,64 @@ function installAccessRoutes(app2) {
       );
       if (error) fail("\u0630\u062E\u06CC\u0631\u0647 \u0631\u0627\u0647\u0646\u0645\u0627\u06CC \u0631\u0645\u0632 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
       res.json({ success: true });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app2.get("/api/access/identities", requireAuth, async (req, res, next) => {
+    try {
+      requirePermission(req, "canManageUsers");
+      const users = await listAuthUsers();
+      res.json({ success: true, identities: users.map(authIdentity) });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app2.post("/api/access/users/:appUserId/connect-identity", requireAuth, async (req, res, next) => {
+    try {
+      requirePermission(req, "canManageUsers");
+      const appUserId = String(req.params.appUserId || "");
+      text(appUserId, "\u0634\u0646\u0627\u0633\u0647 \u06A9\u0627\u0631\u0628\u0631", 160);
+      const admin = adminClient();
+      const { data: profile, error: profileError } = await admin.from("app_users").select("id,email,full_name,auth_user_id,is_deleted").eq("id", appUserId).maybeSingle();
+      if (profileError) fail("\u062E\u0648\u0627\u0646\u062F\u0646 \u067E\u0631\u0648\u0641\u0627\u06CC\u0644 \u06A9\u0627\u0631\u0628\u0631 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
+      if (!profile) fail("\u06A9\u0627\u0631\u0628\u0631 \u062F\u0631 \u0641\u0647\u0631\u0633\u062A \u0633\u0627\u0645\u0627\u0646\u0647 \u06CC\u0627\u0641\u062A \u0646\u0634\u062F.", 404);
+      if (profile.is_deleted) fail("\u0627\u06CC\u0646 \u06A9\u0627\u0631\u0628\u0631 \u062D\u0630\u0641 \u0634\u062F\u0647 \u0627\u0633\u062A\u061B \u0627\u0628\u062A\u062F\u0627 \u0628\u0627\u0632\u06CC\u0627\u0628\u06CC \u06A9\u0646\u06CC\u062F.");
+      const email = String(profile.email || "").toLowerCase().trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail("\u0627\u06CC\u0645\u06CC\u0644 \u0627\u06CC\u0646 \u067E\u0631\u0648\u0641\u0627\u06CC\u0644 \u0645\u0639\u062A\u0628\u0631 \u0646\u06CC\u0633\u062A.");
+      let authUserId = String(profile.auth_user_id || "");
+      const alreadyLinked = Boolean(authUserId);
+      if (!alreadyLinked) recentAuth(req);
+      let createdAuthUser = false;
+      let password;
+      if (!authUserId) {
+        const identities = await listAuthUsers();
+        const match = identities.find((u) => String(u.email || "").toLowerCase().trim() === email);
+        if (match) {
+          const claimed = await admin.from("app_users").select("id").eq("auth_user_id", match.id).neq("id", appUserId).limit(1);
+          if (claimed.error) fail("\u0628\u0631\u0631\u0633\u06CC \u0627\u062A\u0635\u0627\u0644 \u0647\u0648\u06CC\u062A \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
+          if (Array.isArray(claimed.data) && claimed.data.length > 0) fail("\u0627\u06CC\u0646 \u0647\u0648\u06CC\u062A \u0627\u062D\u0631\u0627\u0632 \u0647\u0648\u06CC\u062A \u0628\u0647 \u06A9\u0627\u0631\u0628\u0631 \u062F\u06CC\u06AF\u0631\u06CC \u0645\u062A\u0635\u0644 \u0627\u0633\u062A.", 409);
+          authUserId = String(match.id);
+        } else {
+          password = generateTemporaryPassword();
+          const created = await admin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { fullName: profile.full_name || "" }
+          });
+          if (created.error || !created.data.user) fail("\u0633\u0627\u062E\u062A \u0647\u0648\u06CC\u062A \u0627\u062D\u0631\u0627\u0632 \u0647\u0648\u06CC\u062A \u062A\u0623\u06CC\u06CC\u062F \u0646\u0634\u062F\u061B \u0645\u0645\u06A9\u0646 \u0627\u0633\u062A \u0627\u06CC\u0646 \u0627\u06CC\u0645\u06CC\u0644 \u0627\u0632 \u0642\u0628\u0644 \u062F\u0631 Auth \u0645\u0648\u062C\u0648\u062F \u0628\u0627\u0634\u062F.", 409);
+          authUserId = created.data.user.id;
+          createdAuthUser = true;
+        }
+      }
+      const confirmed = await admin.auth.admin.updateUserById(authUserId, { email_confirm: true });
+      if (confirmed.error) fail("\u062A\u0623\u06CC\u06CC\u062F \u0627\u06CC\u0645\u06CC\u0644 \u062F\u0631 \u0633\u0631\u0648\u06CC\u0633 \u0627\u062D\u0631\u0627\u0632 \u0647\u0648\u06CC\u062A \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
+      if (!alreadyLinked) {
+        const linked = await admin.from("app_users").update({ auth_user_id: authUserId }).eq("id", appUserId);
+        if (linked.error) fail("\u0627\u062A\u0635\u0627\u0644 \u067E\u0631\u0648\u0641\u0627\u06CC\u0644 \u0628\u0647 \u0647\u0648\u06CC\u062A \u0627\u062D\u0631\u0627\u0632 \u0647\u0648\u06CC\u062A \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.", 503);
+      }
+      res.json({ success: true, authUserId, createdAuthUser, password });
     } catch (e) {
       next(e);
     }

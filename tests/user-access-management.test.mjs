@@ -65,3 +65,27 @@ test('failed-login endpoint never leaks whether an email exists', () => {
   assert.match(slice, /res\.json\(\{ success: true \}\)/);
   assert.doesNotMatch(slice, /fail\(/);
 });
+
+test('server connects a profile to its Auth identity and confirms the email', () => {
+  const start = serverRoutes.indexOf("'/api/access/users/:appUserId/connect-identity'");
+  assert.ok(start > -1, 'connect-identity route missing');
+  const end = serverRoutes.indexOf('// ----', start);
+  assert.ok(end > start, 'could not isolate connect-identity handler');
+  const slice = serverRoutes.slice(start, end);
+  assert.match(slice, /requirePermission\(req, 'canManageUsers'\)/);
+  assert.match(slice, /recentAuth\(req\)/);
+  assert.match(slice, /from\('app_users'\)/);
+  assert.match(slice, /await listAuthUsers\(\)/);
+  assert.match(serverRoutes, /auth\.admin\.listUsers\(\{ page, perPage: AUTH_PAGE_SIZE \}\)/);
+  assert.match(slice, /auth\.admin\.createUser\(/);
+  assert.match(slice, /updateUserById\(authUserId, \{ email_confirm: true \}\)/);
+  assert.match(slice, /update\(\{ auth_user_id: authUserId \}\)/);
+});
+
+test('identity status stays behind the server API layer', () => {
+  assert.match(serverRoutes, /'\/api\/access\/identities'/);
+  assert.match(serverRoutes, /emailConfirmed: Boolean\(user\.email_confirmed_at\)/);
+  assert.match(clientApi, /export async function listAuthIdentities/);
+  assert.match(clientApi, /export async function connectUserIdentity/);
+  assert.doesNotMatch(clientApi, /auth\.admin|SECRET_KEY|service_role/);
+});

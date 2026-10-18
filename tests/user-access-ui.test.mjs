@@ -39,3 +39,13 @@ test('UI exposes login/logout history and notification sections', () => {
   assert.match(ui, /تعیین رمز جدید/);
   assert.match(ui, /لغو نشست‌ها/);
 });
+
+test('admin UI can connect an unlinked profile and confirm an unverified email', () => {
+  assert.match(ui, /بدون هویت احراز هویت/);
+  assert.match(ui, /ایمیل تأیید نشده است/);
+  assert.match(ui, /اتصال هویت احراز هویت/);
+  assert.match(ui, /ساخت هویت احراز هویت/);
+  assert.match(ui, /تایید ایمیل/);
+  assert.match(ui, /connectUserIdentity\(user\.id\)/);
+  assert.doesNotMatch(ui, /supabase/);
+});

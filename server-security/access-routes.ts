@@ -53,6 +53,32 @@ async function insertAuthEvent(row: Record<string, unknown>): Promise<string | n
   return error || !data ? null : (data.id as string);
 }
 
+const AUTH_PAGE_SIZE = 200;
+
+/** فهرست هویت‌های احراز هویت (Auth) — فقط روی سرور و با کلید سرویس خوانده می‌شود. */
+async function listAuthUsers(): Promise<any[]> {
+  const admin = adminClient();
+  const users: any[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: AUTH_PAGE_SIZE });
+    if (error) fail('دریافت فهرست هویت‌های احراز هویت ناموفق بود.', 503);
+    const batch = data?.users || [];
+    users.push(...batch);
+    if (batch.length < AUTH_PAGE_SIZE) break;
+  }
+  return users;
+}
+
+function authIdentity(user: any) {
+  return {
+    authUserId: String(user.id || ''),
+    email: String(user.email || ''),
+    emailConfirmed: Boolean(user.email_confirmed_at),
+    lastSignInAt: (user.last_sign_in_at as string) || null,
+    blocked: Boolean(user.banned_until && new Date(user.banned_until).getTime() > Date.now()),
+  };
+}
+
 async function sendLoginFailureNotifications(
   req: Request,
   appUserId: string | null,
@@ -297,6 +323,83 @@ export function installAccessRoutes(app: Express) {
         );
       if (error) fail('ذخیره راهنمای رمز ناموفق بود.', 503);
       res.json({ success: true });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ---- وضعیت هویت احراز هویت کاربران (تأیید ایمیل و اتصال به پروفایل) ----
+  app.get('/api/access/identities', requireAuth, async (req, res, next) => {
+    try {
+      requirePermission(req, 'canManageUsers');
+      const users = await listAuthUsers();
+      res.json({ success: true, identities: users.map(authIdentity) });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ---- اتصال پروفایل سامانه به هویت احراز هویت (بر اساس ایمیل) و تأیید ایمیل ----
+  // اگر هویت Auth با ایمیل پروفایل وجود داشته باشد همان وصل می‌شود، وگرنه هویت تازه ساخته می‌شود
+  // و رمز تصادفی یک‌باره برگردانده می‌شود. بدون تأیید ایمیل، ورود با پیام «ایمیل تایید نشده» رد می‌شود.
+  app.post('/api/access/users/:appUserId/connect-identity', requireAuth, async (req, res, next) => {
+    try {
+      requirePermission(req, 'canManageUsers');
+      const appUserId = String(req.params.appUserId || '');
+      text(appUserId, 'شناسه کاربر', 160);
+      const admin = adminClient();
+      const { data: profile, error: profileError } = await admin
+        .from('app_users')
+        .select('id,email,full_name,auth_user_id,is_deleted')
+        .eq('id', appUserId)
+        .maybeSingle();
+      if (profileError) fail('خواندن پروفایل کاربر ناموفق بود.', 503);
+      if (!profile) fail('کاربر در فهرست سامانه یافت نشد.', 404);
+      if ((profile as any).is_deleted) fail('این کاربر حذف شده است؛ ابتدا بازیابی کنید.');
+      const email = String((profile as any).email || '').toLowerCase().trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('ایمیل این پروفایل معتبر نیست.');
+
+      let authUserId = String((profile as any).auth_user_id || '');
+      const alreadyLinked = Boolean(authUserId);
+      // اتصال یک هویت احراز هویت به پروفایل، عملیات حساس است؛ تأیید ایمیلِ کاربرِ متصل خیر.
+      if (!alreadyLinked) recentAuth(req);
+      let createdAuthUser = false;
+      let password: string | undefined;
+
+      if (!authUserId) {
+        const identities = await listAuthUsers();
+        const match = identities.find((u) => String(u.email || '').toLowerCase().trim() === email);
+        if (match) {
+          const claimed = await admin
+            .from('app_users')
+            .select('id')
+            .eq('auth_user_id', match.id)
+            .neq('id', appUserId)
+            .limit(1);
+          if (claimed.error) fail('بررسی اتصال هویت ناموفق بود.', 503);
+          if (Array.isArray(claimed.data) && claimed.data.length > 0) fail('این هویت احراز هویت به کاربر دیگری متصل است.', 409);
+          authUserId = String(match.id);
+        } else {
+          password = generateTemporaryPassword();
+          const created = await admin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { fullName: (profile as any).full_name || '' },
+          });
+          if (created.error || !created.data.user) fail('ساخت هویت احراز هویت تأیید نشد؛ ممکن است این ایمیل از قبل در Auth موجود باشد.', 409);
+          authUserId = created.data.user.id;
+          createdAuthUser = true;
+        }
+      }
+
+      const confirmed = await admin.auth.admin.updateUserById(authUserId, { email_confirm: true });
+      if (confirmed.error) fail('تأیید ایمیل در سرویس احراز هویت ناموفق بود.', 503);
+      if (!alreadyLinked) {
+        const linked = await admin.from('app_users').update({ auth_user_id: authUserId }).eq('id', appUserId);
+        if (linked.error) fail('اتصال پروفایل به هویت احراز هویت ناموفق بود.', 503);
+      }
+      res.json({ success: true, authUserId, createdAuthUser, password });
     } catch (e) {
       next(e);
     }
