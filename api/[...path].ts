@@ -11,6 +11,11 @@ function adminClient() {
 // server-security/ai-handler.ts
 import { createClient as createClient2 } from "@supabase/supabase-js";
 import { GoogleGenAI } from "@google/genai";
+
+// src/utils/aiModel.ts
+var DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+
+// server-security/ai-handler.ts
 var dependencies = {
   env: process.env,
   createSupabase: createClient2,
@@ -67,8 +72,9 @@ function createAiHandler(deps = dependencies) {
         res.setHeader("Retry-After", "60");
         return res.status(429).json({ error: "\u0633\u0647\u0645\u06CC\u0647 \u062F\u0631\u062E\u0648\u0627\u0633\u062A \u062A\u06A9\u0645\u06CC\u0644 \u0634\u062F\u0647 \u0627\u0633\u062A\u061B \u0628\u0639\u062F\u0627\u064B \u062A\u0644\u0627\u0634 \u06A9\u0646\u06CC\u062F." });
       }
-      const text2 = await deps.generate(key, deps.env.GEMINI_MODEL || "gemini-2.5-flash", body.prompt.trim(), body.systemContext || "", body.history || []);
-      return res.status(200).json({ text: text2 });
+      const model = deps.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+      const text2 = await deps.generate(key, model, body.prompt.trim(), body.systemContext || "", body.history || []);
+      return res.status(200).json({ text: text2, model });
     } catch {
       return res.status(503).json({ error: "\u0633\u0631\u0648\u06CC\u0633 \u0647\u0648\u0634 \u0645\u0635\u0646\u0648\u0639\u06CC \u0645\u0648\u0642\u062A\u0627\u064B \u062F\u0631 \u062F\u0633\u062A\u0631\u0633 \u0646\u06CC\u0633\u062A." });
     }

@@ -25,7 +25,8 @@ import {
   Building2,
   PieChart,
   BarChart3,
-  Landmark
+  Landmark,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   FinancialTransaction, 
@@ -52,6 +53,7 @@ import {
   BASINA_SUBCATEGORY_CONFIG
 } from '../utils/formatters';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { DEFAULT_GEMINI_MODEL } from '../utils/aiModel';
 
 interface AiAssistantViewProps {
   transactions: FinancialTransaction[];
@@ -76,6 +78,10 @@ interface ChatMessage {
   text: string;
   timestamp: string;
   isQuickReport?: boolean;
+  /** Where the answer came from. Absent for user messages and the welcome message. */
+  source?: 'gemini' | 'local';
+  /** Shown above a locally generated (fallback) answer to explain why Gemini was not reached. */
+  notice?: string;
 }
 
 const getPresetPrompts = (selectedYear: number) => [
@@ -155,6 +161,8 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
   const [inputPrompt, setInputPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // Kept in sync with the model the server reports; falls back to the shared default.
+  const [modelLabel, setModelLabel] = useState(DEFAULT_GEMINI_MODEL);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom of messages
@@ -599,6 +607,22 @@ ${OPERATING_RESULT_NOTE}
 نتیجه عملیاتی ثبت‌ها ${netProfit>=0?'مثبت':'منفی'} است؛ این عدد به‌تنهایی رشد، موجودی نقد یا سود خالص استاندارد را اثبات نمی‌کند.`;
   };
 
+  // Local analytics engine answer, always labelled for what it is: a fallback, not the AI model.
+  const appendLocalAnalysis = (query: string, reason: string) => {
+    console.warn('AI analysis fallback activated:', reason);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `ai-${Date.now()}`,
+        sender: 'assistant',
+        text: generateDynamicFinancialAnalysis(query),
+        timestamp: 'هم‌اکنون',
+        source: 'local',
+        notice: `پاسخ Gemini دریافت نشد (${reason})؛ این گزارش با موتور تحلیل محلی و فقط بر پایه داده‌های خودتان ساخته شد.`,
+      },
+    ]);
+  };
+
   const handleSendMessage = async (customPrompt?: string) => {
     const textToSend = (customPrompt || inputPrompt).trim();
     if (!textToSend || isLoading) return;
@@ -623,7 +647,11 @@ ${OPERATING_RESULT_NOTE}
 
       // Call server proxy route with chat history
       const { data: authData } = await supabase!.auth.getSession();
-      if (!authData.session) throw new Error('نشست معتبر لازم است.');
+      if (!authData.session) {
+        clearTimeout(timeoutId);
+        appendLocalAnalysis(textToSend, 'نشست معتبر لازم است.');
+        return;
+      }
       const response = await fetch('/api/gemini/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authData.session.access_token },
@@ -641,8 +669,9 @@ ${OPERATING_RESULT_NOTE}
       clearTimeout(timeoutId);
 
       if (response.ok) {
-        const data = await response.json();
-        if (data.text) {
+        const data = await response.json().catch(() => null);
+        if (data?.text) {
+          if (typeof data.model === 'string' && data.model) setModelLabel(data.model);
           setMessages((prev) => [
             ...prev,
             {
@@ -650,37 +679,25 @@ ${OPERATING_RESULT_NOTE}
               sender: 'assistant',
               text: data.text,
               timestamp: 'هم‌اکنون',
+              source: 'gemini',
             },
           ]);
-          setIsLoading(false);
           return;
         }
+        appendLocalAnalysis(textToSend, 'پاسخ خالی از سرویس هوش مصنوعی');
+        return;
       }
 
-      // If backend returns an error or status 503/500, use robust dynamic analytics engine
-      const dynamicReport = generateDynamicFinancialAnalysis(textToSend);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          sender: 'assistant',
-          text: dynamicReport,
-          timestamp: 'هم‌اکنون',
-        },
-      ]);
+      // Backend refused or failed (503/429/401/...): keep a usable answer but make the reason visible.
+      const errorBody = await response.json().catch(() => null);
+      const serverError = typeof errorBody?.error === 'string' && errorBody.error ? errorBody.error : `کد پاسخ ${response.status}`;
+      appendLocalAnalysis(textToSend, serverError);
     } catch (err: any) {
       clearTimeout(timeoutId);
-      console.warn('AI analysis fallback activated:', err?.name === 'AbortError' ? 'Timeout' : err?.message || err);
-      const dynamicReport = generateDynamicFinancialAnalysis(textToSend);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          sender: 'assistant',
-          text: dynamicReport,
-          timestamp: 'هم‌اکنون',
-        },
-      ]);
+      appendLocalAnalysis(
+        textToSend,
+        err?.name === 'AbortError' ? 'مهلت ۱۵ ثانیه‌ای پاسخ به پایان رسید' : err?.message || 'خطای ارتباط با سرور',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -710,7 +727,7 @@ ${OPERATING_RESULT_NOTE}
                 دستیار هوشمند مالی و تحلیل‌گر ارشد شرکت
               </h1>
               <span className="text-[10px] bg-indigo-500/30 text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-400/20 font-bold">
-                مدل Gemini 3.8 Flash
+                مدل {modelLabel}
               </span>
             </div>
             <p className="text-xs text-indigo-200 mt-0.5">
@@ -807,6 +824,14 @@ ${OPERATING_RESULT_NOTE}
                     </button>
                   )}
 
+                  {/* Local fallback notice: the user must be able to tell which engine answered */}
+                  {msg.source === 'local' && msg.notice && (
+                    <div className="mb-2.5 flex items-start gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-2.5 py-2">
+                      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      <span>{msg.notice}</span>
+                    </div>
+                  )}
+
                   {/* Message Content rendered with rich markdown (bold, lists, headings) */}
                   <MarkdownRenderer content={msg.text} isUser={isUser} />
 
@@ -817,6 +842,18 @@ ${OPERATING_RESULT_NOTE}
                         : 'text-slate-400 border-slate-200 text-right'
                     }`}
                   >
+                    {msg.source && (
+                      <span
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-bold me-2 align-middle ${
+                          msg.source === 'local'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        }`}
+                      >
+                        {msg.source === 'local' ? <AlertTriangle className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
+                        {msg.source === 'local' ? 'تحلیل محلی' : `Gemini (${modelLabel})`}
+                      </span>
+                    )}
                     {msg.timestamp}
                   </span>
                 </div>
@@ -874,7 +911,7 @@ ${OPERATING_RESULT_NOTE}
           </form>
           <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 px-1">
             <span>تحلیل دقیق بر مبنای اسناد سال مالی ۱۴۰۵ آینده نگاران خلاق</span>
-            <span>طراحی شده با مدل هوش مصنوعی Gemini</span>
+            <span>اگر ارتباط با Gemini برقرار نشود، تحلیل محلی روی داده‌های خودتان انجام می‌شود</span>
           </div>
         </div>
       </div>
