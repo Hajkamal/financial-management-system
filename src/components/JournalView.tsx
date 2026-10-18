@@ -108,18 +108,6 @@ export const JournalView: React.FC<JournalViewProps> = ({
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-5 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <BookOpen className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-slate-800">دفتر روزنامه (Journal)</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  سال {toPersianDigits(selectedYear)} — {toPersianDigits(stats.count)} سند حسابداری
-                </p>
-              </div>
-            </div>
-
             {/* وضعیت تراز */}
             <div className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border ${
               stats.isBalanced

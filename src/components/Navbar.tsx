@@ -23,7 +23,9 @@ import {
   FileCheck2,
   BookOpen,
   BookOpenCheck,
-  SlidersHorizontal
+  SlidersHorizontal,
+  MoreHorizontal,
+  ChevronDown
 } from 'lucide-react';
 import { ActiveTab, CurrencyMode, FiscalYear, AppUser } from '../types';
 import { CompanyLogo } from './CompanyLogo';
@@ -351,46 +353,52 @@ export const Sidebar: React.FC<NavigationProps> = ({
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
         </div>
 
-        {/* User Account & Logout in Sidebar */}
-        {onLogout && (
-          <div className="pt-2 border-t border-slate-800/80 space-y-2">
-            {currentUser ? (
-              <div className="px-2.5 py-2 bg-slate-800/70 rounded-lg border border-slate-700/50 flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-blue-600/30 border border-blue-400/40 text-blue-300 font-bold flex items-center justify-center text-xs shrink-0">
-                  {currentUser.fullName.slice(0, 1)}
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-xs font-bold text-slate-200 truncate">{currentUser.fullName}</span>
-                  <span className="text-[10px] text-emerald-400 font-medium">{currentUser.roleTitle}</span>
-                </div>
+        {/* کاربر جاری — در دسکتاپ اقدام‌های حساب فقط در منوی کاربرِ هدر است (بدون تکرار) */}
+        {currentUser ? (
+          <div className="pt-2 border-t border-slate-800/80">
+            <div className="px-2.5 py-2 bg-slate-800/70 rounded-lg border border-slate-700/50 flex items-center gap-2" title={`${currentUser.fullName} — ${currentUser.roleTitle}`}>
+              <div className="w-7 h-7 rounded-full bg-blue-600/30 border border-blue-400/40 text-blue-300 font-bold flex items-center justify-center text-xs shrink-0">
+                {currentUser.fullName.slice(0, 1)}
               </div>
-            ) : userEmail ? (
-              <div className="px-2 py-1 text-[11px] text-slate-400 truncate flex items-center gap-1.5 font-mono mb-1.5" title={userEmail}>
-                <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                <span className="truncate" dir="ltr">{userEmail}</span>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-bold text-slate-200 truncate">{currentUser.fullName}</span>
+                <span className="text-[10px] text-emerald-400 font-medium">{currentUser.roleTitle}</span>
               </div>
-            ) : null}
-            {onOpenChangePassword && (
-              <button
-                type="button"
-                id="sidebar-change-password-btn"
-                onClick={onOpenChangePassword}
-                className="w-full p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-              >
-                <Lock className="w-3.5 h-3.5 text-amber-400" />
-                <span>تغییر کلمه عبور</span>
-              </button>
+            </div>
+
+            {/* در موبایل که منوی کاربرِ هدر پایین‌تر است، این دو دکمه برای دسترسی سریع می‌مانند */}
+            {onLogout && (
+              <div className="space-y-2 mt-2 md:hidden">
+                {onOpenChangePassword && (
+                  <button
+                    type="button"
+                    id="sidebar-change-password-btn"
+                    onClick={onOpenChangePassword}
+                    className="w-full p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>تغییر کلمه عبور</span>
+                  </button>
+                )}
+                <button
+                  id="sidebar-logout-btn"
+                  onClick={onLogout}
+                  className="w-full p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>خروج از حساب کاربری</span>
+                </button>
+              </div>
             )}
-            <button
-              id="sidebar-logout-btn"
-              onClick={onLogout}
-              className="w-full p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>خروج از حساب کاربری</span>
-            </button>
           </div>
-        )}
+        ) : userEmail ? (
+          <div className="pt-2 border-t border-slate-800/80">
+            <div className="px-2 py-1 text-[11px] text-slate-400 truncate flex items-center gap-1.5 font-mono" title={userEmail}>
+              <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span className="truncate" dir="ltr">{userEmail}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -556,8 +564,31 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const currentFiscalYear = fiscalYears?.find(y => y.year === selectedYear);
   const isYearClosed = currentFiscalYear?.isClosed || false;
 
+  // منوهای هدر: «ابزارها» و «کاربر» — با بستن روی کلیک بیرون و کلید Esc
+  const [openMenu, setOpenMenu] = useState<null | 'tools' | 'user'>(null);
+  const actionsRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (actionsRef.current && !actionsRef.current.contains(event.target as Node)) setOpenMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenMenu(null);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openMenu]);
+
+  const closeMenu = () => setOpenMenu(null);
+  const menuItemClass = 'w-full text-right px-3 py-2 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-2 transition-colors cursor-pointer';
+
   return (
-    <header className="min-h-14 sm:min-h-20 bg-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between px-3.5 sm:px-6 lg:px-8 py-2.5 sm:py-4 gap-2.5 sm:gap-4" id="app-header">
+    <header className="md:sticky md:top-0 z-30 min-h-14 sm:min-h-16 bg-white/95 backdrop-blur border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between px-3.5 sm:px-6 lg:px-8 py-2.5 sm:py-3 gap-2.5 sm:gap-4" id="app-header">
       {/* Title & Period */}
       <div className="flex flex-col min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
@@ -579,58 +610,14 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
-        {/* Menu Reorder Button */}
-        <button
-          id="menu-reorder-header-btn"
-          onClick={() => {
-            if (onOpenMenuReorder) {
-              onOpenMenuReorder();
-            } else {
-              window.dispatchEvent(new Event('ayandeh_open_menu_reorder'));
-            }
-          }}
-          className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 border border-indigo-200 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 rounded-lg font-bold text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 active:scale-95"
-          title="شخصی‌سازی و تغییر ترتیب دلخواه منوها"
-        >
-          <SlidersHorizontal className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
-          <span className="hidden sm:inline">ترتیب منوها</span>
-          <span className="sm:hidden">ترتیب</span>
-        </button>
-
-        {/* Excel Export Button */}
-        {(currentUser?.permissions.canExportExcel ?? true) && (
-          <button
-            id="excel-export-btn"
-            onClick={onExportExcel}
-            className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-emerald-600 text-white rounded-lg font-bold text-xs sm:text-sm hover:bg-emerald-700 shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 active:scale-95"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">خروجی اکسل (XLSX)</span>
-            <span className="sm:hidden">اکسل</span>
-          </button>
-        )}
-
-        {/* System Settings / Backup */}
-        {(currentUser?.permissions.canBackupRestore ?? true) && (
-          <button
-            id="backup-btn"
-            onClick={onOpenBackupModal}
-            className="px-2.5 sm:px-4 py-1.5 sm:py-2 border border-slate-300 text-slate-700 rounded-lg font-bold text-xs sm:text-sm hover:bg-slate-50 shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 active:scale-95"
-          >
-            <DatabaseBackup className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" />
-            <span className="hidden sm:inline">تنظیمات سیستم</span>
-            <span className="sm:hidden">تنظیمات</span>
-          </button>
-        )}
-
-        {/* New Transaction */}
+      {/* Action Buttons — یک اقدام اصلی + منوی ابزارها + منوی کاربر */}
+      <div ref={actionsRef} className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-end flex-wrap shrink-0">
+        {/* New Transaction (اقدام اصلی) */}
         {(currentUser?.permissions.canCreateTransactions ?? true) && (
           <button
             id="add-transaction-header-btn"
             onClick={onOpenNewTransaction}
-            className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg font-bold text-xs sm:text-sm hover:bg-blue-700 shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 active:scale-95"
+            className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg font-bold text-xs sm:text-sm hover:bg-blue-700 shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 active:scale-95"
           >
             <PlusCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">+ ثبت تراکنش</span>
@@ -638,48 +625,157 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </button>
         )}
 
-        {/* Supabase User & Logout */}
-        {onLogout && (
-          <div className="flex items-center gap-1.5 border-r border-slate-200 pr-1.5 sm:pr-2.5 mr-0.5 sm:mr-1 shrink-0">
-            {currentUser ? (
-              <div 
-                className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200/80 rounded-lg text-slate-700 text-xs font-medium"
-                title={`کاربر: ${currentUser.fullName} (${currentUser.email}) - ${currentUser.roleTitle}`}
-              >
-                <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
-                <span className="font-bold text-slate-800">{currentUser.fullName}</span>
-                <span className="text-[11px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">{currentUser.roleTitle}</span>
-              </div>
-            ) : userEmail ? (
-              <div 
-                className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 border border-slate-200/80 rounded-lg text-slate-700 text-xs font-mono font-medium max-w-[210px] truncate"
-                title={`کاربر وارد شده: ${userEmail}`}
-              >
-                <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
-                <span className="truncate" dir="ltr">{userEmail}</span>
-              </div>
-            ) : null}
-            {onOpenChangePassword && (
+        {/* ابزارها: خروجی اکسل سامانه، ترتیب منوها، تنظیمات سیستم */}
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            id="header-tools-btn"
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'tools'}
+            onClick={() => setOpenMenu(openMenu === 'tools' ? null : 'tools')}
+            className={`px-2.5 sm:px-3 py-1.5 sm:py-2 border rounded-lg font-bold text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer active:scale-95 ${
+              openMenu === 'tools'
+                ? 'border-blue-300 bg-blue-50 text-blue-700'
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+            title="ابزارها و تنظیمات سامانه"
+          >
+            <MoreHorizontal className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" />
+            <span className="hidden sm:inline">ابزارها</span>
+          </button>
+
+          {openMenu === 'tools' && (
+            <div
+              role="menu"
+              className="absolute left-0 top-full mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-50 space-y-0.5"
+            >
+              {(currentUser?.permissions.canExportExcel ?? true) && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  id="excel-export-btn"
+                  onClick={() => {
+                    closeMenu();
+                    onExportExcel();
+                  }}
+                  className={menuItemClass}
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>خروجی اکسل سامانه (انتخاب بخش‌ها)</span>
+                </button>
+              )}
               <button
                 type="button"
-                id="header-change-password-btn"
-                onClick={onOpenChangePassword}
-                className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                title="تغییر کلمه عبور اختصاصی"
+                role="menuitem"
+                id="menu-reorder-header-btn"
+                onClick={() => {
+                  closeMenu();
+                  if (onOpenMenuReorder) {
+                    onOpenMenuReorder();
+                  } else {
+                    window.dispatchEvent(new Event('ayandeh_open_menu_reorder'));
+                  }
+                }}
+                className={menuItemClass}
               >
-                <Lock className="w-3.5 h-3.5 text-amber-600" />
-                <span className="hidden md:inline">تغییر رمز</span>
+                <SlidersHorizontal className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>ترتیب و چینش منوها</span>
               </button>
-            )}
+              {(currentUser?.permissions.canBackupRestore ?? true) && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  id="backup-btn"
+                  onClick={() => {
+                    closeMenu();
+                    onOpenBackupModal();
+                  }}
+                  className={menuItemClass}
+                >
+                  <DatabaseBackup className="w-4 h-4 text-slate-500 shrink-0" />
+                  <span>تنظیمات سیستم و پشتیبان‌گیری</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* منوی کاربر: هویت + تغییر کلمه عبور + خروج */}
+        {onLogout && (
+          <div className="relative shrink-0">
             <button
-              id="header-logout-btn"
-              onClick={onLogout}
-              className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs sm:text-sm flex items-center gap-1 transition-colors shadow-xs cursor-pointer shrink-0"
-              title="خروج امن از سامانه (Supabase Logout)"
+              type="button"
+              id="header-user-btn"
+              aria-haspopup="menu"
+              aria-expanded={openMenu === 'user'}
+              onClick={() => setOpenMenu(openMenu === 'user' ? null : 'user')}
+              className={`px-1.5 sm:px-2 py-1 sm:py-1.5 border rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+                openMenu === 'user'
+                  ? 'border-blue-300 bg-blue-50'
+                  : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+              }`}
+              title={currentUser ? `${currentUser.fullName} — ${currentUser.roleTitle}` : userEmail || 'حساب کاربری'}
             >
-              <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">خروج</span>
+              <span className="w-6 h-6 rounded-full bg-blue-600/10 border border-blue-300/60 text-blue-700 font-black text-[11px] flex items-center justify-center shrink-0">
+                {(currentUser?.fullName || userEmail || '?').slice(0, 1)}
+              </span>
+              <span className="hidden lg:flex flex-col items-start leading-tight max-w-[130px]">
+                <span className="text-[11px] font-bold text-slate-700 truncate w-full text-right">
+                  {currentUser?.fullName || userEmail}
+                </span>
+                {currentUser?.roleTitle && (
+                  <span className="text-[10px] text-slate-400 truncate w-full text-right">{currentUser.roleTitle}</span>
+                )}
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${openMenu === 'user' ? 'rotate-180 text-blue-600' : 'text-slate-400'}`} />
             </button>
+
+            {openMenu === 'user' && (
+              <div
+                role="menu"
+                className="absolute left-0 top-full mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-50"
+              >
+                <div className="px-3 py-2 mb-1 border-b border-slate-100">
+                  <div className="text-xs font-bold text-slate-800 truncate">{currentUser?.fullName || 'کاربر سامانه'}</div>
+                  <div className="text-[10px] text-slate-400 truncate" dir="ltr">{currentUser?.email || userEmail}</div>
+                  {currentUser?.roleTitle && (
+                    <span className="inline-block mt-1.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-bold border border-blue-200/60">
+                      {currentUser.roleTitle}
+                    </span>
+                  )}
+                </div>
+
+                {onOpenChangePassword && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    id="header-change-password-btn"
+                    onClick={() => {
+                      closeMenu();
+                      onOpenChangePassword();
+                    }}
+                    className={menuItemClass}
+                  >
+                    <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>تغییر کلمه عبور</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  id="header-logout-btn"
+                  onClick={() => {
+                    closeMenu();
+                    onLogout();
+                  }}
+                  className="w-full text-right px-3 py-2 rounded-lg text-xs font-bold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4 shrink-0" />
+                  <span>خروج از حساب کاربری</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

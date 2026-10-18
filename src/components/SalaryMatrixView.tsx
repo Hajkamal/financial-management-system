@@ -536,22 +536,6 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
         <>
           {/* Top Header Card */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-slate-900 text-white rounded-lg">
-                  <Table2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900">
-                    ماتریس سالانه حقوق و مزایای کارمندان (سال {selectedYear})
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    اتصال مستقیم به اسناد مالی، تفکیک ماه پرداخت از ماه کارکرد، جلوگیری از سند تکراری و شفافیت کامل مبالغ
-                  </p>
-                </div>
-              </div>
-            </div>
-
             <div className="flex flex-wrap items-center gap-2.5">
               <div className="bg-emerald-50 border border-emerald-200/80 px-4 py-2 rounded-xl text-xs">
                 <span className="text-emerald-700 block font-medium">جمع کل حقوق‌های سال {selectedYear}:</span>

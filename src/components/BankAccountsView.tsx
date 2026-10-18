@@ -339,26 +339,13 @@ export const BankAccountsView: React.FC<BankAccountsViewProps> = ({
     <div className="flex flex-col gap-6">
       {/* Header and Quick Stats */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
-              <Landmark className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-black text-slate-900 flex items-center gap-2 flex-wrap">
-                <span>حساب‌های بانکی و کارت‌های تنخواه شرکت</span>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
-                  {toPersianDigits(stats.bankCount)} حساب اصلی
-                </span>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
-                  {toPersianDigits(stats.pettyCashCount)} کارت تنخواه
-                </span>
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                مدیریت موجودی اول دوره، گردش جاری و پایان دوره حساب‌ها و کارت‌های تنخواه گردان پرسنل
-              </p>
-            </div>
-          </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
+            {toPersianDigits(stats.bankCount)} حساب اصلی
+          </span>
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+            {toPersianDigits(stats.pettyCashCount)} کارت تنخواه
+          </span>
         </div>
 
         <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap">

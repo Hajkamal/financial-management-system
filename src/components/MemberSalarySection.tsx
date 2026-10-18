@@ -10,7 +10,6 @@ import {
   Trash2, 
   CheckCircle2, 
   UserCheck, 
-  Building2, 
   ArrowUpRight,
   TrendingUp,
   Table2,
@@ -537,23 +536,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
     <div className="space-y-6">
 
       {/* TOP HEADER & CONTROLS */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-xs">
-              <Building2 className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">
-                حقوق، کارکرد و برداشت اعضا و سهامداران (سال {selectedYear})
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                اتصال مستقیم به اسناد مالی پرداخت، تفکیک حقوق کارکرد از برداشت‌های سود، و ویرایش بلادرنگ ماتریس
-              </p>
-            </div>
-          </div>
-        </div>
-
+      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-end gap-4">
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Sub-view Mode Switcher: Matrix vs Ledger */}
           <div className="flex items-center p-1 bg-slate-100 rounded-xl text-xs font-semibold text-slate-600">

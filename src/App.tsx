@@ -331,7 +331,7 @@ export default function App() {
       <button type="button" onClick={retrySessionValidation} className="underline font-bold mx-3">تلاش مجدد بررسی نشست</button>
       <button type="button" onClick={handleLogout} className="underline">خروج از این دستگاه</button>
     </div>}
-    <div inert={Boolean(sessionCheckError)} className="min-h-screen bg-slate-50 text-slate-900 flex flex-col md:flex-row overflow-x-hidden selection:bg-blue-100 selection:text-blue-900 font-sans" dir="rtl" id="main-app">
+    <div inert={Boolean(sessionCheckError)} className="min-h-screen bg-slate-50 text-slate-900 flex flex-col md:flex-row overflow-x-clip selection:bg-blue-100 selection:text-blue-900 font-sans" dir="rtl" id="main-app">
       
       {/* منوی کناری (Sidebar) */}
       <Sidebar
@@ -361,9 +361,7 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
 
         
-        <div className="bg-amber-100 text-amber-900 px-4 py-3 text-sm" role="status">
-          داده‌های مالی روی سرور ذخیره می‌شوند؛ پشتیبان مستقل را خارج از سامانه نگه دارید.
-        </div>
+        {/* یادآوری پشتیبان‌گیری به نوار همگام‌سازی منتقل شد تا بالای صفحه فقط یک نوار وضعیت باشد */}
 
         {/* نوار بنر تست هویت کاربر آزمایشی (Impersonation) */}
         {impersonatedUser && (
@@ -409,15 +407,18 @@ export default function App() {
           </div>
         )}
 
-        {/* نوار وضعیت و ابزار همگام‌سازی بین لپ‌تاپ و گوشی */}
+        {/* نوار وضعیت و ابزار همگام‌سازی (تنها نوار بالای صفحه) */}
         <div className="bg-slate-900 border-b border-slate-800 text-white px-3 sm:px-4 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 z-20">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isCloudConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`}></span>
             <span className="font-bold text-slate-200 text-xs">
               {isCloudConnected ? 'همگام‌سازی متمرکز فعال است' : 'ارتباط با سرور متمرکز قطع است'}
             </span>
             <span className="text-[11px] text-slate-400 hidden lg:inline">
               {isCloudConnected ? '(تغییرات شما به صورت خودکار با دیتابیس همگام می‌شود)' : '(امکان بارگذاری اطلاعات از API وجود ندارد)'}
+            </span>
+            <span className="text-[11px] text-amber-300/80 hidden 2xl:inline">
+              • داده‌های مالی روی سرور ذخیره می‌شوند؛ پشتیبان مستقل را خارج از سامانه نگه دارید.
             </span>
           </div>
 
