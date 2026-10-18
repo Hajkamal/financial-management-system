@@ -16,6 +16,8 @@ import {
   Loader2,
   Eye,
   EyeOff,
+  MailCheck,
+  UserPlus,
   History,
   X,
 } from 'lucide-react';
@@ -29,8 +31,11 @@ import {
   resetUserPassword,
   revokeUserSessions,
   savePasswordHint,
+  listAuthIdentities,
+  connectUserIdentity,
   type AdminNotification,
   type AuthEvent,
+  type AuthIdentity,
 } from '../lib/userAccessApi';
 
 interface UserAccessManagementProps {
@@ -73,7 +78,14 @@ export const UserAccessManagement: React.FC<UserAccessManagementProps> = ({
   const [hintDrafts, setHintDrafts] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [temporaryPassword, setTemporaryPassword] = useState<{ user: AppUser; password: string; generated: boolean } | null>(null);
+  const [temporaryPassword, setTemporaryPassword] = useState<{
+    user: AppUser;
+    password: string;
+    generated: boolean;
+    title?: string;
+    note?: string;
+  } | null>(null);
+  const [identities, setIdentities] = useState<Record<string, AuthIdentity>>({});
   const [resetTarget, setResetTarget] = useState<AppUser | null>(null);
   const [resetCustom, setResetCustom] = useState(false);
   const [resetValue, setResetValue] = useState('');
@@ -88,20 +100,34 @@ export const UserAccessManagement: React.FC<UserAccessManagementProps> = ({
     [users],
   );
 
+  const identityByEmail = useMemo(() => {
+    const map: Record<string, AuthIdentity> = {};
+    for (const item of Object.values(identities)) {
+      const mail = (item.email || '').toLowerCase().trim();
+      if (mail) map[mail] = item;
+    }
+    return map;
+  }, [identities]);
+
+  const identityFor = (user: AppUser): AuthIdentity | undefined =>
+    user.authUserId ? identities[user.authUserId] : identityByEmail[(user.email || '').toLowerCase().trim()];
+
   const refresh = useCallback(async () => {
     if (!canManage) return;
     setIsLoading(true);
     setError(null);
     try {
-      const [nextNotifications, nextEvents, nextHints] = await Promise.all([
+      const [nextNotifications, nextEvents, nextHints, nextIdentities] = await Promise.all([
         listAdminNotifications(),
         listAuthEvents(),
         listPasswordHints(),
+        listAuthIdentities(),
       ]);
       setNotifications(nextNotifications.notifications);
       setUnreadCount(nextNotifications.unreadCount);
       setEvents(nextEvents);
       setHints(nextHints);
+      setIdentities(Object.fromEntries(nextIdentities.map((item) => [item.authUserId, item])));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'دریافت اطلاعات ناموفق بود.');
     } finally {
@@ -181,6 +207,29 @@ export const UserAccessManagement: React.FC<UserAccessManagementProps> = ({
       onShowToast?.(warning || 'نشست‌های کاربر لغو شد.');
     } catch (err) {
       onShowToast?.(err instanceof Error ? err.message : 'لغو نشست ناموفق بود.');
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
+  const handleConnectIdentity = async (user: AppUser) => {
+    setBusyUserId(user.id);
+    try {
+      const result = await connectUserIdentity(user.id);
+      if (result.password) {
+        setTemporaryPassword({
+          user,
+          password: result.password,
+          generated: true,
+          title: 'هویت احراز هویت ساخته شد',
+          note: 'برای این کاربر هویت احراز هویت ساخته شد، ایمیلش تأیید و پروفایل به آن متصل شد. این رمز فقط همین یک‌بار نمایش داده می‌شود؛ آن را به کاربر تحویل دهید تا پس از ورود تغییرش دهد.',
+        });
+      } else {
+        onShowToast?.('ایمیل کاربر تأیید و هویت احراز هویت به پروفایل متصل شد.');
+      }
+      await refresh();
+    } catch (err) {
+      onShowToast?.(err instanceof Error ? err.message : 'اتصال هویت احراز هویت ناموفق بود.');
     } finally {
       setBusyUserId(null);
     }
@@ -401,6 +450,9 @@ export const UserAccessManagement: React.FC<UserAccessManagementProps> = ({
           <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-[11px] leading-relaxed">
             رمزهای عبور در سرویس احراز هویت به‌صورت هش‌شده ذخیره می‌شوند و قابل خواندن نیستند. شما می‌توانید برای هر کاربر یک
             «راهنمای رمز» ثبت کنید یا رمز جدید تعیین کنید (رمز جدید فقط یک‌بار نمایش داده می‌شود).
+            <br />
+            اگر برای کاربری «بدون هویت احراز هویت» یا «ایمیل تأیید نشده است» می‌بینید، با دکمهٔ همان سطر هویت او را متصل یا
+            ایمیلش را تأیید کنید؛ بدون این کار ورود آن کاربر رد می‌شود.
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs border-collapse">
@@ -415,6 +467,8 @@ export const UserAccessManagement: React.FC<UserAccessManagementProps> = ({
                 {sortedUsers.map((user) => {
                   const connected = Boolean(user.authUserId);
                   const busy = busyUserId === user.id;
+                  const identity = identityFor(user);
+                  const needsEmailConfirmation = connected && Boolean(identity) && identity?.emailConfirmed === false;
                   return (
                     <tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50 align-top">
                       <td className="py-3 px-2">
@@ -423,6 +477,7 @@ export const UserAccessManagement: React.FC<UserAccessManagementProps> = ({
                           {user.email}
                         </div>
                         {!connected && <div className="text-[10px] text-amber-600 mt-1">بدون هویت احراز هویت</div>}
+                        {needsEmailConfirmation && <div className="text-[10px] text-amber-600 mt-1">ایمیل تأیید نشده است</div>}
                       </td>
                       <td className="py-3 px-2">
                         <div className="flex items-center gap-2">
@@ -446,6 +501,29 @@ export const UserAccessManagement: React.FC<UserAccessManagementProps> = ({
                       </td>
                       <td className="py-3 px-2">
                         <div className="flex flex-wrap gap-2">
+                          {!connected ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handleConnectIdentity(user)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold hover:bg-emerald-100 disabled:opacity-50"
+                            >
+                              <UserPlus className="w-3.5 h-3.5" />
+                              {identityByEmail[(user.email || '').toLowerCase().trim()]
+                                ? 'اتصال هویت احراز هویت'
+                                : 'ساخت هویت احراز هویت'}
+                            </button>
+                          ) : needsEmailConfirmation ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handleConnectIdentity(user)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold hover:bg-blue-100 disabled:opacity-50"
+                            >
+                              <MailCheck className="w-3.5 h-3.5" />
+                              تایید ایمیل
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             disabled={!connected || busy}
@@ -556,7 +634,7 @@ export const UserAccessManagement: React.FC<UserAccessManagementProps> = ({
           <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6">
             <div className="flex items-center gap-2 mb-3 text-emerald-700">
               <Check className="w-5 h-5" />
-              <h3 className="text-sm font-black">رمز جدید تعیین شد</h3>
+              <h3 className="text-sm font-black">{temporaryPassword.title || 'رمز جدید تعیین شد'}</h3>
             </div>
             <p className="text-xs text-slate-600 mb-3">
               کاربر: <span className="font-bold text-slate-800">{temporaryPassword.user.fullName || temporaryPassword.user.email}</span>
@@ -566,7 +644,8 @@ export const UserAccessManagement: React.FC<UserAccessManagementProps> = ({
             </div>
             <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] mb-4 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              این رمز فقط همین یک‌بار نمایش داده می‌شود و در هیچ‌جا ذخیره نمی‌شود. آن را همین حالا به کاربر تحویل دهید.
+              {temporaryPassword.note ||
+                'این رمز فقط همین یک‌بار نمایش داده می‌شود و در هیچ‌جا ذخیره نمی‌شود. آن را همین حالا به کاربر تحویل دهید.'}
             </div>
             <div className="flex justify-end gap-2">
               <button

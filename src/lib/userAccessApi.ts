@@ -36,6 +36,20 @@ export interface ResetPasswordResult {
   generated: boolean;
 }
 
+export interface AuthIdentity {
+  authUserId: string;
+  email: string;
+  emailConfirmed: boolean;
+  lastSignInAt: string | null;
+  blocked: boolean;
+}
+
+export interface ConnectIdentityResult {
+  authUserId: string;
+  createdAuthUser: boolean;
+  password?: string;
+}
+
 async function getJson(path: string): Promise<Record<string, any>> {
   const response = await authenticatedFetch(path, { method: 'GET' });
   const data = await readJsonResponse(response);
@@ -95,6 +109,28 @@ export async function resetUserPassword(authUserId: string, password?: string): 
 export async function revokeUserSessions(authUserId: string): Promise<string | null> {
   const data = await postJson(`/api/access/users/${encodeURIComponent(authUserId)}/revoke-sessions`);
   return (data.warning as string) || null;
+}
+
+/**
+ * وضعیت هویت‌های احراز هویت (تأیید ایمیل) — فقط مدیران.
+ * نبودِ هویت Auth برای یک پروفایل یعنی آن کاربر نمی‌تواند وارد شود.
+ */
+export async function listAuthIdentities(): Promise<AuthIdentity[]> {
+  const data = await getJson('/api/access/identities');
+  return (data.identities as AuthIdentity[]) || [];
+}
+
+/**
+ * اتصال پروفایل سامانه به هویت احراز هویت (بر اساس ایمیل) و تأیید ایمیل.
+ * اگر هویت Auth وجود نداشته باشد، ساخته می‌شود و رمز یک‌باره برگردانده می‌شود.
+ */
+export async function connectUserIdentity(appUserId: string): Promise<ConnectIdentityResult> {
+  const data = await postJson(`/api/access/users/${encodeURIComponent(appUserId)}/connect-identity`);
+  return {
+    authUserId: String(data.authUserId || ''),
+    createdAuthUser: Boolean(data.createdAuthUser),
+    password: typeof data.password === 'string' && data.password ? data.password : undefined,
+  };
 }
 
 /**
