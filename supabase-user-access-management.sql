@@ -85,3 +85,12 @@ CREATE POLICY "Admins read password hints" ON public.password_hints
   FOR SELECT TO authenticated USING (public.has_app_permission('canManageUsers'));
 
 -- هیچ سیاست INSERT/UPDATE/DELETE تعریف نمی‌شود؛ فقط service_role (سرور) می‌نویسد.
+
+-- ۵) دسترسی نقش سرویس (سرور)
+-- مهم: در برخی پروژه‌ها جدول‌های تازه‌ساخته‌شده به‌طور خودکار به service_role دسترسی نمی‌گیرند؛
+-- در آن حالت مسیرهای /api/access/* خطای ۵۰۳ («permission denied») می‌دهند، درحالی‌که
+-- مسیرهای مبتنی بر RPC سالم کار می‌کنند. پس دسترسی را صریح می‌دهیم.
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.auth_events         TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.admin_notifications TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.password_hints      TO service_role;
