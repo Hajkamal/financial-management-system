@@ -6,3 +6,11 @@ test('Vercel entry runs under native Node ESM without local extensionless import
 });
 
 test('Nested API routes target a static Vercel function',async()=>{const cfg=JSON.parse(await fs.readFile('vercel.json','utf8'));assert.deepEqual(cfg.rewrites[0],{source:'/api/:path*',destination:'/api/index'});assert.equal(await fs.readFile('api/index.ts','utf8'),await fs.readFile('api/[...path].ts','utf8'));});
+
+test('api/ hosts only the bundled entry functions (no stale per-path routes)',async()=>{
+ const out=[];const walk=async d=>{for(const e of await fs.readdir(d,{withFileTypes:true})){const p=d+'/'+e.name;if(e.isDirectory())await walk(p);else out.push(p.replace(/^api\//,''));}};
+ await walk('api');out.sort();
+ // A per-path function (e.g. api/gemini/analyze.ts) circumvents vercel.json rewrites: it skips the shared
+ // middleware chain and, with an extensionless first-party import, fails to load under native Node ESM.
+ assert.deepEqual(out,['[...path].ts','index.ts']);
+});
