@@ -30,6 +30,7 @@ import { AppUser, UserRole } from '../types';
 import { getPermissionsByRole } from '../utils/permissions';
 
 import { toEnglishDigits, normalizeEmail, normalizePassword } from '../utils/formatters';
+import { recordLoginFailure, recordLoginSuccess } from '../lib/userAccessApi';
 
 
 
@@ -79,13 +80,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         return;
       }
       const result = await supabase.auth.signInWithPassword({ email: cleanEmail, password: normalizePassword(password) });
-      if (result.error) throw result.error;
+      if (result.error) {
+        void recordLoginFailure(cleanEmail, result.error.code || result.error.message);
+        throw result.error;
+      }
       if (!result.data.session) throw new Error('نشست معتبر ایجاد نشد.');
       const profile = await supabase.rpc('get_my_profile');
       if (profile.error || !profile.data || profile.data.status !== 'active' || profile.data.authUserId !== result.data.user?.id) {
+        void recordLoginFailure(cleanEmail, 'profile_inactive');
         await supabase.auth.signOut();
         throw new Error('حساب شما هنوز به پروفایل فعال سامانه متصل نشده است؛ با مدیر هماهنگ کنید.');
       }
+      void recordLoginSuccess();
       // Auth state listener restores the real Supabase user; never fabricate one.
       onAuthSuccess?.();
     } catch (err: any) { setErrorMessage(getPersianAuthErrorMessage(err)); }
