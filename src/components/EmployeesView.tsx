@@ -237,23 +237,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     <div className="space-y-6" id="employees-view">
       
       {/* Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-slate-900 text-white rounded-lg">
-              <Users2 className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">
-                مدیریت پرسنل، روند تغییرات حقوق و محاسبه مالیات ۱۴۰۵
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                ثبت احکام پرسنلی، خط زمانی افزایش حقوق، محاسبه خودکار مالیات پلکانی ۱۴۰۵ و بیمه تامین اجتماعی
-              </p>
-            </div>
-          </div>
-        </div>
-
+      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-end gap-4">
         <div className="flex items-center gap-2 flex-wrap">
           {/* Tax Calculator Button */}
           <button

@@ -173,22 +173,6 @@ export const MembersView: React.FC<MembersViewProps> = ({
       
       {/* Header */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-slate-900 text-white rounded-lg">
-              <UserCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">
-                اعضا، سهامداران و برداشت‌های شرکای شرکت آینده‌نگاران خلاق
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                تعیین درصد سهام، تفکیک نیروی اجرایی از صرفاً سهامدار، و ثبت مجزای «حقوق کارکرد» و «برداشت سود»
-              </p>
-            </div>
-          </div>
-        </div>
-
         <div className="flex flex-wrap items-center gap-2.5">
           <div className={`px-3 py-2 rounded-xl border text-xs font-bold ${
             totalSharePercentage === 100 

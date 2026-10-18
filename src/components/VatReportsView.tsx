@@ -539,26 +539,9 @@ export const VatReportsView: React.FC<VatReportsViewProps> = ({
         <div className="absolute bottom-0 right-0 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none translate-x-1/3 translate-y-1/3" />
         
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2.5 bg-blue-600/30 border border-blue-400/40 rounded-xl text-blue-300">
-                <Receipt className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
-                    گزارش‌های فصلی ارزش افزوده و سامانه مودیان
-                  </h2>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    ماده ۱۶۹ مکرر و ارزش افزوده
-                  </span>
-                </div>
-                <p className="text-xs sm:text-sm text-slate-300 mt-1">
-                  ثبت دوره‌ای فروش ۳ ماهه خدمات باسینا، مدیریت کارمزدهای متغیر در طول دوره و صدور فاکتور رسمی استاندارد سازمان امور مالیاتی کشور
-                </p>
-              </div>
-            </div>
-          </div>
+          <span className="self-start px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            ماده ۱۶۹ مکرر و ارزش افزوده
+          </span>
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button

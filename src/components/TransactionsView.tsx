@@ -334,24 +334,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       )}
 
-      {/* Top Controls & Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-slate-900 text-white rounded-lg">
-              <ReceiptText className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">
-                دفتر کل ثبت درآمدها و هزینه‌های سال {selectedYear}
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                ثبت و مدیریت اسناد مالی شرکت آینده‌نگاران خلاق با رهگیری دقیق کاربر ثبت‌کننده
-              </p>
-            </div>
-          </div>
-        </div>
-
+      {/* Top Controls Toolbar */}
+      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-end gap-4">
         <div className="flex items-center gap-2">
           {canExport && (
             <button
@@ -366,10 +350,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 }
               }}
               className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
-              title={`دانلود فایل اکسل تراکنش‌های سال ${selectedYear}`}
+              title="دانلود اکسل فقط ردیف‌های فیلترشده"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-              <span>خروجی اکسل تراکنش‌ها</span>
+              <span>خروجی نتایج فیلتر</span>
             </button>
           )}
 

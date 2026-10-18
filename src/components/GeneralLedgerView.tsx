@@ -496,18 +496,6 @@ export const GeneralLedgerView: React.FC<GeneralLedgerViewProps> = ({
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-5 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-teal-500/20">
-                <BookOpenCheck className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-slate-800">دفتر کل (General Ledger)</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  سال {toPersianDigits(selectedYear)} — {toPersianDigits(ledger.length)} حساب فعال
-                </p>
-              </div>
-            </div>
-
             {/* تراز */}
             <div className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border ${
               trialBalance.isBalanced
