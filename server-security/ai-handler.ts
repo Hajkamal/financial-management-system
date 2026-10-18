@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI } from '@google/genai';
+import { DEFAULT_GEMINI_MODEL } from '../src/utils/aiModel';
 
 type Dependencies = {
   env: Record<string, string | undefined>;
@@ -53,8 +54,10 @@ export function createAiHandler(deps: Dependencies = dependencies) {
       if (quota.data?.allowed !== true) {
         res.setHeader('Retry-After', '60'); return res.status(429).json({ error: 'سهمیه درخواست تکمیل شده است؛ بعداً تلاش کنید.' });
       }
-      const text = await deps.generate(key, deps.env.GEMINI_MODEL || 'gemini-2.5-flash', body.prompt.trim(), body.systemContext || '', body.history || []);
-      return res.status(200).json({ text });
+      const model = deps.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+      const text = await deps.generate(key, model, body.prompt.trim(), body.systemContext || '', body.history || []);
+      // Report the model actually used so the UI never shows a model name that is out of date.
+      return res.status(200).json({ text, model });
     } catch {
       // Never return provider/SDK errors, tokens, keys or financial context.
       return res.status(503).json({ error: 'سرویس هوش مصنوعی موقتاً در دسترس نیست.' });
