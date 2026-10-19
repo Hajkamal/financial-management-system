@@ -76,8 +76,10 @@ function createAiHandler(deps = dependencies) {
       const text2 = await deps.generate(key, model, body.prompt.trim(), body.systemContext || "", body.history || []);
       return res.status(200).json({ text: text2, model });
     } catch (err) {
-      console.error("[ai] request failed:", err?.name || "Error", String(err?.message || err).slice(0, 200));
-      return res.status(503).json({ error: "\u0633\u0631\u0648\u06CC\u0633 \u0647\u0648\u0634 \u0645\u0635\u0646\u0648\u0639\u06CC \u0645\u0648\u0642\u062A\u0627\u064B \u062F\u0631 \u062F\u0633\u062A\u0631\u0633 \u0646\u06CC\u0633\u062A." });
+      const detail = `${err?.name || "Error"}: ${String(err?.message || err)}`.slice(0, 200);
+      console.error("[ai] request failed:", detail);
+      const base = "\u0633\u0631\u0648\u06CC\u0633 \u0647\u0648\u0634 \u0645\u0635\u0646\u0648\u0639\u06CC \u0645\u0648\u0642\u062A\u0627\u064B \u062F\u0631 \u062F\u0633\u062A\u0631\u0633 \u0646\u06CC\u0633\u062A.";
+      return res.status(503).json({ error: deps.env.AI_DEBUG_ERRORS === "true" ? `${base} (\u0634\u0631\u062D \u0641\u0646\u06CC: ${detail})` : base });
     }
   };
 }
