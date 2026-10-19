@@ -1,5 +1,4 @@
 import {financialSummary,OPERATING_RESULT_NOTE} from './financialMetrics';
-import * as XLSX from 'xlsx';
 import { 
   CurrencyMode, 
   PersianMonthInfo, 
@@ -800,7 +799,7 @@ function prepareLoansRows(loans: Loan[]) {
 }
 
 // 1. Comprehensive Excel Export (خروجی کامل کل سال مالی در چند شیت)
-export function exportToExcel(
+export async function exportToExcel(
   companyName: string,
   year: number,
   transactions: FinancialTransaction[],
@@ -809,6 +808,8 @@ export function exportToExcel(
   members: CompanyMember[],
   loans: Loan[]
 ) {
+  // xlsx is loaded on demand: it is heavy and must stay out of the initial bundle graph.
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
 
   // فیلتر دقیق تراکنش‌های سال مالی انتخابی
@@ -865,11 +866,12 @@ export function exportToExcel(
 
 // 2. Individual Section Exports (خروجی اختصاصی برای هر بخش)
 
-export function exportTransactionsToExcel(
+export async function exportTransactionsToExcel(
   companyName: string,
   year: number,
   transactions: FinancialTransaction[]
 ) {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   const yearTxs = transactions.filter(t => t.year === year);
   const rows = mapTransactionsToExcelRows(yearTxs);
@@ -881,13 +883,14 @@ export function exportTransactionsToExcel(
   XLSX.writeFile(wb, filename);
 }
 
-export function exportSalaryMatrixToExcel(
+export async function exportSalaryMatrixToExcel(
   companyName: string,
   year: number,
   employees: Employee[],
   salaryMatrix: SalaryMatrixItem[],
   transactions: FinancialTransaction[] = []
 ) {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   const rows = prepareSalaryMatrixRows(employees, salaryMatrix, year, transactions);
 
@@ -898,12 +901,13 @@ export function exportSalaryMatrixToExcel(
   XLSX.writeFile(wb, filename);
 }
 
-export function exportEmployeesToExcel(
+export async function exportEmployeesToExcel(
   companyName: string,
   year: number,
   employees: Employee[],
   salaryMatrix: SalaryMatrixItem[]
 ) {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   const rows = prepareEmployeesRows(employees, salaryMatrix, year);
 
@@ -914,12 +918,13 @@ export function exportEmployeesToExcel(
   XLSX.writeFile(wb, filename);
 }
 
-export function exportMembersToExcel(
+export async function exportMembersToExcel(
   companyName: string,
   year: number,
   members: CompanyMember[],
   transactions: FinancialTransaction[]
 ) {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   const rows = prepareMembersRows(members, transactions, year);
 
@@ -930,11 +935,12 @@ export function exportMembersToExcel(
   XLSX.writeFile(wb, filename);
 }
 
-export function exportLoansToExcel(
+export async function exportLoansToExcel(
   companyName: string,
   year: number,
   loans: Loan[]
 ) {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   const rows = prepareLoansRows(loans);
 
@@ -1005,7 +1011,8 @@ export function numberToPersianWords(amount: number, unit = 'ریال'): string 
 /**
  * Exports a single official VAT Invoice to Excel (matching Tax Authority & Taxpayer System format).
  */
-export function exportVatInvoiceToExcel(invoice: VatInvoice, companyName: string) {
+export async function exportVatInvoiceToExcel(invoice: VatInvoice, companyName: string) {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
 
   // Header info
@@ -1105,7 +1112,8 @@ export function exportVatInvoiceToExcel(invoice: VatInvoice, companyName: string
 /**
  * Exports summary of all VAT seasonal & monthly invoices to Excel.
  */
-export function exportAllVatInvoicesToExcel(invoices: VatInvoice[], companyName: string, year: number) {
+export async function exportAllVatInvoicesToExcel(invoices: VatInvoice[], companyName: string, year: number) {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
 
   const rows = invoices.map((inv, idx) => ({

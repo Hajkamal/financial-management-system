@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ReceiptText, 
   Search, 
@@ -94,6 +94,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   customCategories = INITIAL_CUSTOM_CATEGORIES,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  // Heavy filter/sort runs on the debounced value; the input itself stays instant.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => clearTimeout(id);
+  }, [searchTerm]);
   const [typeFilter, setTypeFilter] = useState<'all' | TransactionType>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [subCategoryFilter, setSubCategoryFilter] = useState<string>('all');
@@ -168,8 +174,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       if (maxRial !== null && t.amount > maxRial) return false;
 
       // Text search in title, description, recipient/payer, tracking code, creator
-      if (searchTerm.trim()) {
-        const query = searchTerm.toLowerCase();
+      if (debouncedSearch.trim()) {
+        const query = debouncedSearch.toLowerCase();
         const matchTitle = (t.title || '').toLowerCase().includes(query);
         const matchDesc = t.description?.toLowerCase().includes(query) || false;
         const matchRecipient = t.recipientOrPayer?.toLowerCase().includes(query) || false;
@@ -215,7 +221,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     minAmount, 
     maxAmount, 
     currencyMode, 
-    searchTerm,
+    debouncedSearch,
     sortBy
   ]);
 
