@@ -11,7 +11,7 @@ const dependencies: Dependencies = {
   env: process.env,
   createSupabase: createClient,
   async generate(key, model, prompt, context, history) {
-    const ai = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 20000 } });
+    const ai = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 45000 } });
     const contents = [...history.map(item => ({ role: item.sender === 'user' ? 'user' : 'model', parts: [{ text: item.text }] })),
       { role: 'user', parts: [{ text: prompt }] }];
     const result = await ai.models.generateContent({ model, contents,
