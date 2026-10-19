@@ -20,7 +20,7 @@ var dependencies = {
   env: process.env,
   createSupabase: createClient2,
   async generate(key, model, prompt, context, history) {
-    const ai = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 2e4 } });
+    const ai = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 45e3 } });
     const contents = [
       ...history.map((item) => ({ role: item.sender === "user" ? "user" : "model", parts: [{ text: item.text }] })),
       { role: "user", parts: [{ text: prompt }] }
@@ -2064,3 +2064,5 @@ var vercel_entry_default = app;
 export {
   vercel_entry_default as default
 };
+
+export const maxDuration = 60;

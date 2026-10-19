@@ -638,9 +638,9 @@ ${OPERATING_RESULT_NOTE}
     if (!customPrompt) setInputPrompt('');
     setIsLoading(true);
 
-    // Abort controller with 15s timeout to prevent hanging UI
+    // Abort controller with a generous timeout: thinking models + large financial context can take 30-40s.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
 
     try {
       const systemContext = compileFinancialContext();
@@ -696,7 +696,7 @@ ${OPERATING_RESULT_NOTE}
       clearTimeout(timeoutId);
       appendLocalAnalysis(
         textToSend,
-        err?.name === 'AbortError' ? 'مهلت ۱۵ ثانیه‌ای پاسخ به پایان رسید' : err?.message || 'خطای ارتباط با سرور',
+        err?.name === 'AbortError' ? 'مهلت ۴۵ ثانیه‌ای پاسخ به پایان رسید' : err?.message || 'خطای ارتباط با سرور',
       );
     } finally {
       setIsLoading(false);
@@ -869,7 +869,7 @@ ${OPERATING_RESULT_NOTE}
               </div>
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-                <span>دستیار در حال تحلیل اسناد و تهیه گزارش مالی است...</span>
+                <span>دستیار در حال تحلیل با Gemini است؛ ممکن است ۳۰ تا ۴۵ ثانیه طول بکشد...</span>
               </div>
             </div>
           )}
