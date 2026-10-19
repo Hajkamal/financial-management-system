@@ -61,8 +61,12 @@ export function createAiHandler(deps: Dependencies = dependencies) {
     } catch (err: any) {
       // Never return provider/SDK errors, tokens, keys or financial context — but do log enough
       // server-side (name/message only, no secrets) to diagnose availability or misconfiguration.
-      console.error('[ai] request failed:', err?.name || 'Error', String(err?.message || err).slice(0, 200));
-      return res.status(503).json({ error: 'سرویس هوش مصنوعی موقتاً در دسترس نیست.' });
+      const detail = `${err?.name || 'Error'}: ${String(err?.message || err)}`.slice(0, 200);
+      console.error('[ai] request failed:', detail);
+      const base = 'سرویس هوش مصنوعی موقتاً در دسترس نیست.';
+      // Temporary diagnostics knob: while AI_DEBUG_ERRORS="true" the technical cause is surfaced
+      // in the client (no secrets/comments of financial context can appear in provider messages).
+      return res.status(503).json({ error: deps.env.AI_DEBUG_ERRORS === 'true' ? `${base} (شرح فنی: ${detail})` : base });
     }
   };
 }
