@@ -44,15 +44,18 @@ export function useAuthManager({ onShowToast }: UseAuthManagerProps) {
         clearRequestState(); setSessionVerificationPending(true); setIsAuthLoading(true);
       }
       try {
-        const verified = await supabase.auth.getUser(candidate.access_token);
+        // Token validation and profile fetch are independent round-trips: run them in
+        // parallel to cut one server round-trip off every restore/login path.
+        const [verified, profile] = await Promise.all([
+          supabase.auth.getUser(candidate.access_token),
+          supabase.rpc('get_my_profile'),
+        ]);
         if (!alive || epoch !== generation.current || manualLogout.current) return;
         if (verified.error) {
           if (isDefinitiveAuthFailure(verified.error)) expired(); else temporaryFailure();
           return;
         }
         if (!verified.data.user || verified.data.user.id !== candidate.user.id) { expired(); return; }
-        const profile = await supabase.rpc('get_my_profile');
-        if (!alive || epoch !== generation.current || manualLogout.current) return;
         if (profile.error) {
           if (isDefinitiveAuthFailure(profile.error)) expired(); else temporaryFailure();
           return;

@@ -255,6 +255,15 @@ export default function App() {
     setCurrentUserContext(currentAppUser);
   }, [currentAppUser]);
 
+  // پیش‌بارگذاری مودال پرکاربرد تراکنش در اوقات بیکاری: باز شدن گفتگو لحظه‌ای می‌شود.
+  useEffect(() => {
+    const warm = () => { void import('./components/TransactionModal'); };
+    const ric = window.requestIdleCallback || ((cb: () => void) => window.setTimeout(cb, 1500));
+    const cic = window.cancelIdleCallback || ((id: number) => window.clearTimeout(id));
+    const id = ric(() => warm());
+    return () => cic(id);
+  }, []);
+
 
   // مدیریت وضعیت مودال‌ها
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
