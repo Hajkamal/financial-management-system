@@ -11,6 +11,7 @@ export const getSessionGeneration=()=>generation;
 export function clearRequestState(){revision=undefined;identity=null;sessionVerificationPending=false;generation++;}
 export function setAuthenticatedIdentity(id:string){if(identity!==id){clearRequestState();identity=id;}}
 export function setServerRevision(value:number){if(Number.isSafeInteger(value)&&value>=0&&(revision===undefined||value>=revision))revision=value;}
+export const getServerRevision=()=>revision;
 async function tokenHeaders(headers?:HeadersInit){
  if(sessionVerificationPending)throw new Error('اعتبار نشست هنوز تأیید نشده است؛ کمی بعد دوباره تلاش کنید.');
  const s=await supabase?.auth.getSession();
@@ -46,7 +47,10 @@ export async function sessionRequest(path:string,body?:unknown){
 }
 export async function apiFetch(path:string,init:RequestInit={}):Promise<Response>{
  const epoch=generation;
- const read=async()=>{const response=await authenticatedFetch(path,init);if(response.status===401)expireSession();if((init.method||'GET').toUpperCase()!=='HEAD')await readJsonResponse(response);return response;};
+ const read=async()=>{const response=await authenticatedFetch(path,init);if(response.status===401)expireSession();
+  // 304 Not Modified carries no body and no JSON schema; callers branch on the status themselves.
+  if(response.status===304)return response;
+  if((init.method||'GET').toUpperCase()!=='HEAD')await readJsonResponse(response);return response;};
  if(!init.method||['GET','HEAD'].includes(init.method.toUpperCase()))return read();
  pending++;
  const operation=async()=>{

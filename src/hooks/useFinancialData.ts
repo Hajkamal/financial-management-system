@@ -411,6 +411,12 @@ export function useFinancialData({
     if (!userId || hasPendingWrites()) return false;
     const snapshot = await serverApi.getFinancialData();
     if (liveUser.current !== userId || hasPendingWrites()) return false;
+    if (snapshot === 'unchanged') {
+      // 304: data and revision are identical; keep connection state without any re-render churn.
+      setIsCloudConnected(true);
+      setCloudError(null);
+      return true;
+    }
     if (!snapshot) {
       setIsCloudConnected(false);
       setCloudError((prev) => prev || 'عدم دسترسی به داده‌های مالی از سرور.');

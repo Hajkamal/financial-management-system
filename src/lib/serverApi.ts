@@ -1,5 +1,5 @@
 import type { BackupAuthProof } from './backupReauth';
-import { apiFetch, backupReadWithProof, setServerRevision, sessionRequest } from "./request";
+import { apiFetch, backupReadWithProof, setServerRevision, getServerRevision, sessionRequest } from "./request";
 /**
  * کلاینت ارتباط بلادرنگ با دیتابیس متمرکز سرور
  * تضمین می‌کند اطلاعات وارد شده در تمامی مرورگرها، دستگاه‌ها و برای کلیه کاربران یکپارچه و به روز باشد.
@@ -44,12 +44,18 @@ export const setCurrentUserContext = (_user: AppUser | null) => {};
 const getHeaders = () => ({ "Content-Type": "application/json" });
 
 export const serverApi = {
-  // دریافت تمامی داده‌ها از دیتابیس سرور
-  async getFinancialData(): Promise<ServerFullData | null> {
+  // دریافت تمامی داده‌ها از دیتابیس سرور.
+  // Returns the string 'unchanged' when the server reports 304 Not Modified (revision has not moved).
+  async getFinancialData(): Promise<ServerFullData | "unchanged" | null> {
     try {
+      const currentRevision = getServerRevision();
       const res = await apiFetch("/api/financial-data", {
-        headers: getHeaders(),
+        headers: {
+          ...getHeaders(),
+          ...(currentRevision !== undefined ? { "If-None-Match": String(currentRevision) } : {}),
+        },
       });
+      if (res.status === 304) return "unchanged";
       const cType = res.headers.get("content-type") || "";
       if (!cType.includes("application/json")) {
         const errMsg = "پاسخ سرور با فرمت JSON دریافت نشد (صفحه HTML دریافت شد). مسیر API به درستی به سرور Express هدایت نشده است.";

@@ -238,6 +238,8 @@ app.get("/api/financial-data", async (req, res, next) => {
       fail("اجازه مشاهده اطلاعات مالی را ندارید", 403);
     const db = (await loadDatabase());
     res.set("ETag", `"${db.revision}"`);
+    // Cheap 5s polling: an unchanged revision earns an empty 304 instead of the full snapshot.
+    if (req.get("If-None-Match") === String(db.revision)) { res.status(304).end(); return; }
     res.json({ success: true, data: financialView(db, req.actor) });
   } catch (e) {
     next(e);

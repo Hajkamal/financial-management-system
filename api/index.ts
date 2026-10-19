@@ -1770,6 +1770,10 @@ app.get("/api/financial-data", async (req, res, next) => {
       fail("\u0627\u062C\u0627\u0632\u0647 \u0645\u0634\u0627\u0647\u062F\u0647 \u0627\u0637\u0644\u0627\u0639\u0627\u062A \u0645\u0627\u0644\u06CC \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F", 403);
     const db = await loadDatabase();
     res.set("ETag", `"${db.revision}"`);
+    if (req.get("If-None-Match") === String(db.revision)) {
+      res.status(304).end();
+      return;
+    }
     res.json({ success: true, data: financialView(db, req.actor) });
   } catch (e) {
     next(e);
