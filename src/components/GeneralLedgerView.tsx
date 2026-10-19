@@ -142,7 +142,7 @@ export const GeneralLedgerView: React.FC<GeneralLedgerViewProps> = ({
           return (
             <div
               key={account.accountCode}
-              className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+              className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow [content-visibility:auto] [contain-intrinsic-size:auto_84px]"
             >
               {/* هدر حساب */}
               <button

@@ -407,6 +407,36 @@ export function useFinancialData({
   const userId = currentUser?.id;
   const liveUser = useRef(userId);
   liveUser.current = userId;
+  // Cache-first paint: the last good snapshot of the SAME session/tab is shown instantly
+  // while the network round-trip corrects/refreshes it. Keys are user-scoped and only
+  // session-scoped (sessionStorage dies with the tab), so nothing persists on the device.
+  // Write safety: with no revision cached, apiFetch fetches a fresh revision before any write.
+  const restoreCachedSnapshot = useCallback((uid: string) => {
+    try {
+      const raw = sessionStorage.getItem(`ayandeh_fin_cache_${uid}`);
+      if (!raw) return;
+      const cached = JSON.parse(raw);
+      if (
+        cached &&
+        Array.isArray(cached.transactions) &&
+        Array.isArray(cached.fiscalYears) &&
+        Array.isArray(cached.customCategories)
+      )
+        setData(cached as ServerFullData);
+    } catch {
+      /* corrupt or missing cache is silently ignored */
+    }
+  }, []);
+  const saveCachedSnapshot = useCallback((uid: string, snapshot: ServerFullData) => {
+    try {
+      const raw = JSON.stringify(snapshot);
+      if (typeof raw === 'string' && raw.length <= 4500000)
+        sessionStorage.setItem(`ayandeh_fin_cache_${uid}`, raw);
+      else sessionStorage.removeItem(`ayandeh_fin_cache_${uid}`);
+    } catch {
+      /* quota or privacy mode: caching is best-effort */
+    }
+  }, []);
   const reload = useCallback(async () => {
     if (!userId || hasPendingWrites()) return false;
     const snapshot = await serverApi.getFinancialData();
@@ -423,6 +453,7 @@ export function useFinancialData({
       return false;
     }
     setData(snapshot);
+    saveCachedSnapshot(userId, snapshot);
     setIsCloudConnected(true);
     setCloudError(null);
     setSelectedYear((y) =>
@@ -431,14 +462,26 @@ export function useFinancialData({
         : snapshot.selectedYear || snapshot.fiscalYears[0]?.year || 1405,
     );
     return true;
-  }, [userId]);
+  }, [userId, saveCachedSnapshot]);
   useEffect(() => {
     setData(d=>({...d,users:[],fiscalYears:[],transactions:[],employees:[],salaryMatrix:[],members:[],loans:[],bankAccounts:[],vatInvoices:[],serviceTariffs:[],syncLogs:[],customCategories:INITIAL_CUSTOM_CATEGORIES,companyLogo:null}));
     setIsCloudConnected(false);
     setCloudError(null);
-    if (!userId) return;
+    if (!userId) {
+      // Tab-scoped cache must not outlive the signed-out state on shared devices.
+      try {
+        Object.keys(sessionStorage)
+          .filter((k) => k.startsWith('ayandeh_fin_cache_'))
+          .forEach((k) => sessionStorage.removeItem(k));
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     let cancelled = false;
     setIsCloudLoading(true);
+    // Show the last good snapshot of this session immediately; the fetch below refreshes it.
+    restoreCachedSnapshot(userId);
     reload().finally(() => {
       if (!cancelled) setIsCloudLoading(false);
     });
@@ -461,7 +504,7 @@ export function useFinancialData({
       window.removeEventListener("financial-error", error);
       window.removeEventListener("financial-api-error", onApiError);
     };
-  }, [userId, reload]);
+  }, [userId, reload, restoreCachedSnapshot]);
   const execute = async (
     operation: Promise<boolean>,
     message = "تغییرات روی سرور ذخیره شد.",

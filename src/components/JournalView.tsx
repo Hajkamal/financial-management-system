@@ -232,7 +232,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
             return (
               <div
                 key={entry.id}
-                className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow [content-visibility:auto] [contain-intrinsic-size:auto_84px]"
               >
                 {/* هدر سند */}
                 <button

@@ -1013,7 +1013,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 );
 
                 return (
-                  <div key={t.id} className="p-4 space-y-2.5 hover:bg-slate-50/60 transition-colors">
+                  <div key={t.id} className="p-4 space-y-2.5 hover:bg-slate-50/60 transition-colors [content-visibility:auto] [contain-intrinsic-size:auto_128px]">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
