@@ -225,6 +225,19 @@ BEGIN
 END; $$;
 REVOKE ALL ON FUNCTION public.consume_ai_quota() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.consume_ai_quota() TO authenticated;
+CREATE OR REPLACE FUNCTION public.refund_ai_quota() RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+ IF NOT public.has_app_permission('canUseAiAssistant') THEN RAISE EXCEPTION 'Not authorized' USING ERRCODE='42501'; END IF;
+ -- Serialize with consume so refunded buckets stay consistent across serverless instances.
+ PERFORM pg_advisory_xact_lock(hashtextextended(auth.uid()::text,0));
+ -- Give back the most recently consumed unit of each bucket; a refund can never go negative.
+ UPDATE app_private.ai_quota q SET requests=GREATEST(q.requests-1,0)
+  WHERE q.user_id=auth.uid() AND q.bucket=(SELECT MAX(x.bucket) FROM app_private.ai_quota x WHERE x.user_id=q.user_id AND x.kind=q.kind);
+ DELETE FROM app_private.ai_quota WHERE user_id=auth.uid() AND requests<=0;
+END; $$;
+REVOKE ALL ON FUNCTION public.refund_ai_quota() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.refund_ai_quota() TO authenticated;
 
 
 -- Phase two: financial reads/writes only through the JWT-verified server API.
