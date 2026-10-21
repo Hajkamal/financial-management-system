@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { 
   Sidebar,
   TopHeader,
@@ -59,18 +59,13 @@ const VALID_TABS: ActiveTab[] = [
 ];
 
 /**
- * بازیابی منوی فعال اولیه از روی URL Hash یا پارامتر یا LocalStorage
- * تا هنگام رفرش (F5) یا باز کردن مجدد، کاربر دقیقاً در همان صفحه بماند
+ * صفحهٔ ورودی: بازکردن تازهٔ سایت (تب جدید، بوکمارک، ورود به دامنه) همیشه داشبورد است،
+ * ولی رفرش (F5) در همان صفحه می‌ماند؛ برای تشخیص این دو از Navigation Type مرورگر استفاده می‌شود.
+ * استثنا در هر دو حالت: دیپ‌لینک صریح ?tab=... که عمداً باز شده است.
  */
 const getInitialActiveTab = (): ActiveTab => {
   if (typeof window !== 'undefined') {
-    // ۱. بررسی هش آدرس مرورگر (مانند #journal یا #/journal)
-    const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
-    if (rawHash && VALID_TABS.includes(rawHash as ActiveTab)) {
-      return rawHash as ActiveTab;
-    }
-
-    // ۲. بررسی پارامتر جستجو (مانند ?tab=journal یا ?view=journal)
+    // ۱. دیپ‌لینک صریح
     try {
       const params = new URLSearchParams(window.location.search);
       const queryTab = params.get('tab') || params.get('view') || params.get('menu');
@@ -79,15 +74,23 @@ const getInitialActiveTab = (): ActiveTab => {
       }
     } catch {}
 
-    // ۳. بررسی حافظه ماندگار مرورگر (LocalStorage)
+    // ۲. رفرش: همان تبِ جاری حفظ شود (هش همیشه با تب همگام است؛ localStorage پشتیبان)
     try {
-      const saved = localStorage.getItem('ayandeh_active_tab') || localStorage.getItem('ayandeh_active_menu');
-      if (saved && VALID_TABS.includes(saved as ActiveTab)) {
-        return saved as ActiveTab;
+      const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+      if (navEntry?.type === 'reload') {
+        const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
+        if (rawHash && VALID_TABS.includes(rawHash as ActiveTab)) {
+          return rawHash as ActiveTab;
+        }
+        const saved = localStorage.getItem('ayandeh_active_tab') || localStorage.getItem('ayandeh_active_menu');
+        if (saved && VALID_TABS.includes(saved as ActiveTab)) {
+          return saved as ActiveTab;
+        }
       }
     } catch {}
   }
 
+  // ۳. ورود تازه به سایت: همیشه داشبورد
   return 'dashboard';
 };
 
@@ -124,13 +127,13 @@ export default function App() {
     window.addEventListener('hashchange', handleHashChange);
     window.addEventListener('popstate', handleHashChange);
 
-    // تثبیت اولیه آدرس هش در نوار آدرس مرورگر
+    // تثبیت اولیه آدرس هش در نوار آدرس مرورگر (همیشه هم‌راستا با تب فعلی)
     const initial = getInitialActiveTab();
     if (initial && typeof window !== 'undefined') {
       try {
         localStorage.setItem('ayandeh_active_tab', initial);
         localStorage.setItem('ayandeh_active_menu', initial);
-        if (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/') {
+        if (window.location.hash !== `#${initial}`) {
           window.history.replaceState(null, '', `#${initial}`);
         }
       } catch {}
@@ -173,6 +176,28 @@ export default function App() {
   } = useAuthManager({
     onShowToast: showToast,
   });
+
+  // هر ورود واقعی (بعد از خروج/انقضای نشست یا تغییر کاربر) از داشبورد شروع می‌شود؛
+  // بازیابی نشست هنگام رفرش جزو «ورود» نیست تا F5 در همان صفحه بماند.
+  const lastAuthUserId = useRef<string | null>(null);
+  const authRestoredOnce = useRef(false);
+  useEffect(() => {
+    const uid = currentAppUser?.id ?? null;
+    if (uid) {
+      if (!authRestoredOnce.current) {
+        authRestoredOnce.current = true; // اولین احراز هویت پس از بارگذاری = بازیابی نشست
+      } else if (lastAuthUserId.current !== uid) {
+        let deepLinked = false;
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const queryTab = params.get('tab') || params.get('view') || params.get('menu') || '';
+          deepLinked = VALID_TABS.includes(queryTab as ActiveTab);
+        } catch {}
+        if (!deepLinked) setActiveTab('dashboard');
+      }
+    }
+    lastAuthUserId.current = uid;
+  }, [currentAppUser]);
 
 
   // ۱. مدیریت داده‌های مالی با Custom Hook
