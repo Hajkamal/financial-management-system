@@ -59,13 +59,13 @@ const VALID_TABS: ActiveTab[] = [
 ];
 
 /**
- * صفحهٔ ورودی برنامه همیشه داشبورد است: ناوبری درون‌برنامه‌ای همان لحظه روی URL ذخیره می‌شود،
- * اما بازکردن دوبارهٔ سایت (رفرش / ورود مجدد) عمداً از داشبورد شروع می‌شود و
- * آخرین تب ذخیره‌شده در localStorage دیگر تعیین‌کنندهٔ صفحهٔ اول نیست.
- * تنها استثنا، لینک صریح ?tab=... است تا دیپ‌لینک‌های عمدی همچنان کار کنند.
+ * صفحهٔ ورودی: بازکردن تازهٔ سایت (تب جدید، بوکمارک، ورود به دامنه) همیشه داشبورد است،
+ * ولی رفرش (F5) در همان صفحه می‌ماند؛ برای تشخیص این دو از Navigation Type مرورگر استفاده می‌شود.
+ * استثنا در هر دو حالت: دیپ‌لینک صریح ?tab=... که عمداً باز شده است.
  */
 const getInitialActiveTab = (): ActiveTab => {
   if (typeof window !== 'undefined') {
+    // ۱. دیپ‌لینک صریح
     try {
       const params = new URLSearchParams(window.location.search);
       const queryTab = params.get('tab') || params.get('view') || params.get('menu');
@@ -73,8 +73,24 @@ const getInitialActiveTab = (): ActiveTab => {
         return queryTab as ActiveTab;
       }
     } catch {}
+
+    // ۲. رفرش: همان تبِ جاری حفظ شود (هش همیشه با تب همگام است؛ localStorage پشتیبان)
+    try {
+      const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+      if (navEntry?.type === 'reload') {
+        const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
+        if (rawHash && VALID_TABS.includes(rawHash as ActiveTab)) {
+          return rawHash as ActiveTab;
+        }
+        const saved = localStorage.getItem('ayandeh_active_tab') || localStorage.getItem('ayandeh_active_menu');
+        if (saved && VALID_TABS.includes(saved as ActiveTab)) {
+          return saved as ActiveTab;
+        }
+      }
+    } catch {}
   }
 
+  // ۳. ورود تازه به سایت: همیشه داشبورد
   return 'dashboard';
 };
 
@@ -161,19 +177,24 @@ export default function App() {
     onShowToast: showToast,
   });
 
-  // هر ورود موفق از داشبورد شروع می‌شود (صرف‌نظر از تبِ باقی‌ماندهٔ قبل از خروج/انقضای نشست).
-  // استثنا: دیپ‌لینک صریح ?tab=... که کاربر عمداً باز کرده است.
+  // هر ورود واقعی (بعد از خروج/انقضای نشست یا تغییر کاربر) از داشبورد شروع می‌شود؛
+  // بازیابی نشست هنگام رفرش جزو «ورود» نیست تا F5 در همان صفحه بماند.
   const lastAuthUserId = useRef<string | null>(null);
+  const authRestoredOnce = useRef(false);
   useEffect(() => {
     const uid = currentAppUser?.id ?? null;
-    if (uid && lastAuthUserId.current !== uid) {
-      let deepLinked = false;
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const queryTab = params.get('tab') || params.get('view') || params.get('menu') || '';
-        deepLinked = VALID_TABS.includes(queryTab as ActiveTab);
-      } catch {}
-      if (!deepLinked) setActiveTab('dashboard');
+    if (uid) {
+      if (!authRestoredOnce.current) {
+        authRestoredOnce.current = true; // اولین احراز هویت پس از بارگذاری = بازیابی نشست
+      } else if (lastAuthUserId.current !== uid) {
+        let deepLinked = false;
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const queryTab = params.get('tab') || params.get('view') || params.get('menu') || '';
+          deepLinked = VALID_TABS.includes(queryTab as ActiveTab);
+        } catch {}
+        if (!deepLinked) setActiveTab('dashboard');
+      }
     }
     lastAuthUserId.current = uid;
   }, [currentAppUser]);
