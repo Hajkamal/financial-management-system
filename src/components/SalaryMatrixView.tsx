@@ -44,6 +44,13 @@ import {
   classifyPersonTransaction
 } from '../utils/formatters';
 import { getCurrentJalaliDateTime, getTodayJalali } from '../utils/jalali';
+import {
+  employeeSalaryPayments,
+  paymentsForMonth,
+  salaryTarget,
+  resolveSalaryCell,
+  duplicateSalaryPayments,
+} from '../utils/salaryMatrix';
 import { AmountInput } from './AmountInput';
 import { MemberSalarySection } from './MemberSalarySection';
 import { PersonPaymentHistoryModal, PersonTarget } from './PersonPaymentHistoryModal';
@@ -132,64 +139,42 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
   const [selectedPersonForHistory, setSelectedPersonForHistory] = useState<PersonTarget | null>(null);
 
   /**
-   * تابع استخراج مستقیم حقوق هر کارمند در هر ماه از فیلتر کردن تراکنش‌های ثبت‌شده:
-   * مقادیر مستقیماً بر اساس تراکنش‌های ثبت شده با دسته‌بندی حقوق برای هر کارمند در ماه مربوطه استخراج می‌شوند.
-   * خریدهای شرکتی، تنخواه و هزینه‌های متفرقه به هیچ وجه در ماتریس حقوق آورده نمی‌شوند.
+   * منبع واحد محاسبه: اسناد حقوق هر کارمند در سال، یک بار برای هر ۱۲ ماه محاسبه می‌شود.
+   * ماهِ نشستن هر سند در ماتریس، ماه «کارکرد» است (salaryMonth/salaryYear)، نه ماه واریز.
    */
+  const employeeYearPayments = useMemo(() => {
+    const map = new Map<string, FinancialTransaction[]>();
+    for (const emp of employees)
+      map.set(emp.id, employeeSalaryPayments(transactions, emp, selectedYear));
+    return map;
+  }, [employees, transactions, selectedYear]);
+
   const getEmployeeMonthData = useCallback((empId: string, monthNum: PersianMonthNumber) => {
-    const emp = employees.find(e => e.id === empId);
     const cell = salaryMatrix.find(
       item => item.employeeId === empId && item.month === monthNum && item.year === selectedYear
     );
 
-    // اسناد مالی ثبت شده در دفتر هزینه‌ها برای این کارمند در این ماه (با اولویت ماه کارکرد حقوق)
-    // دقت شود: خریدهای شرکتی و تنخواه طبق منطق جدید به هیچ وجه در ماتریس محاسبه نمی‌شوند
-    const empTxs = transactions.filter(t => {
-      const targetYear = t.salaryYear || t.year;
-      const targetMonth = t.salaryMonth || t.month;
-      if (targetYear !== selectedYear || targetMonth !== monthNum) return false;
-      
-      const isDirectMatch = t.relatedEmployeeId === empId;
-      const isRecipientMatch = Boolean(emp && emp.name && t.recipientOrPayer && 
-        t.recipientOrPayer.trim().toLowerCase() === emp.name.trim().toLowerCase()
-      );
-      const isTitleMatch = Boolean(emp && emp.name && t.title && 
-        t.title.toLowerCase().includes(emp.name.trim().toLowerCase()) &&
-        (t.title.includes('حقوق') || t.title.includes('دستمزد'))
-      );
-
-      if (!isDirectMatch && !isRecipientMatch && !isTitleMatch) return false;
-
-      // سند باید صراحتاً مربوط به حقوق و دستمزد کارکرد باشد
-      return isSalaryTransaction(t);
-    });
-
-    const txTotal = empTxs.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
-    const hasTransactions = empTxs.length > 0;
-
-    // اصل مبلغ مستقیماً بر اساس تراکنش‌های ثبت‌شده در هزینه‌ها است
-    const amt = txTotal;
-    const bonus = cell?.bonus || 0;
-    const totalCell = amt + bonus;
-    const isManualOnly = !hasTransactions && totalCell > 0;
-    const status: 'paid' | 'pending' | 'zero' = totalCell === 0 
-      ? 'zero' 
-      : (hasTransactions ? 'paid' : (cell?.status || 'paid'));
-    const colorTag = cell?.colorTag || '';
+    // اسناد مالی ثبت شده در دفتر هزینه‌ها با ماه کارکرد این ستون
+    const empTxs = paymentsForMonth(employeeYearPayments.get(empId) || [], monthNum);
+    const resolved = resolveSalaryCell(cell, empTxs);
+    const status: 'paid' | 'pending' | 'zero' =
+      resolved.total === 0
+        ? 'zero'
+        : (resolved.hasTransactions ? 'paid' : (cell?.status || 'paid'));
 
     return {
-      amt,
-      bonus,
-      totalCell,
+      amt: resolved.amount,
+      bonus: resolved.bonus,
+      totalCell: resolved.total,
       status,
-      colorTag,
-      hasTransactions,
-      isManualOnly,
+      colorTag: cell?.colorTag || '',
+      hasTransactions: resolved.hasTransactions,
+      isManualOnly: resolved.manualOnly,
       transactionsCount: empTxs.length,
       transactions: empTxs,
       cell
     };
-  }, [employees, salaryMatrix, transactions, selectedYear]);
+  }, [salaryMatrix, employeeYearPayments, selectedYear]);
 
   // آمار کلی تطبیق و یکپارچگی حقوق با اسناد مالی
   const reconciliationStats = useMemo(() => {
@@ -373,6 +358,23 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
           linkedTransaction=updatedTx;
 
         } else if (!editingCell.transactions || editingCell.transactions.length === 0) {
+          // محافظ تکرار: مبلغ یکسان برای همان کارمند در ماه کارکرد دیگر = احتمال ثبت دومِ همان پرداخت
+          const duplicates = duplicateSalaryPayments(
+            employeeYearPayments.get(editingCell.employeeId) || [],
+            amt,
+            editingCell.month,
+          );
+          if (duplicates.length > 0) {
+            const otherMonths = [...new Set(
+              duplicates.map(t => PERSIAN_MONTHS.find(m => m.num === salaryTarget(t).month)?.name || '')
+            )].filter(Boolean).join('، ');
+            const proceed = window.confirm(
+              `برای این کارمند در ماه ${otherMonths} مبلغی معادل ${formatCurrency(amt, currencyMode)} ثبت شده است. ` +
+              `اگر همان پرداخت است، آن را از بخش «پرداختهای سایر ماهها» با دکمهٔ «انتقال به این ماه» جابهجا کنید تا سند تکراری ساخته نشود. ` +
+              `با این حال سند جدید ثبت شود؟`
+            );
+            if (!proceed) return;
+          }
           // ایجاد سند هزینه جدید و رسمی در دفتر کل
           const regDt = getCurrentJalaliDateTime().fullString;
           const newTx: FinancialTransaction = {
@@ -403,6 +405,25 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
 
     if ((await onUpdateSalaryCell({employeeId:editingCell.employeeId,month:editingCell.month,year:selectedYear,amount:amt,bonus:bns,status:inputStatus,colorTag:inputColor,transaction:linkedTransaction}))===false) return;
     setEditingCell(null);
+  };
+
+  // جابه‌جایی یک سند موجود به ماه کارکرد این ستون (بدون ساخت سند تکراری و بدون تغییر تاریخ پرداخت)
+  const handleMovePaymentToCell = async (tx: FinancialTransaction) => {
+    if (!editingCell || !onSaveTransaction) return;
+    const targetMonthName = PERSIAN_MONTHS.find(m => m.num === editingCell.month)?.name || '';
+    const confirmed = window.confirm(
+      `سند «${tx.title}» به کارکرد ${targetMonthName} ${selectedYear} منتقل شود؟\n` +
+      `مبلغ و تاریخ پرداخت (${tx.dateString}) تغییری نمی‌کند و سند تکراری ساخته نمی‌شود.`
+    );
+    if (!confirmed) return;
+    const moved: FinancialTransaction = {
+      ...tx,
+      salaryMonth: editingCell.month,
+      salaryYear: selectedYear,
+    };
+    if ((await onSaveTransaction(moved)) === false) return;
+    setEditingCell(null);
+    onShowToast?.(`سند بدون تغییر مبلغ و تاریخ پرداخت، به کارکرد ${targetMonthName} منتقل شد.`);
   };
 
   // عملیات ایجاد خودکار اسناد هزینه برای تمامی موارد فاقد سند (یکپارچه‌سازی با ۱ کلیک)
@@ -1060,6 +1081,83 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
                       </div>
                     </div>
                   )}
+
+                  {/* پرداخت‌های همان فرد در سایر ماه‌های سال — انتقال بدون ساخت سند تکراری */}
+                  {(() => {
+                    const others = (employeeYearPayments.get(editingCell.employeeId) || [])
+                      .filter(tx => salaryTarget(tx).month !== editingCell.month);
+                    if (others.length === 0) return null;
+                    return (
+                      <div className="p-3.5 bg-amber-50/80 border border-amber-300 rounded-2xl space-y-2.5">
+                        <div className="flex items-center gap-2 font-black text-amber-950 text-xs">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>پرداخت‌های همین فرد در سایر ماه‌های {toPersianDigits(selectedYear)} ({toPersianDigits(others.length)} سند):</span>
+                        </div>
+                        <p className="text-[11px] text-amber-800 leading-relaxed">
+                          اگر همین پرداخت باید برای کارکرد {salMonthName} باشد، «انتقال به این ماه» را بزنید؛ همان سند جابه‌جا می‌شود و سند تکراری ساخته نمی‌شود.
+                        </p>
+                        <div className="space-y-2">
+                          {others.map(tx => {
+                            const tgt = salaryTarget(tx);
+                            const tgtName = PERSIAN_MONTHS.find(m => m.num === tgt.month)?.name || '';
+                            return (
+                              <div key={tx.id} className="p-2.5 bg-white rounded-xl border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div>
+                                  <div className="font-extrabold text-slate-900 text-xs">{tx.title}</div>
+                                  <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+                                    <span className="bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded font-bold border border-amber-200">
+                                      کارکرد {tgtName} {toPersianDigits(tgt.year)}
+                                    </span>
+                                    <span>تاریخ پرداخت: <strong>{toPersianDigits(tx.dateString)}</strong></span>
+                                    {tx.trackingCode && <span>• پیگیری: {tx.trackingCode}</span>}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                                  <span className="font-black text-slate-800 text-xs font-mono">
+                                    {formatCurrency(tx.amount, currencyMode)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleMovePaymentToCell(tx)}
+                                    className="px-2 py-1 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors cursor-pointer"
+                                    title={`جابه‌جایی این سند به کارکرد ${salMonthName}`}
+                                  >
+                                    انتقال به این ماه
+                                  </button>
+                                  {onEditTransaction && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingCell(null);
+                                        onEditTransaction(tx);
+                                      }}
+                                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                      title="ویرایش کامل در فرم سند مالی"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (confirm('آیا از حذف این سند مالی اطمینان دارید؟')) {
+                                        if ((await onDeleteTransaction(tx.id)) === false) return;
+                                        setEditingCell(null);
+                                      }
+                                    }}
+                                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                    title="حذف این سند مالی"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* بخش ۲: ثبت / ویرایش مبلغ حقوق */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
