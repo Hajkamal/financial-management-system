@@ -643,18 +643,19 @@ export function useFinancialData({
     trackingCode?: string;
     salaryMonth?: PersianMonthNumber;
     salaryYear?: number;
+    year?: number;
   }) =>
     handleSaveTransaction({
       id: crypto.randomUUID(),
       type: "expense",
       category: "shareholder_payout",
       amount: p.amount,
-      year: selectedYear,
+      year: p.year || selectedYear,
       month: p.month,
       day: p.day || 1,
       dateString:
         p.dateString ||
-        `${selectedYear}/${String(p.month).padStart(2, "0")}/01`,
+        `${p.year || selectedYear}/${String(p.month).padStart(2, "0")}/01`,
       title: p.title,
       description: p.description,
       relatedMemberId: p.memberId,

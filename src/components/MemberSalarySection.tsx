@@ -1,31 +1,17 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { 
-  Briefcase, 
   Wallet, 
   Coins, 
   Plus, 
-  Calendar, 
   Search, 
-  Filter, 
   Trash2, 
-  CheckCircle2, 
-  UserCheck, 
-  ArrowUpRight,
-  TrendingUp,
   Table2,
   ListOrdered,
-  FileSpreadsheet,
-  BadgeAlert,
   Edit3,
   Check,
   X,
-  ExternalLink,
-  Clock,
   Receipt,
-  Sparkles,
-  Info,
-  CalendarDays,
-  ReceiptText
+  Info
 } from 'lucide-react';
 import { 
   CompanyMember, 
@@ -37,17 +23,21 @@ import {
 } from '../types';
 import { 
   formatCurrency, 
+  formatNumber,
   toPersianDigits, 
   PERSIAN_MONTHS,
-  isSalaryTransaction,
-  isMemberPayoutTransaction,
-  classifyPersonTransaction,
   getTxPaymentDate
 } from '../utils/formatters';
 import { getCurrentJalaliDateTime } from '../utils/jalali';
+import {
+  buildMemberAnnualSummary,
+  memberPayoutEntries,
+  resolveMemberPayout,
+} from '../utils/memberPayroll';
 import { AmountInput } from './AmountInput';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { PersonTarget } from './PersonPaymentHistoryModal';
+import { MemberPayrollMonthView } from './MemberPayrollMonthView';
 
 interface MemberSalarySectionProps {
   members: CompanyMember[];
@@ -66,6 +56,7 @@ interface MemberSalarySectionProps {
     trackingCode?: string;
     salaryMonth?: PersianMonthNumber;
     salaryYear?: number;
+    year?: number;
   }) => boolean | void | Promise<boolean | void>;
   onSaveTransaction?: (transaction: FinancialTransaction) => boolean | void | Promise<boolean | void>;
   onDeleteTransaction: (id: string) => boolean | void | Promise<boolean | void>;
@@ -97,24 +88,25 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
   onShowToast,
 }) => {
 
-  // Sub-view toggle: 'matrix' (monthly spreadsheet) vs 'ledger' (transaction list)
-  const [viewMode, setViewModeState] = useState<'matrix' | 'ledger'>(() => {
+  // سه نمای مستقل: پرداخت این ماه (عملیات ماهانه)، خلاصه سالانه (مرور)، دفتر پرداخت‌ها
+  type MemberSalaryTab = 'monthly' | 'annual' | 'ledger';
+  const [tab, setTabState] = useState<MemberSalaryTab>(() => {
     try {
-      const saved = localStorage.getItem('ayandeh_member_salary_viewmode');
-      if (saved === 'ledger' || saved === 'matrix') return saved;
+      const saved = localStorage.getItem('ayandeh_member_salary_tab');
+      if (saved === 'monthly' || saved === 'annual' || saved === 'ledger') return saved;
+      // مهاجرت از کلید قدیمی: ledger همان دفتر پرداخت‌ها بود
+      const legacy = localStorage.getItem('ayandeh_member_salary_viewmode');
+      if (legacy === 'ledger') return 'ledger';
     } catch {}
-    return 'matrix';
+    return 'monthly';
   });
 
-  const setViewMode = (mode: 'matrix' | 'ledger') => {
-    setViewModeState(mode);
+  const setTab = (next: MemberSalaryTab) => {
+    setTabState(next);
     try {
-      localStorage.setItem('ayandeh_member_salary_viewmode', mode);
+      localStorage.setItem('ayandeh_member_salary_tab', next);
     } catch {}
   };
-
-  // مبنای دسته‌بندی ماه‌ها در ماتریس: پیش‌فرض بر اساس تاریخ ثبت و پرداخت سند (دقیقاً طبق تاریخ سندهای پرداختی)
-  const [monthBasis, setMonthBasis] = useState<'payment_date' | 'work_month'>('payment_date');
 
   // مودال جزئیات و اسناد پرداختی سلول کلیک‌شده
   const [activeCellModal, setActiveCellModal] = useState<ActiveCellModalState | null>(null);
@@ -128,19 +120,6 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
   const [cellFormDesc, setCellFormDesc] = useState<string>('');
   const [editingTxIdInCell, setEditingTxIdInCell] = useState<string | null>(null);
 
-  // Modal State برای ثبت سند مستقل (دکمه هدر)
-  const [isStandaloneModalOpen, setIsStandaloneModalOpen] = useState(false);
-  const [standaloneMemberId, setStandaloneMemberId] = useState<string>('');
-  const [standalonePayoutType, setStandalonePayoutType] = useState<MemberPayoutType>('salary');
-  const [standaloneAmount, setStandaloneAmount] = useState<string>('');
-  const [standaloneMonth, setStandaloneMonth] = useState<PersianMonthNumber>(1);
-  const [standaloneDay, setStandaloneDay] = useState<number>(28);
-  const [standaloneSalaryMonth, setStandaloneSalaryMonth] = useState<PersianMonthNumber>(1);
-  const [standaloneSalaryYear, setStandaloneSalaryYear] = useState<number>(selectedYear);
-  const [standaloneTrackingCode, setStandaloneTrackingCode] = useState<string>('');
-  const [standaloneTitle, setStandaloneTitle] = useState<string>('');
-  const [standaloneDescription, setStandaloneDescription] = useState<string>('');
-
   // Ledger Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMember, setFilterMember] = useState<string>('all');
@@ -150,124 +129,36 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
   // Deletion Modal
   const [deletingTx, setDeletingTx] = useState<{ id: string; title: string } | null>(null);
 
-  /**
-   * تابع کمکی جامع برای شناسایی عضو متناظر و نوع پرداخت (حقوق یا برداشت) برای هر تراکنش مالی
-   * در ماتریس و لیست حقوق اعضا، به هیچ وجه خریدهای شرکتی یا تنخواه قرار نمی‌گیرند.
-   */
-  const getTxMemberInfo = useCallback((t: FinancialTransaction) => {
-    if (t.type !== 'expense') return null;
+  const getTxMemberInfo = useCallback(
+    (t: FinancialTransaction) => resolveMemberPayout(t, members),
+    [members],
+  );
 
-    // ۱. بررسی قطعی: سند باید پرداخت حقوق کارکرد یا برداشت سود عضو باشد و نباید خرید شرکتی باشد
-    if (!isMemberPayoutTransaction(t)) {
-      return null;
-    }
+  // همهٔ اسناد پرداختی سال با ماه مرجع: حقوق = ماه کارکرد، برداشت = تاریخ پرداخت
+  const memberEntries = useMemo(
+    () => memberPayoutEntries(transactions, members, selectedYear),
+    [transactions, members, selectedYear],
+  );
 
-    let member = members.find(m => m.id === t.relatedMemberId || (t as any).memberId === m.id);
-    if (!member && t.recipientOrPayer) {
-      const rec = t.recipientOrPayer.trim().toLowerCase();
-      member = members.find(m => {
-        const name = m.name.trim().toLowerCase();
-        return name === rec || rec.includes(name) || name.includes(rec);
-      });
-    }
-    if (!member && t.title) {
-      const tit = t.title.toLowerCase();
-      member = members.find(m => tit.includes(m.name.trim().toLowerCase()));
-    }
-
-    // اگر سند مربوط به هیچ عضوی نیست و دسته‌بندی هم برداشت سهامدار نیست
-    if (!member && t.category !== 'shareholder_payout') {
-      return null;
-    }
-
-    const titleLower = (t.title || '').toLowerCase();
-    const descLower = (t.description || '').toLowerCase();
-
-    // تعیین دقیق نوع پرداخت: حقوق کارکرد یا برداشت سود
-    const isExplicitSalary = 
-      isSalaryTransaction(t) ||
-      t.memberPayoutType === 'salary' || 
-      t.category === 'salary' || 
-      titleLower.includes('حقوق') || 
-      titleLower.includes('دستمزد') || 
-      descLower.includes('حقوق');
-
-    const isExplicitWithdrawal = 
-      t.memberPayoutType === 'profit_withdrawal' ||
-      titleLower.includes('برداشت') ||
-      titleLower.includes('سود سهام') ||
-      titleLower.includes('سود شرکا') ||
-      titleLower.includes('سهم شریک');
-
-    let payoutType: MemberPayoutType = 'profit_withdrawal';
-    if (isExplicitSalary) {
-      payoutType = 'salary';
-    } else if (isExplicitWithdrawal) {
-      payoutType = 'profit_withdrawal';
-    } else if (member?.isWorkingForce) {
-      payoutType = 'salary';
-    } else {
-      payoutType = 'profit_withdrawal';
-    }
-
-    return {
-      member,
-      memberId: member ? member.id : (t.relatedMemberId || ''),
-      memberName: member ? member.name : (t.recipientOrPayer || 'عضو شرکت'),
-      payoutType
-    };
-  }, [members]);
-
-  /**
-   * فیلتر تمامی اسناد پرداختی و حقوق اعضای شرکت در سال مالی انتخابی
-   * مبنای تاریخ: به صورت پیش‌فرض طبق تاریخ واقعی پرداخت سند (تاریخ سندهای پرداختی)
-   */
-  const memberTransactions = useMemo(() => {
-    return transactions.filter(t => {
-      const info = getTxMemberInfo(t);
-      if (!info) return false;
-
-      const payDate = getTxPaymentDate(t);
-      const targetYear = monthBasis === 'payment_date' ? payDate.year : (t.salaryYear || payDate.year);
-      
-      return targetYear === selectedYear;
-    });
-  }, [transactions, selectedYear, getTxMemberInfo, monthBasis]);
+  const memberTransactions = useMemo(
+    () => memberEntries.map((entry) => entry.transaction),
+    [memberEntries],
+  );
 
   // محاسبات آمار کل پرداختی‌ها به اعضا
-  const totalSalaryPayout = useMemo(() => {
-    return memberTransactions
-      .filter(t => getTxMemberInfo(t)?.payoutType === 'salary')
-      .reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
-  }, [memberTransactions, getTxMemberInfo]);
+  const annualSummary = useMemo(
+    () => buildMemberAnnualSummary(members, memberEntries, selectedYear),
+    [members, memberEntries, selectedYear],
+  );
 
-  const totalProfitWithdrawal = useMemo(() => {
-    return memberTransactions
-      .filter(t => getTxMemberInfo(t)?.payoutType === 'profit_withdrawal')
-      .reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
-  }, [memberTransactions, getTxMemberInfo]);
-
-  const totalAllMemberPayouts = totalSalaryPayout + totalProfitWithdrawal;
-
-  const activeWorkingMembers = useMemo(() => {
-    return members.filter(m => m.isWorkingForce);
-  }, [members]);
-
-  /**
-   * اسناد پرداختی متناظر با یک سلول خاص در ماتریس
-   */
-  const getCellTransactions = useCallback((memberId: string, monthNum: PersianMonthNumber) => {
-    return memberTransactions.filter(t => {
-      const info = getTxMemberInfo(t);
-      if (!info || info.memberId !== memberId) return false;
-
-      const payDate = getTxPaymentDate(t);
-      const targetMonth = monthBasis === 'payment_date' ? payDate.month : (t.salaryMonth || payDate.month);
-      const targetYear = monthBasis === 'payment_date' ? payDate.year : (t.salaryYear || payDate.year);
-
-      return targetMonth === monthNum && targetYear === selectedYear;
-    });
-  }, [memberTransactions, getTxMemberInfo, monthBasis, selectedYear]);
+  // اسناد یک ماه مشخص: حقوق بر اساس ماه کارکرد و برداشت بر اساس تاریخ پرداخت
+  const getCellTransactions = useCallback(
+    (memberId: string, monthNum: PersianMonthNumber) =>
+      memberEntries
+        .filter((entry) => entry.memberId === memberId && entry.month === monthNum)
+        .map((entry) => entry.transaction),
+    [memberEntries],
+  );
 
   /**
    * کلیک روی یک سلول در ماتریس: باز شدن مودال ریز اسناد و ورود دستی
@@ -350,16 +241,19 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
     const finalTracking = cellFormTracking.trim() || `MEM-${selectedYear}${monthStr}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     if (editingTxIdInCell) {
-      // ویرایش سند موجود
+      // ویرایش سند موجود: تاریخ واقعی پرداخت حفظ می‌شود تا با ویرایش کارکرد جابه‌جا نشود
       const existingTx = transactions.find(t => t.id === editingTxIdInCell);
       if (existingTx && onSaveTransaction) {
+        const payDate = getTxPaymentDate(existingTx);
+        const payMonthStr = payDate.month < 10 ? '0' + payDate.month : payDate.month.toString();
+        const editDateString = `${payDate.year}/${payMonthStr}/${dayStr}`;
         const updatedTx: FinancialTransaction = {
           ...existingTx,
           amount: numAmount,
-          year: selectedYear,
-          month: month,
+          year: payDate.year,
+          month: payDate.month,
           day: cellFormDay,
-          dateString: finalDateString,
+          dateString: editDateString,
           title: finalTitle,
           description: cellFormDesc.trim() || undefined,
           trackingCode: finalTracking,
@@ -376,7 +270,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
         handleCancelEditTxInCell();
       }
     } else {
-      // ایجاد سند پرداختی جدید در دفتر هزینه‌ها و درج خودکار در ماتریس
+      // ایجاد سند پرداختی جدید در دفتر هزینه‌ها و درج خودکار در دفتر پرداخت‌ها
       if ((await onAddMemberPayoutTransaction({
         memberId: member.id,
         type: cellFormType,
@@ -392,7 +286,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
       })) === false) return;
 
       if (onShowToast) {
-        onShowToast(`سند پرداختی به ${member.name} به مبلغ ${formatCurrency(numAmount, currencyMode)} ثبت و در ماتریس درج شد.`);
+        onShowToast(`سند پرداختی به ${member.name} به مبلغ ${formatCurrency(numAmount, currencyMode)} ثبت و در دفتر پرداخت‌ها درج شد.`);
       }
 
       // ریست فرم ورود جدید
@@ -402,107 +296,36 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
     }
   };
 
-  /**
-   * باز کردن مودال ثبت سند مستقل (هدر)
-   */
-  const handleOpenStandaloneAddModal = (defaultMemberId?: string, defaultMonth?: PersianMonthNumber) => {
-    const memId = defaultMemberId || (members[0]?.id || '');
-    const mem = members.find(m => m.id === memId);
-    const targetSalMonth = defaultMonth || 1;
-    
-    setStandaloneMemberId(memId);
-    setStandalonePayoutType(mem?.isWorkingForce ? 'salary' : 'profit_withdrawal');
-    setStandaloneAmount('');
-    setStandaloneMonth(targetSalMonth);
-    setStandaloneDay(28);
-    setStandaloneSalaryMonth(targetSalMonth);
-    setStandaloneSalaryYear(selectedYear);
-    setStandaloneTrackingCode('');
-    setStandaloneTitle('');
-    setStandaloneDescription('');
-    setIsStandaloneModalOpen(true);
-  };
-
-  const handleStandaloneMemberChange = (id: string) => {
-    setStandaloneMemberId(id);
-    const mem = members.find(m => m.id === id);
-    if (mem?.isWorkingForce) {
-      setStandalonePayoutType('salary');
-    } else {
-      setStandalonePayoutType('profit_withdrawal');
-    }
-  };
-
-  const handleStandaloneFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const numAmount = Number(standaloneAmount) || 0;
-    if (numAmount <= 0 || !standaloneMemberId) return;
-
-    const mem = members.find(m => m.id === standaloneMemberId);
-    const payMonthObj = PERSIAN_MONTHS.find(m => m.num === standaloneMonth);
-    const salMonthObj = PERSIAN_MONTHS.find(m => m.num === standaloneSalaryMonth);
-    const payMonthName = payMonthObj ? payMonthObj.name : standaloneMonth;
-    const salMonthName = salMonthObj ? salMonthObj.name : standaloneSalaryMonth;
-    const typeLabel = standalonePayoutType === 'salary' ? 'واریز حقوق نیروی فعال' : 'برداشت عضو / سود';
-
-    const defaultTitle = standalonePayoutType === 'salary'
-      ? (standaloneSalaryMonth !== standaloneMonth 
-          ? `${typeLabel} - ${mem?.name || 'عضو شرکت'} (کارکرد ${salMonthName} - پرداخت در ${payMonthName})`
-          : `${typeLabel} - ${mem?.name || 'عضو شرکت'} (ماه ${salMonthName})`)
-      : `برداشت عضو / سود - ${mem?.name || 'عضو شرکت'} (ماه ${payMonthName})`;
-
-    const finalTitle = standaloneTitle.trim() || defaultTitle;
-    const finalDateString = `${selectedYear}/${standaloneMonth < 10 ? '0' + standaloneMonth : standaloneMonth}/${standaloneDay < 10 ? '0' + standaloneDay : standaloneDay}`;
-
-    if ((await onAddMemberPayoutTransaction({
-      memberId: standaloneMemberId,
-      type: standalonePayoutType,
-      amount: numAmount,
-      month: standaloneMonth,
-      day: standaloneDay,
-      dateString: finalDateString,
-      title: finalTitle,
-      description: standaloneDescription.trim() || undefined,
-      trackingCode: standaloneTrackingCode.trim() || `MEM-${Date.now().toString().slice(-6)}`,
-      salaryMonth: standalonePayoutType === 'salary' ? standaloneSalaryMonth : undefined,
-      salaryYear: standalonePayoutType === 'salary' ? standaloneSalaryYear : undefined,
-    })) === false) return;
-
-    setIsStandaloneModalOpen(false);
-  };
-
-  // Filtered ledger transactions
+  // دفتر پرداخت‌ها: جستجو و فیلتر بر اساس ماه مرجع هر سند
   const filteredTransactions = useMemo(() => {
-    return memberTransactions.filter(t => {
-      const info = getTxMemberInfo(t);
-      if (filterMember !== 'all' && info?.memberId !== filterMember) {
-        return false;
-      }
-      if (filterType !== 'all' && info?.payoutType !== filterType) {
-        return false;
-      }
-      if (filterMonth !== 'all') {
-        const payDate = getTxPaymentDate(t);
-        const m = monthBasis === 'payment_date' ? payDate.month : (t.salaryMonth || payDate.month);
-        if (m.toString() !== filterMonth) {
-          return false;
+    return memberEntries
+      .filter((entry) => {
+        if (filterMember !== 'all' && entry.memberId !== filterMember) return false;
+        if (filterType !== 'all' && entry.payoutType !== filterType) return false;
+        if (filterMonth !== 'all' && entry.month.toString() !== filterMonth) return false;
+        if (searchQuery.trim()) {
+          const query = searchQuery.toLowerCase().trim();
+          const tx = entry.transaction;
+          const title = (tx.title || '').toLowerCase();
+          const desc = (tx.description || '').toLowerCase();
+          const tracking = (tx.trackingCode || '').toLowerCase();
+          const memberName = entry.memberName.toLowerCase();
+          return (
+            title.includes(query) ||
+            desc.includes(query) ||
+            tracking.includes(query) ||
+            memberName.includes(query)
+          );
         }
-      }
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        const title = (t.title || '').toLowerCase();
-        const desc = (t.description || '').toLowerCase();
-        const trk = (t.trackingCode || '').toLowerCase();
-        const memName = (info?.memberName || '').toLowerCase();
-        return title.includes(query) || desc.includes(query) || trk.includes(query) || memName.includes(query);
-      }
-      return true;
-    }).sort((a, b) => {
-      const dateA = a.dateString || `${a.year}/${String(a.month).padStart(2, '0')}/${String(a.day || 1).padStart(2, '0')}`;
-      const dateB = b.dateString || `${b.year}/${String(b.month).padStart(2, '0')}/${String(b.day || 1).padStart(2, '0')}`;
-      return dateB.localeCompare(dateA);
-    });
-  }, [memberTransactions, getTxMemberInfo, filterMember, filterType, filterMonth, searchQuery, monthBasis]);
+        return true;
+      })
+      .map((entry) => entry.transaction)
+      .sort((a, b) => {
+        const dateA = a.dateString || `${a.year}/${String(a.month).padStart(2, '0')}/${String(a.day || 1).padStart(2, '0')}`;
+        const dateB = b.dateString || `${b.year}/${String(b.month).padStart(2, '0')}/${String(b.day || 1).padStart(2, '0')}`;
+        return dateB.localeCompare(dateA);
+      });
+  }, [memberEntries, filterMember, filterType, filterMonth, searchQuery]);
 
   // اسناد موجود در سلول فعال
   const activeCellTransactions = useMemo(() => {
@@ -535,45 +358,62 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
   return (
     <div className="space-y-6">
 
-      {/* TOP HEADER & CONTROLS */}
-      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-end gap-4">
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Sub-view Mode Switcher: Matrix vs Ledger */}
-          <div className="flex items-center p-1 bg-slate-100 rounded-xl text-xs font-semibold text-slate-600">
-            <button
-              onClick={() => setViewMode('matrix')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                viewMode === 'matrix' 
-                  ? 'bg-white text-indigo-900 font-bold shadow-xs' 
-                  : 'hover:text-slate-900'
-              }`}
-            >
-              <Table2 className="w-3.5 h-3.5" />
-              <span>ماتریس ماهانه</span>
-            </button>
-            <button
-              onClick={() => setViewMode('ledger')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                viewMode === 'ledger' 
-                  ? 'bg-white text-indigo-900 font-bold shadow-xs' 
-                  : 'hover:text-slate-900'
-              }`}
-            >
-              <ListOrdered className="w-3.5 h-3.5" />
-              <span>دفتر کل اسناد ({toPersianDigits(memberTransactions.length)})</span>
-            </button>
-          </div>
+      {/* ناوبری سه‌گانه بخش حقوق اعضا */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setTab('monthly')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+              tab === 'monthly'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50/70'
+            }`}
+          >
+            <Wallet className="w-4 h-4" />
+            <span>پرداخت این ماه</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+              tab === 'monthly' ? 'bg-emerald-700 text-emerald-50' : 'bg-emerald-100 text-emerald-800'
+            }`}>
+              حقوق و برداشت
+            </span>
+          </button>
 
-          {canEdit && (
-            <button
-              onClick={() => handleOpenStandaloneAddModal()}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>ثبت پرداختی جدید</span>
-            </button>
-          )}
+          <button
+            onClick={() => setTab('annual')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+              tab === 'annual'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Table2 className="w-4 h-4" />
+            <span>خلاصه سالانه</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+              tab === 'annual' ? 'bg-slate-800 text-slate-200' : 'bg-slate-200 text-slate-700'
+            }`}>
+              ۱۲ ماه
+            </span>
+          </button>
 
+          <button
+            onClick={() => setTab('ledger')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+              tab === 'ledger'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/60'
+            }`}
+          >
+            <ListOrdered className="w-4 h-4" />
+            <span>دفتر پرداخت‌ها</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+              tab === 'ledger' ? 'bg-indigo-700 text-indigo-100' : 'bg-indigo-100 text-indigo-800'
+            }`}>
+              {toPersianDigits(memberTransactions.length)}
+            </span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
           {onNavigateToMembers && (
             <button
               onClick={onNavigateToMembers}
@@ -582,348 +422,262 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
               مدیریت اعضا و سهام 👥
             </button>
           )}
+          <span className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400">
+            <span>سال مالی</span>
+            <strong className="text-slate-700 font-mono">{selectedYear}</strong>
+          </span>
         </div>
       </div>
 
-      {/* SUMMARY STAT CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        
-        {/* 1. Total All Member Payouts */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span>کل پرداختی‌های شرکت به اعضا</span>
-            <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
-              <Coins className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-indigo-950 mb-1 font-mono">
-            {formatCurrency(totalAllMemberPayouts, currencyMode)}
-          </div>
-          <span className="text-[11px] text-slate-400">
-            مجموع حقوق کارکرد + برداشت سود در سال {selectedYear}
-          </span>
-        </div>
+      {tab === 'monthly' && (
+        <MemberPayrollMonthView
+          members={members}
+          transactions={transactions}
+          selectedYear={selectedYear}
+          currencyMode={currencyMode}
+          canEdit={canEdit}
+          currentUser={currentUser}
+          onAddMemberPayoutTransaction={onAddMemberPayoutTransaction}
+          onOpenDetails={(member, monthNum) =>
+            handleCellClick(
+              member,
+              PERSIAN_MONTHS.find((item) => item.num === monthNum) || PERSIAN_MONTHS[0],
+            )
+          }
+          onNavigateToMembers={onNavigateToMembers}
+          onShowToast={onShowToast}
+        />
+      )}
 
-        {/* 2. Total Working Salaries */}
-        <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span>حقوق ماهانه نیروهای فعال</span>
-            <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
-              <Wallet className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-emerald-600 mb-1 font-mono">
-            {formatCurrency(totalSalaryPayout, currencyMode)}
-          </div>
-          <span className="text-[11px] text-emerald-700 font-medium">
-            حقوق کارکرد شرکای اجرایی
-          </span>
-        </div>
-
-        {/* 3. Total Profit Withdrawals */}
-        <div className="bg-white p-4 rounded-2xl border border-amber-100 shadow-xs">
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span>برداشت سود / تنخواه اعضا</span>
-            <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-amber-600 mb-1 font-mono">
-            {formatCurrency(totalProfitWithdrawal, currencyMode)}
-          </div>
-          <span className="text-[11px] text-amber-700 font-medium">
-            برداشت علی‌الحساب سود سهامداران
-          </span>
-        </div>
-
-        {/* 4. Active Working Forces Count */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span>نیروهای فعال عضو شرکت</span>
-            <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
-              <UserCheck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-slate-900 mb-1">
-            {toPersianDigits(activeWorkingMembers.length)} از {toPersianDigits(members.length)} عضو
-          </div>
-          <div className="text-[11px] text-slate-500 flex items-center gap-1 truncate">
-            {activeWorkingMembers.map(m => m.name).join('، ')}
-          </div>
-        </div>
-      </div>
-
-      {/* VIEW MODE: MATRIX SPREADSHEET */}
-      {viewMode === 'matrix' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          
-          {/* Matrix Header Toolbar */}
-          <div className="p-4 border-b border-slate-100 bg-slate-50/70 flex flex-col md:flex-row md:items-center justify-between gap-3">
+      {tab === 'annual' && (
+        <div className="space-y-5">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm text-slate-900">
-                  ماتریس ماهانه دریافتی‌های اعضای شرکت (سال {selectedYear})
-                </h3>
-                <span className="text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
-                  اتصال به اسناد مالی
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                روی هر سلول کلیک کنید تا <strong>سندهای پرداخت تشکیل‌دهنده آن عدد</strong> نمایش داده شوند یا مبلغ را دستی وارد نمایید.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Month Basis Toggle: Payment Date vs Work Month */}
-              <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 text-xs">
-                <span className="text-[11px] text-slate-500 px-1 font-medium">مبنای ماه‌ها:</span>
-                <button
-                  type="button"
-                  onClick={() => setMonthBasis('payment_date')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    monthBasis === 'payment_date'
-                      ? 'bg-indigo-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="ماتریس بر اساس تاریخ سندهای پرداختی ثبت‌شده دسته‌بندی می‌شود"
-                >
-                  📅 تاریخ پرداخت سند (پیش‌فرض)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMonthBasis('work_month')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    monthBasis === 'work_month'
-                      ? 'bg-indigo-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="ماتریس بر اساس ماه کارکرد حقوق دسته‌بندی می‌شود"
-                >
-                  💼 ماه کارکرد حقوق
-                </button>
+                <div className="p-2 bg-slate-900 text-white rounded-xl">
+                  <Table2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-slate-900">
+                    خلاصه سالانه پرداخت‌های اعضا — سال {selectedYear}
+                  </h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    فقط برای مرور و بررسی؛ ثبت و اصلاح هر ماه از تب «پرداخت این ماه» انجام
+                    می‌شود.
+                  </p>
+                </div>
               </div>
 
-              {/* Legends */}
-              <div className="hidden sm:flex items-center gap-3 text-xs bg-white px-2.5 py-1.5 rounded-xl border border-slate-200">
-                <span className="flex items-center gap-1.5 text-indigo-700 font-medium">
-                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block"></span>
-                  حقوق ماهانه
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-[11px] text-slate-500">
+                <span>
+                  جمع کل سال:{' '}
+                  <strong className="text-slate-800 font-mono">
+                    {formatCurrency(annualSummary.grandTotal, currencyMode)}
+                  </strong>
                 </span>
-                <span className="flex items-center gap-1.5 text-amber-700 font-medium">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
-                  برداشت سود / تنخواه
+                <span className="text-emerald-700">
+                  حقوق:{' '}
+                  <strong className="font-mono">
+                    {formatCurrency(annualSummary.salaryTotal, currencyMode)}
+                  </strong>
+                </span>
+                <span className="text-amber-700">
+                  برداشت:{' '}
+                  <strong className="font-mono">
+                    {formatCurrency(annualSummary.withdrawalTotal, currencyMode)}
+                  </strong>
+                </span>
+                <span>
+                  اعضا: <strong className="text-slate-700">{toPersianDigits(members.length)}</strong>
                 </span>
               </div>
             </div>
+
+            {canEdit && (
+              <button
+                onClick={() => setTab('monthly')}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
+              >
+                <Wallet className="w-4 h-4" />
+                <span>رفتن به پرداخت این ماه</span>
+              </button>
+            )}
           </div>
 
-          {/* Matrix Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-right border-collapse">
-              <thead>
-                <tr className="bg-slate-900 text-white font-bold border-b border-slate-800">
-                  <th className="p-3.5 w-28 text-center border-l border-slate-800">ماه / اعضا</th>
-                  {members.map(mem => (
-                    <th 
-                      key={mem.id} 
-                      onClick={() => {
-                        if (onOpenPersonHistory) {
-                          onOpenPersonHistory({
-                            id: mem.id,
-                            name: mem.name,
-                            type: 'member',
-                            role: mem.role,
-                            sharePercentage: mem.sharePercentage,
-                            phone: mem.phone,
-                            nationalId: mem.nationalId,
-                            notes: mem.notes,
-                          });
-                        }
-                      }}
-                      className="p-3.5 text-center border-l border-slate-800 min-w-[170px] cursor-pointer group hover:bg-slate-800 transition-colors"
-                      title={`کلیک برای مشاهده کامل تاریخچه دریافتی و پرداختی‌های ${mem.name}`}
-                    >
-                      <div className="flex flex-col items-center">
-                        <span className="font-extrabold text-sm text-white group-hover:text-indigo-300 transition-colors underline decoration-dotted decoration-slate-600 underline-offset-4">
-                          {mem.name}
-                        </span>
-                        <div className="flex items-center gap-1 mt-0.5">
-                          {mem.isWorkingForce ? (
-                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-semibold border border-emerald-500/30">
-                              نیروی فعال ({toPersianDigits(mem.sharePercentage)}٪)
-                            </span>
-                          ) : (
-                            <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-normal">
-                              سهامدار ({toPersianDigits(mem.sharePercentage)}٪)
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[9px] text-indigo-300 mt-1 opacity-0 group-hover:opacity-100 transition-opacity bg-indigo-950/80 px-2 py-0.5 rounded">
-                          مشاهده تاریخچه مالی 🔍
-                        </span>
-                      </div>
-                    </th>
-                  ))}
+          {members.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-dashed border-slate-300 shadow-xs">
+              <Table2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <h3 className="font-bold text-slate-800 text-base mb-1">
+                هیچ عضوی برای محاسبه تعریف نشده است
+              </h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto mb-4 leading-relaxed">
+                ابتدا اعضا و نیروهای فعال شرکت را تعریف کنید تا خلاصه ۱۲ماهه پرداخت‌ها فعال
+                شود.
+              </p>
+              {onNavigateToMembers && (
+                <button
+                  onClick={onNavigateToMembers}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>انتقال به بخش اعضا</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+              <div className="p-3.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Table2 className="w-4 h-4 text-slate-400" />
+                  ماتریس ۱۲ماهه — مبالغ به {currencyMode === 'toman' ? 'تومان' : 'ریال'}
+                </span>
+                <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                    حقوق (ماه کارکرد)
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                    برداشت (تاریخ پرداخت)
+                  </span>
+                </div>
+              </div>
 
-                  <th className="p-3.5 w-36 text-center bg-slate-950 font-extrabold text-indigo-300">
-                    مجموع کل ماه
-                  </th>
-                </tr>
-              </thead>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[11px] text-right border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                      <th className="p-2.5 text-right sticky right-0 bg-slate-50 z-20 min-w-[150px] border-l border-slate-200">
+                        عضو شرکت
+                      </th>
+                      {PERSIAN_MONTHS.map((monthItem) => (
+                        <th
+                          key={monthItem.num}
+                          className="p-2 text-center min-w-[92px] border-l border-slate-200 font-bold"
+                        >
+                          {monthItem.name}
+                        </th>
+                      ))}
+                      <th className="p-2.5 text-center bg-slate-100 min-w-[110px] font-extrabold">
+                        جمع سال
+                      </th>
+                    </tr>
+                  </thead>
 
-              <tbody>
-                {PERSIAN_MONTHS.map((monthItem, idx) => {
-                  let monthTotal = 0;
-                  const isEven = idx % 2 === 0;
-
-                  return (
-                    <tr 
-                      key={monthItem.num} 
-                      className={`border-b border-slate-200 hover:bg-indigo-50/20 transition-colors ${
-                        isEven ? 'bg-white' : 'bg-slate-50/40'
-                      }`}
-                    >
-                      {/* Month Column */}
-                      <td className="p-3 font-bold text-slate-800 text-center border-l border-slate-200 bg-slate-50/80">
-                        {monthItem.name}
-                      </td>
-
-                      {/* Member Cells */}
-                      {members.map(mem => {
-                        const cellTxs = getCellTransactions(mem.id, monthItem.num);
-
-                        let salarySum = 0;
-                        let withdrawalSum = 0;
-
-                        cellTxs.forEach(t => {
-                          const info = getTxMemberInfo(t);
-                          const amt = t.type === 'expense' ? t.amount : -t.amount;
-                          if (info?.payoutType === 'salary') {
-                            salarySum += amt;
-                          } else {
-                            withdrawalSum += amt;
-                          }
-                        });
-
-                        const totalCell = salarySum + withdrawalSum;
-                        monthTotal += totalCell;
-
-                        return (
-                          <td 
-                            key={mem.id} 
-                            onClick={() => handleCellClick(mem, monthItem)}
-                            className="p-2.5 text-center border-l border-slate-200 cursor-pointer hover:bg-indigo-50/60 hover:ring-2 hover:ring-indigo-500 hover:ring-inset transition-all group"
-                            title={`مشاهده سندهای پرداختی ${mem.name} در ماه ${monthItem.name} یا ورود دستی مبلغ`}
+                  <tbody>
+                    {annualSummary.rows.map((row) => (
+                      <tr
+                        key={row.member.id}
+                        className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors"
+                      >
+                        <td className="p-2.5 sticky right-0 bg-white z-10 border-l border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onOpenPersonHistory) {
+                                onOpenPersonHistory({
+                                  id: row.member.id,
+                                  name: row.member.name,
+                                  type: 'member',
+                                  role: row.member.role,
+                                  sharePercentage: row.member.sharePercentage,
+                                  phone: row.member.phone,
+                                  nationalId: row.member.nationalId,
+                                  notes: row.member.notes,
+                                });
+                              }
+                            }}
+                            className="text-right cursor-pointer group"
+                            title={`مشاهده تاریخچه مالی ${row.member.name}`}
                           >
-                            {totalCell === 0 ? (
-                              <div className="flex items-center justify-center py-1">
-                                <span className="text-slate-300 text-[11px] group-hover:hidden">۰</span>
-                                <span className="hidden group-hover:flex items-center gap-1 text-[10px] text-indigo-700 font-bold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg shadow-2xs">
-                                  <Plus className="w-3 h-3" />
-                                  <span>ثبت سند</span>
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col items-center justify-center gap-1">
-                                {salarySum > 0 && (
-                                  <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 rounded-md">
-                                    حقوق: {formatCurrency(salarySum, currencyMode)}
-                                  </span>
-                                )}
-                                {withdrawalSum > 0 && (
-                                  <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200/70 px-1.5 py-0.5 rounded-md">
-                                    برداشت: {formatCurrency(withdrawalSum, currencyMode)}
-                                  </span>
-                                )}
-                                {salarySum > 0 && withdrawalSum > 0 && (
-                                  <span className="text-[9px] text-slate-500 font-black">
-                                    جمع: {formatCurrency(totalCell, currencyMode)}
-                                  </span>
-                                )}
-                                <span className="text-[8px] text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 font-bold">
-                                  <span>مشاهده سندها ({toPersianDigits(cellTxs.length)})</span>
-                                </span>
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
+                            <span className="block font-extrabold text-slate-900 group-hover:text-indigo-700 group-hover:underline">
+                              {row.member.name}
+                            </span>
+                            <span className="block text-[9px] text-slate-500 font-normal mt-0.5">
+                              {row.member.role}
+                            </span>
+                          </button>
+                        </td>
 
-                      {/* Month Total Column */}
-                      <td className="p-3 text-center font-extrabold text-slate-900 bg-indigo-50/40 border-l border-slate-200 font-mono">
-                        {formatCurrency(monthTotal, currencyMode)}
+                        {row.months.map((cell, index) => {
+                          const monthItem = PERSIAN_MONTHS[index];
+                          return (
+                            <td
+                              key={monthItem.num}
+                              onClick={() => handleCellClick(row.member, monthItem)}
+                              className={`p-2 text-center border-l border-slate-100 cursor-pointer transition-colors hover:bg-indigo-50/50 ${
+                                cell.total > 0 ? 'bg-slate-50/40' : ''
+                              }`}
+                              title="برای دیدن ریز اسناد و ثبت/ویرایش کلیک کنید"
+                            >
+                              {cell.total === 0 ? (
+                                <span className="text-slate-300">—</span>
+                              ) : (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  {cell.salary > 0 && (
+                                    <span className="font-mono font-bold text-emerald-700">
+                                      {formatNumber(cell.salary)}
+                                    </span>
+                                  )}
+                                  {cell.withdrawal > 0 && (
+                                    <span className="font-mono font-bold text-amber-700">
+                                      {formatNumber(cell.withdrawal)}
+                                    </span>
+                                  )}
+                                  {cell.salary > 0 && cell.withdrawal > 0 && (
+                                    <span className="text-[9px] text-slate-500">
+                                      جمع: {formatNumber(cell.total)}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+
+                        <td className="p-2.5 text-center font-mono font-black text-slate-900 bg-slate-50/70">
+                          {formatNumber(row.total)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+
+                  <tfoot>
+                    <tr className="bg-slate-900 text-white font-bold">
+                      <td className="p-2.5 text-right sticky right-0 bg-slate-900 z-20 border-l border-slate-700">
+                        جمع ماه
+                      </td>
+                      {annualSummary.monthTotals.map((cell, index) => (
+                        <td
+                          key={index}
+                          className="p-2 text-center font-mono text-[10px] text-slate-200 border-l border-slate-800"
+                        >
+                          {formatNumber(cell.total)}
+                        </td>
+                      ))}
+                      <td className="p-2.5 text-center font-mono text-emerald-300 bg-slate-950">
+                        {formatNumber(annualSummary.grandTotal)}
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
+                  </tfoot>
+                </table>
+              </div>
 
-              {/* Total Row */}
-              <tfoot>
-                <tr className="bg-slate-900 text-white font-extrabold border-t-2 border-slate-700">
-                  <td className="p-3.5 text-center border-l border-slate-800 text-slate-300">
-                    جمع کل سال {selectedYear}
-                  </td>
-                  {members.map(mem => {
-                    const memberAllTxs = memberTransactions.filter(t => {
-                      const info = getTxMemberInfo(t);
-                      return info?.memberId === mem.id;
-                    });
-
-                    const memSalSum = memberAllTxs
-                      .filter(t => getTxMemberInfo(t)?.payoutType === 'salary')
-                      .reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
-
-                    const memWdSum = memberAllTxs
-                      .filter(t => getTxMemberInfo(t)?.payoutType === 'profit_withdrawal')
-                      .reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : -t.amount), 0);
-
-                    const memGrandTotal = memSalSum + memWdSum;
-
-                    return (
-                      <td 
-                        key={mem.id} 
-                        className="p-3.5 text-center border-l border-slate-800 cursor-pointer hover:bg-slate-800 transition-colors"
-                        onClick={() => {
-                          if (onOpenPersonHistory) {
-                            onOpenPersonHistory({
-                              id: mem.id,
-                              name: mem.name,
-                              type: 'member',
-                              role: mem.role,
-                              sharePercentage: mem.sharePercentage,
-                              phone: mem.phone,
-                              nationalId: mem.nationalId,
-                              notes: mem.notes,
-                            });
-                          }
-                        }}
-                        title={`مشاهده گردش حساب و تاریخچه مالی ${mem.name}`}
-                      >
-                        <span className="block text-sm font-black text-emerald-300 font-mono tabular-nums">
-                          {formatCurrency(memGrandTotal, currencyMode)}
-                        </span>
-                        <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-300 mt-1 font-normal">
-                          <span>حقوق: {formatCurrency(memSalSum, currencyMode)}</span>
-                          <span>•</span>
-                          <span>برداشت: {formatCurrency(memWdSum, currencyMode)}</span>
-                        </div>
-                      </td>
-                    );
-                  })}
-
-                  <td className="p-3.5 text-center bg-slate-950 font-black text-amber-300 text-sm font-mono tabular-nums">
-                    {formatCurrency(totalAllMemberPayouts, currencyMode)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+              <div className="p-3 bg-slate-50/70 border-t border-slate-100 text-[10px] text-slate-500 leading-relaxed flex items-start gap-1.5">
+                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                <span>
+                  عدد سبز = حقوق همان ماه کارکرد، حتی اگر واریز در ماه بعد انجام شده باشد.
+                  عدد زرد = برداشت سود/تنخواه بر اساس تاریخ پرداخت. برای ثبت یا اصلاح، از تب
+                  «پرداخت این ماه» یا کلیک روی همان خانه استفاده کنید.
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* VIEW MODE: LEDGER VIEW (TRANSACTION LIST) */}
-      {viewMode === 'ledger' && (
+      {tab === 'ledger' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden space-y-4 p-5">
           {/* Filters Bar */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
@@ -1167,7 +921,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
             <div className="my-4 p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <span className="text-xs text-slate-300 block">مجموع مبلغ ثبت‌شده در این خانه ماتریس:</span>
+                  <span className="text-xs text-slate-300 block">مجموع پرداخت‌های این ماه:</span>
                   <div className="text-2xl font-black font-mono text-emerald-300 mt-0.5 tabular-nums">
                     {formatCurrency(activeCellTotals.total, currencyMode)}
                   </div>
@@ -1213,7 +967,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                     <Info className="w-5 h-5 text-slate-400 mx-auto" />
                     <p className="font-semibold text-slate-700">هنوز هیچ سند پرداختی در ماه {activeCellModal.monthName} برای این عضو ثبت نشده است.</p>
                     <p className="text-[11px] text-slate-400">
-                      مبلغ این خانه در حال حاضر صفر است. برای ثبت مبلغ در ماتریس، فرم زیر را پر کرده و دکمه ثبت سند را بزنید.
+                      مبلغ این ماه در حال حاضر صفر است. برای ثبت پرداخت، فرم زیر را پر کرده و دکمه ثبت سند را بزنید.
                     </p>
                   </div>
                 ) : (
@@ -1380,7 +1134,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                           value={cellFormAmount}
                           onChange={(val) => setCellFormAmount(val.toString())}
                           placeholder="مثلاً 30,000,000"
-                          helperText="این مبلغ به عنوان سند پرداختی رسمی در هزینه‌های شرکت ثبت و در ماتریس منعکس می‌شود."
+                          helperText="این مبلغ به عنوان سند پرداختی رسمی در هزینه‌های شرکت ثبت و در خلاصه سالانه منعکس می‌شود."
                         />
                       </div>
 
@@ -1453,7 +1207,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
                           className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
                         >
                           <Check className="w-4 h-4" />
-                          <span>{editingTxIdInCell ? 'ذخیره تغییرات سند' : 'ثبت سند و اعمال در ماتریس'}</span>
+                          <span>{editingTxIdInCell ? 'ذخیره تغییرات سند' : 'ثبت سند و اعمال در خلاصه سالانه'}</span>
                         </button>
                       </div>
                     </form>
@@ -1466,7 +1220,7 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
             {/* Footer */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between shrink-0">
               <span className="text-xs text-slate-500">
-                ماتریس دریافتی‌های ماهانه اعضای شرکت
+                جزئیات پرداخت‌های عضو
               </span>
               <button
                 type="button"
@@ -1484,208 +1238,12 @@ export const MemberSalarySection: React.FC<MemberSalarySectionProps> = ({
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* مودال ثبت سند مستقل (هدر) */}
-      {/* ======================================================== */}
-      {isStandaloneModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 max-h-[92vh] overflow-y-auto">
-            
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                  <Briefcase className="w-4 h-4" />
-                </div>
-                <h3 className="font-bold text-slate-900 text-sm">
-                  ثبت واریز حقوق نیروی فعال یا برداشت عضو
-                </h3>
-              </div>
-              <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md font-semibold">
-                سال {selectedYear}
-              </span>
-            </div>
-
-            <form onSubmit={handleStandaloneFormSubmit} className="space-y-4 py-4 text-xs">
-              
-              {/* Member Selection */}
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">انتخاب عضو / سهامدار شرکت *</label>
-                <select
-                  required
-                  value={standaloneMemberId}
-                  onChange={(e) => handleStandaloneMemberChange(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-xs font-semibold"
-                >
-                  {members.map(mem => (
-                    <option key={mem.id} value={mem.id}>
-                      {mem.name} — {mem.role} ({mem.isWorkingForce ? 'نیروی فعال شرکت' : 'سهامدار'}) [{toPersianDigits(mem.sharePercentage)}٪ سهام]
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Payout Type Radio selection */}
-              <div>
-                <label className="block font-semibold text-slate-700 mb-2">نوع پرداخت *</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <label 
-                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                      standalonePayoutType === 'salary'
-                        ? 'border-indigo-500 bg-indigo-50/70 text-indigo-950 ring-1 ring-indigo-500'
-                        : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="standalonePayoutType"
-                      value="salary"
-                      checked={standalonePayoutType === 'salary'}
-                      onChange={() => setStandalonePayoutType('salary')}
-                      className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <div>
-                      <span className="font-bold block text-xs">واریز حقوق نیروی فعال</span>
-                      <span className="text-[11px] text-slate-500 mt-0.5 block leading-tight">
-                        حقوق ماهانه کارکرد شریک اجرایی (مدیرعامل، مارکتینگ، فنی و...)
-                      </span>
-                    </div>
-                  </label>
-
-                  <label 
-                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                      standalonePayoutType === 'profit_withdrawal'
-                        ? 'border-amber-500 bg-amber-50/70 text-amber-950 ring-1 ring-amber-500'
-                        : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="standalonePayoutType"
-                      value="profit_withdrawal"
-                      checked={standalonePayoutType === 'profit_withdrawal'}
-                      onChange={() => setStandalonePayoutType('profit_withdrawal')}
-                      className="mt-0.5 text-amber-600 focus:ring-amber-500"
-                    />
-                    <div>
-                      <span className="font-bold block text-xs">برداشت عضو (سود/تنخواه)</span>
-                      <span className="text-[11px] text-slate-500 mt-0.5 block leading-tight">
-                        برداشت علی‌الحساب سهامدار یا تقسیم سود جدا از حقوق
-                      </span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Amount Input with AmountInput (3 digit commas, Toman verbal) */}
-              <div>
-                <AmountInput
-                  label="مبلغ پرداختی به ریال"
-                  required
-                  value={standaloneAmount}
-                  onChange={(val) => setStandaloneAmount(val.toString())}
-                  placeholder="مثلاً 250,000,000"
-                  helperText="مبلغ سند پس از تایید در جدول هزینه‌های شرکت و ماتریس اعضا درج می‌شود."
-                />
-              </div>
-
-              {/* Month & Day (Payment Date) */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">ماه تاریخ پرداخت / سند *</label>
-                  <select
-                    value={standaloneMonth}
-                    onChange={(e) => {
-                      const newM = Number(e.target.value) as PersianMonthNumber;
-                      setStandaloneMonth(newM);
-                      setStandaloneSalaryMonth(newM);
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-xs"
-                  >
-                    {PERSIAN_MONTHS.map(m => (
-                      <option key={m.num} value={m.num}>{m.name} ({m.season})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">روز ماه پرداخت (۱ تا ۳۱) *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="31"
-                    required
-                    value={standaloneDay}
-                    onChange={(e) => setStandaloneDay(Number(e.target.value) || 1)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-left font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Title & Tracking */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">عنوان سند (اختیاری)</label>
-                  <input
-                    type="text"
-                    value={standaloneTitle}
-                    onChange={(e) => setStandaloneTitle(e.target.value)}
-                    placeholder="مثال: حقوق تیرماه مهندس علیزاده"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">شماره فیش / پیگیری بانکی</label>
-                  <input
-                    type="text"
-                    value={standaloneTrackingCode}
-                    onChange={(e) => setStandaloneTrackingCode(e.target.value)}
-                    placeholder="مثلاً 140507-PAY-01"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono text-left"
-                  />
-                </div>
-              </div>
-
-              {/* Description / Notes */}
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">توضیحات و بابت</label>
-                <textarea
-                  rows={2}
-                  value={standaloneDescription}
-                  onChange={(e) => setStandaloneDescription(e.target.value)}
-                  placeholder="توضیحات مربوط به تسویه یا پاداش یا شماره شبا مقصد..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-
-              {/* Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsStandaloneModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                >
-                  انصراف
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-colors cursor-pointer"
-                >
-                  ثبت سند و اعمال در هزینه‌ها
-                </button>
-              </div>
-
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Delete Confirmation Modal */}
       <ConfirmDeleteModal
         isOpen={!!deletingTx}
         title="حذف سند دریافتی عضو"
         itemName={deletingTx?.title}
-        warningText="آیا از حذف این سند مالی اطمینان دارید؟ مبلغ این سند از سرفصل هزینه‌ها و ماتریس دریافتی عضو کسر خواهد شد."
+        warningText="آیا از حذف این سند مالی اطمینان دارید؟ مبلغ این سند از سرفصل هزینه‌ها و خلاصه پرداخت‌های عضو کسر خواهد شد."
         onConfirm={async () => {
           if (deletingTx) {
             if ((await onDeleteTransaction(deletingTx.id)) === false) return;
