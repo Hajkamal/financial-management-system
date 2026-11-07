@@ -38,6 +38,7 @@ import {
 import { 
   PERSIAN_MONTHS, 
   formatCurrency, 
+  formatNumber,
   toPersianDigits, 
   exportSalaryMatrixToExcel,
   isSalaryTransaction,
@@ -53,6 +54,7 @@ import {
 } from '../utils/salaryMatrix';
 import { AmountInput } from './AmountInput';
 import { MemberSalarySection } from './MemberSalarySection';
+import { PayrollMonthView } from './PayrollMonthView';
 import { PersonPaymentHistoryModal, PersonTarget } from './PersonPaymentHistoryModal';
 
 interface SalaryMatrixViewProps {
@@ -113,16 +115,20 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
   canExport = true,
   currentUser,
 }) => {
-  // Sub-tab: 'staff' (Employees Matrix) or 'members' (Company Members Salary & Withdrawals)
-  const [payrollSubTab, setPayrollSubTabState] = useState<'staff' | 'members'>(() => {
+  // سه نمای مستقل: حقوق این ماه (عملیات ماهانه)، خلاصه سالانه (مرور و اکسل)، اعضا
+  type PayrollSubTab = 'monthly' | 'annual' | 'members';
+  const [payrollSubTab, setPayrollSubTabState] = useState<PayrollSubTab>(() => {
     try {
       const saved = localStorage.getItem('ayandeh_salary_subtab');
-      if (saved === 'members' || saved === 'staff') return saved;
+      if (saved === 'members' || saved === 'annual' || saved === 'monthly')
+        return saved;
+      // نسخه قبلی فقط staff/members داشت؛ staff یعنی همان ماتریس سالانه،
+      // اما کاربر جدید باید از «حقوق این ماه» شروع کند.
     } catch {}
-    return 'staff';
+    return 'monthly';
   });
 
-  const setPayrollSubTab = (tab: 'staff' | 'members') => {
+  const setPayrollSubTab = (tab: PayrollSubTab) => {
     setPayrollSubTabState(tab);
     try {
       localStorage.setItem('ayandeh_salary_subtab', tab);
@@ -476,39 +482,63 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
     }
   };
 
-  // محاسبه مجموع کل دریافتی هر کارمند در سال
-  const columnGrandTotals: Record<string, number> = {};
-  employees.forEach(emp => {
-    let total = 0;
-    for (let m = 1; m <= 12; m++) {
-      const data = getEmployeeMonthData(emp.id, m as PersianMonthNumber);
-      total += data.totalCell;
-    }
-    columnGrandTotals[emp.id] = total;
-  });
-
-  const totalAllSalariesYear = Object.values(columnGrandTotals).reduce((a, b) => a + b, 0);
+  // خلاصه سالانه: هر کارمند یک ردیف، هر ماه یک ستون (فقط برای مرور و اکسل)
+  const annualSummary = useMemo(() => {
+    const rows = employees.map((emp) => {
+      const months = PERSIAN_MONTHS.map((month) => getEmployeeMonthData(emp.id, month.num));
+      return {
+        emp,
+        months,
+        total: months.reduce((sum, data) => sum + data.totalCell, 0),
+      };
+    });
+    const monthTotals = PERSIAN_MONTHS.map((_, index) =>
+      rows.reduce((sum, row) => sum + row.months[index].totalCell, 0),
+    );
+    return {
+      rows,
+      monthTotals,
+      grandTotal: rows.reduce((sum, row) => sum + row.total, 0),
+    };
+  }, [employees, getEmployeeMonthData]);
 
   return (
     <div className="space-y-6" id="salary-matrix-view">
       
-      {/* Top Segmented Sub-navigation Tabs */}
+      {/* ناوبری سه‌گانه بخش حقوق: عملیات ماهانه، مرور سالانه، اعضا */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs">
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setPayrollSubTab('staff')}
+            onClick={() => setPayrollSubTab('monthly')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-              payrollSubTab === 'staff'
+              payrollSubTab === 'monthly'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50/70'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            <span>حقوق این ماه</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+              payrollSubTab === 'monthly' ? 'bg-emerald-700 text-emerald-50' : 'bg-emerald-100 text-emerald-800'
+            }`}>
+              ثبت و پرداخت
+            </span>
+          </button>
+
+          <button
+            onClick={() => setPayrollSubTab('annual')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+              payrollSubTab === 'annual'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
             <Table2 className="w-4 h-4" />
-            <span>حقوق و دستمزد پرسنل (کارمندان)</span>
+            <span>خلاصه سالانه</span>
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
-              payrollSubTab === 'staff' ? 'bg-slate-800 text-slate-200' : 'bg-slate-200 text-slate-700'
+              payrollSubTab === 'annual' ? 'bg-slate-800 text-slate-200' : 'bg-slate-200 text-slate-700'
             }`}>
-              {toPersianDigits(employees.length)} نفر
+              ۱۲ ماه
             </span>
           </button>
 
@@ -521,7 +551,7 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
             }`}
           >
             <Briefcase className="w-4 h-4" />
-            <span>حقوق نیروی فعال و برداشت اعضا</span>
+            <span>اعضا و نیروی فعال</span>
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
               payrollSubTab === 'members' ? 'bg-indigo-700 text-indigo-100' : 'bg-indigo-100 text-indigo-800'
             }`}>
@@ -555,388 +585,347 @@ export const SalaryMatrixView: React.FC<SalaryMatrixViewProps> = ({
       ) : (
 
         <>
-          {/* Top Header Card */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <div className="bg-emerald-50 border border-emerald-200/80 px-4 py-2 rounded-xl text-xs">
-                <span className="text-emerald-700 block font-medium">جمع کل حقوق‌های سال {selectedYear}:</span>
-                <span className="text-base font-black text-emerald-900">
-                  {formatCurrency(totalAllSalariesYear, currencyMode)}
-                </span>
-              </div>
-
-              {canExport && (
-                <button
-                  onClick={() => {
-                    exportSalaryMatrixToExcel(companyName, selectedYear, employees, salaryMatrix, transactions);
-                    if (onShowToast) onShowToast(`ماتریس حقوق سال مالی ${selectedYear} با موفقیت در قالب اکسل دانلود شد.`);
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
-                  title={`دانلود اکسل ماتریس حقوق سال ${selectedYear}`}
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                  <span>خروجی اکسل ماتریس حقوق</span>
-                </button>
-              )}
-
-              {canEdit && (
-                <button
-                  onClick={onNavigateToEmployees}
-                  className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>تعریف کارمند جدید</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* نوار وضعیت سلامت و تطبیق اسناد با ماتریس حقوق (رفع سردرگمی بین اسناد هزینه و جدول) */}
-          <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-sm border border-slate-800">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                  <span className="font-extrabold text-sm text-white">
-                    پایش یکپارچگی حقوق با دفتر هزینه‌ها (سال {selectedYear})
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
-                    <span>اسناد ثبت‌شده در هزینه‌ها:</span>
-                    <strong className="text-white font-mono">{toPersianDigits(reconciliationStats.voucheredCellsCount)} ماه</strong>
-                    <span className="text-slate-400">({formatCurrency(reconciliationStats.totalVoucheredAmount, currencyMode)})</span>
-                  </span>
-
-                  {reconciliationStats.manualOnlyCellsCount > 0 && (
-                    <span className="flex items-center gap-1.5 bg-amber-950/80 border border-amber-500/40 text-amber-200 px-2 py-0.5 rounded-lg">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                      <span>ثبت مستقیم بدون سند هزینه:</span>
-                      <strong className="font-mono">{toPersianDigits(reconciliationStats.manualOnlyCellsCount)} مورد</strong>
-                      <span>({formatCurrency(reconciliationStats.totalManualOnlyAmount, currencyMode)})</span>
-                    </span>
-                  )}
-
-                  {reconciliationStats.multiVoucherCellsCount > 0 && (
-                    <span className="flex items-center gap-1.5 bg-blue-950/80 border border-blue-500/40 text-blue-200 px-2 py-0.5 rounded-lg">
-                      <Layers className="w-3.5 h-3.5 text-blue-400" />
-                      <span>ماه‌های دارای چند سند (علی‌الحساب/پاداش):</span>
-                      <strong className="font-mono">{toPersianDigits(reconciliationStats.multiVoucherCellsCount)} مورد</strong>
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* دکمه‌های اقدام سریع و رفع مغایرت */}
-              <div className="flex flex-wrap items-center gap-2">
-                {reconciliationStats.manualOnlyCellsCount > 0 && canEdit && (
-                  <button
-                    onClick={() => setIsBulkSyncModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
-                    title="ایجاد اسناد رسمی در هزینه‌ها برای مواردی که فقط در جدول وارد شده‌اند"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>ایجاد خودکار سند هزینه برای {toPersianDigits(reconciliationStats.manualOnlyCellsCount)} مورد فاقد سند</span>
-                  </button>
-                )}
-
-                {reconciliationStats.multiVoucherCellsCount > 0 && (
-                  <button
-                    onClick={() => setIsMultiVoucherModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors cursor-pointer"
-                  >
-                    <Layers className="w-3.5 h-3.5 text-blue-400" />
-                    <span>بررسی اسناد چندگانه</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Spreadsheet Table Container or Empty Notice */}
-          {employees.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-dashed border-slate-300 shadow-xs">
-              <Table2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <h3 className="font-bold text-slate-800 text-base mb-1">
-                هیچ کارمندی برای محاسبه ماتریس حقوق وجود ندارد
-              </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto mb-4 leading-relaxed">
-                ماتریس حقوق بر پایه ستون‌های پرسنل شرکت تشکیل می‌شود. ابتدا کارمندان شرکت را تعریف کنید تا جدول ۱۲ ماهه حقوق، بیمه و پاداش برای آن‌ها فعال گردد.
-              </p>
-              <button
-                onClick={onNavigateToEmployees}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>انتقال به بخش کارمندان و تعریف اولین کارمند</span>
-              </button>
-            </div>
+          {payrollSubTab === 'monthly' ? (
+            <PayrollMonthView
+              employees={employees}
+              salaryMatrix={salaryMatrix}
+              employeeYearPayments={employeeYearPayments}
+              selectedYear={selectedYear}
+              currencyMode={currencyMode}
+              canEdit={canEdit}
+              currentUser={currentUser}
+              onSaveTransaction={onSaveTransaction}
+              onSaveTransactions={onSaveTransactions}
+              onOpenDetails={handleOpenEdit}
+              onNavigateToEmployees={onNavigateToEmployees}
+              onShowToast={onShowToast}
+            />
           ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-              {/* Mobile Swipe Hint */}
-              <div className="md:hidden px-3.5 py-2 bg-blue-50/80 border-b border-blue-100 text-blue-800 text-[11px] font-medium flex items-center justify-between">
-                <span>ماتریس سالانه حقوق پرسنل</span>
-                <span className="text-[10px] bg-blue-200/60 px-2 py-0.5 rounded font-bold">↔️ پیمایش افقی ستون‌ها</span>
+            <div className="space-y-5">
+              {/* هدر خلاصه سالانه */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-slate-900 text-white rounded-xl">
+                      <Table2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-slate-900">
+                        خلاصه سالانه حقوق پرسنل — سال {selectedYear}
+                      </h2>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        فقط برای مرور و خروجی اکسل؛ ثبت و اصلاح هر ماه از تب «حقوق این ماه» انجام می‌شود.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-[11px] text-slate-500">
+                    <span>
+                      جمع کل سال:{' '}
+                      <strong className="text-slate-800 font-mono">
+                        {formatCurrency(annualSummary.grandTotal, currencyMode)}
+                      </strong>
+                    </span>
+                    <span>
+                      پرسنل: <strong className="text-slate-700">{toPersianDigits(employees.length)}</strong>
+                    </span>
+                    <span>
+                      خانه‌های دارای سند:{' '}
+                      <strong className="text-emerald-700">
+                        {toPersianDigits(reconciliationStats.voucheredCellsCount)}
+                      </strong>
+                    </span>
+                    {reconciliationStats.manualOnlyCellsCount > 0 && (
+                      <span className="text-amber-700">
+                        ثبت دستی بدون سند:{' '}
+                        <strong>{toPersianDigits(reconciliationStats.manualOnlyCellsCount)}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {canExport && (
+                    <button
+                      onClick={() => {
+                        exportSalaryMatrixToExcel(companyName, selectedYear, employees, salaryMatrix, transactions);
+                        if (onShowToast) onShowToast(`ماتریس حقوق سال مالی ${selectedYear} با موفقیت در قالب اکسل دانلود شد.`);
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
+                      title={`دانلود اکسل ماتریس حقوق سال ${selectedYear}`}
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      <span>خروجی اکسل ماتریس حقوق</span>
+                    </button>
+                  )}
+
+                  {canEdit && (
+                    <button
+                      onClick={() => setPayrollSubTab('monthly')}
+                      className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Calendar className="w-4 h-4" />
+                      <span>رفتن به حقوق این ماه</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="overflow-x-auto relative">
-                <table className="w-full text-xs text-right border-collapse" id="salary-table">
-                  <thead>
-                    <tr className="bg-slate-900 text-white font-bold border-b border-slate-800">
-                      <th className="p-3.5 w-24 sm:w-28 text-center border-l border-slate-800 sticky right-0 z-20 bg-slate-900 shadow-xs">
-                        ماه / کارمندان
-                      </th>
-                      {employees.map(emp => (
-                        <th 
-                          key={emp.id} 
-                          onClick={() => setSelectedPersonForHistory({
-                            id: emp.id,
-                            name: emp.name,
-                            type: 'employee',
-                            role: emp.role,
-                            baseSalary: emp.baseSalary,
-                            hasInsurance: emp.hasInsurance,
-                            phone: emp.phone,
-                            nationalId: emp.nationalId,
-                            notes: emp.notes,
-                          })}
-                          className="p-3.5 text-center border-l border-slate-800 min-w-[150px] sm:min-w-[170px] cursor-pointer group hover:bg-slate-800 transition-colors"
-                          title={`کلیک برای مشاهده کامل تاریخچه دریافتی و پرداختی‌های ${emp.name}`}
-                        >
-                          <div className="flex flex-col items-center">
-                            <span className="font-extrabold text-sm text-white group-hover:text-blue-300 transition-colors underline decoration-dotted decoration-slate-600 underline-offset-4">
-                              {emp.name}
-                            </span>
-                            <span className="text-[10px] sm:text-[11px] font-normal text-slate-400">
-                              {emp.hasInsurance ? '(دارای بیمه)' : '(بدون بیمه)'} • {emp.role}
-                            </span>
-                            {emp.baseSalary > 0 && (
-                              <span className="text-[9px] text-emerald-400 font-mono mt-0.5">
-                                پایه: {formatCurrency(emp.baseSalary, currencyMode)}
-                              </span>
-                            )}
-                            <span className="text-[9px] text-blue-300 mt-1 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-950/80 px-2 py-0.5 rounded">
-                              مشاهده تاریخچه مالی 🔍
-                            </span>
-                          </div>
-                        </th>
-                      ))}
+              {/* ابزارهای پیشرفته و رفع مغایرت — به‌صورت تاشو تا صفحه شلوغ نشود */}
+              <details className="bg-white rounded-2xl border border-slate-200 shadow-xs group">
+                <summary className="list-none cursor-pointer select-none p-4 flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-extrabold text-slate-800">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>ابزارهای پیشرفته و رفع مغایرت</span>
+                    {(reconciliationStats.manualOnlyCellsCount > 0 ||
+                      reconciliationStats.multiVoucherCellsCount > 0) && (
+                      <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full">
+                        {toPersianDigits(
+                          reconciliationStats.manualOnlyCellsCount +
+                            reconciliationStats.multiVoucherCellsCount,
+                        )}{' '}
+                        مورد نیازمند بررسی
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-400">برای باز شدن کلیک کنید</span>
+                </summary>
 
-                      <th className="p-3.5 w-32 sm:w-36 text-center bg-slate-950 font-extrabold text-emerald-400">
-                        جمع کل ماه
-                      </th>
-                      <th className="p-3.5 w-28 sm:w-32 text-center bg-slate-950 font-medium text-slate-300">
-                        وضعیت اسناد ماه
-                      </th>
-                    </tr>
-                  </thead>
+                <div className="px-4 pb-4 pt-3 border-t border-slate-100 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                    <span className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                      اسناد ثبت‌شده:{' '}
+                      <strong className="text-slate-800">
+                        {toPersianDigits(reconciliationStats.voucheredCellsCount)} خانه
+                      </strong>
+                      <span className="text-slate-400">
+                        ({formatCurrency(reconciliationStats.totalVoucheredAmount, currencyMode)})
+                      </span>
+                    </span>
 
-                  <tbody>
-                    {PERSIAN_MONTHS.map((month, idx) => {
-                      let monthTotal = 0;
-                      const isEven = idx % 2 === 0;
+                    {reconciliationStats.manualOnlyCellsCount > 0 && (
+                      <span className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-2.5 py-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                        ثبت مستقیم بدون سند:{' '}
+                        <strong>{toPersianDigits(reconciliationStats.manualOnlyCellsCount)} مورد</strong>
+                        <span className="text-amber-700">
+                          ({formatCurrency(reconciliationStats.totalManualOnlyAmount, currencyMode)})
+                        </span>
+                      </span>
+                    )}
 
-                      // بررسی وضعیت اسناد کارمندان در این ماه
-                      const monthEmpStatuses = employees.map(emp => getEmployeeMonthData(emp.id, month.num));
-                      const activeEmps = monthEmpStatuses.filter(s => s.totalCell > 0);
-                      const fullyVouchered = activeEmps.length > 0 && activeEmps.every(s => s.hasTransactions);
-                      const missingCount = activeEmps.filter(s => !s.hasTransactions).length;
+                    {reconciliationStats.multiVoucherCellsCount > 0 && (
+                      <span className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-900 rounded-lg px-2.5 py-1.5">
+                        <Layers className="w-3.5 h-3.5 text-blue-600" />
+                        ماه‌های دارای چند سند:{' '}
+                        <strong>{toPersianDigits(reconciliationStats.multiVoucherCellsCount)} مورد</strong>
+                      </span>
+                    )}
+                  </div>
 
-                      return (
-                        <tr 
-                          key={month.num} 
-                          className={`border-b border-slate-200 hover:bg-blue-50/20 transition-colors ${
-                            isEven ? 'bg-white' : 'bg-slate-50/50'
-                          }`}
-                        >
-                          {/* Month Name Column - Sticky on Right */}
-                          <td className="p-3 font-extrabold text-slate-900 text-center border-l border-slate-200 sticky right-0 z-10 bg-slate-100/95 shadow-xs">
-                            <div className="font-bold text-slate-900">{month.name}</div>
-                            <span className="text-[9px] text-slate-500 font-normal">کارکرد ماه {month.num}</span>
-                          </td>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {reconciliationStats.manualOnlyCellsCount > 0 && canEdit && (
+                      <button
+                        onClick={() => setIsBulkSyncModalOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+                        title="ایجاد اسناد رسمی در هزینه‌ها برای مواردی که فقط در جدول وارد شده‌اند"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>
+                          ایجاد سند هزینه برای {toPersianDigits(reconciliationStats.manualOnlyCellsCount)} مورد فاقد سند
+                        </span>
+                      </button>
+                    )}
 
-                          {/* Employee Cells */}
-                          {employees.map(emp => {
-                            const empData = getEmployeeMonthData(emp.id, month.num);
-                            const amt = empData.amt;
-                            const bonus = empData.bonus;
-                            const totalCell = empData.totalCell;
-                            monthTotal += totalCell;
+                    {reconciliationStats.multiVoucherCellsCount > 0 && (
+                      <button
+                        onClick={() => setIsMultiVoucherModalOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold rounded-xl border border-slate-700 transition-colors cursor-pointer"
+                      >
+                        <Layers className="w-3.5 h-3.5 text-blue-400" />
+                        <span>بررسی اسناد چندگانه</span>
+                      </button>
+                    )}
 
-                            // برچسب‌ها و سبک‌های بصری متناسب با اکسل شرکت
-                            let bgCustom = '';
-                            if (empData.colorTag) {
-                              bgCustom = empData.colorTag;
-                            } else if (empData.status === 'pending' || totalCell === 0) {
-                              bgCustom = 'bg-rose-50/60 text-rose-700';
-                            } else if (amt >= 500000000) {
-                              bgCustom = 'bg-emerald-100 text-emerald-900 font-bold';
-                            }
+                    {reconciliationStats.manualOnlyCellsCount === 0 &&
+                      reconciliationStats.multiVoucherCellsCount === 0 && (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          همهٔ خانه‌ها با اسناد هزینه هم‌خوان هستند.
+                        </span>
+                      )}
+                  </div>
+                </div>
+              </details>
 
-                            return (
-                              <td 
-                                key={emp.id} 
-                                onClick={() => handleOpenEdit(emp.id, month.num)}
-                                className={`p-2 sm:p-2.5 text-center border-l border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-500 hover:ring-inset transition-all ${bgCustom}`}
-                                title={
-                                  empData.hasTransactions 
-                                    ? `دارای ${toPersianDigits(empData.transactionsCount)} سند مالی در دفتر هزینه‌ها (کلیک برای مشاهده یا ویرایش)`
-                                    : (empData.amt > 0 ? 'ثبت مستقیم در ماتریس (فاقد سند هزینه - برای ثبت سند کلیک کنید)' : 'برای ثبت حقوق کلیک کنید')
-                                }
-                              >
-                                {totalCell === 0 ? (
-                                  <div className="py-2 text-slate-300 text-center hover:text-slate-500">
-                                    <span className="text-[11px]">۰</span>
-                                  </div>
-                                ) : (
-                                  <div className="flex flex-col items-center justify-center gap-1">
-                                    {/* مبلغ کل دریافتی ماه */}
-                                    <span className="font-black text-slate-900 text-xs sm:text-[13px] flex items-center justify-center gap-1">
-                                      {formatCurrency(amt, currencyMode)}
-                                    </span>
+              {/* جدول خلاصه ۱۲ماهه */}
+              {employees.length === 0 ? (
+                <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-dashed border-slate-300 shadow-xs">
+                  <Table2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <h3 className="font-bold text-slate-800 text-base mb-1">
+                    هیچ کارمندی برای محاسبه ماتریس حقوق وجود ندارد
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto mb-4 leading-relaxed">
+                    ابتدا کارمندان شرکت را تعریف کنید تا جدول ۱۲ماهه حقوق، پاداش و اسناد برای آن‌ها فعال شود.
+                  </p>
+                  <button
+                    onClick={onNavigateToEmployees}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>انتقال به بخش کارمندان و تعریف اولین کارمند</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                  <div className="p-3.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Table2 className="w-4 h-4 text-slate-400" />
+                      ماتریس ۱۲ماهه — مبالغ به {currencyMode === 'toman' ? 'تومان' : 'ریال'}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      کلیک روی نام کارمند = تاریخچهٔ کامل مالی
+                    </span>
+                  </div>
 
-                                    {/* برچسب عیدی یا پاداش */}
-                                    {bonus > 0 && (
-                                      <span className="text-[9px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-1.5 py-0.2 rounded">
-                                        پاداش: {formatCurrency(bonus, currencyMode)}
-                                      </span>
-                                    )}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px] text-right border-collapse" id="salary-table">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                          <th className="p-2.5 text-right sticky right-0 bg-slate-50 z-20 min-w-[150px] border-l border-slate-200">
+                            کارمند
+                          </th>
+                          {PERSIAN_MONTHS.map((month) => (
+                            <th
+                              key={month.num}
+                              className="p-2 text-center min-w-[92px] border-l border-slate-200 font-bold"
+                            >
+                              {month.name}
+                            </th>
+                          ))}
+                          <th className="p-2.5 text-center bg-slate-100 min-w-[110px] font-extrabold">
+                            جمع سال
+                          </th>
+                        </tr>
+                      </thead>
 
-                                    {/* شفافیت منبع داده: سند مالی یا ثبت دستی */}
-                                    {empData.hasTransactions ? (
-                                      <div className="flex flex-col items-center gap-0.5 mt-0.5">
-                                        <span className="text-[9px] text-emerald-900 bg-emerald-100 border border-emerald-300 px-1.5 py-0.2 rounded-full font-bold flex items-center gap-1 shadow-2xs">
-                                          <FileCheck className="w-2.5 h-2.5 text-emerald-600" />
-                                          <span>سند هزینه ({toPersianDigits(empData.transactionsCount)})</span>
-                                        </span>
-                                        {/* اگر پرداخت در ماهی غیر از ماه کارکرد باشد، مثلاً تیر برای خرداد */}
-                                        {empData.transactions.some(t => (t.salaryMonth || t.month) !== t.month) && (
-                                          <span className="text-[8px] text-blue-900 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded font-semibold" title="تاریخ وقوع پرداخت">
-                                            پرداخت: {empData.transactions.map(t => `${toPersianDigits(t.day || 1)} ${PERSIAN_MONTHS.find(m => m.num === t.month)?.name}`).join('، ')}
-                                          </span>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <span className="text-[9px] text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-medium mt-0.5" title="این مبلغ فقط در جدول ثبت شده و هنوز سند هزینه ندارد">
-                                        ثبت دستی (فاقد سند)
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
-                            );
-                          })}
-
-                          {/* Month Total */}
-                          <td className="p-3 text-center font-extrabold text-slate-900 bg-emerald-50/50 border-l border-slate-200">
-                            {formatCurrency(monthTotal, currencyMode)}
-                          </td>
-
-                          {/* وضعیت و عملیات سند این ماه */}
-                          <td className="p-2 text-center">
-                            {monthTotal === 0 ? (
-                              <span className="text-[10px] text-slate-400">بدون کارکرد</span>
-                            ) : fullyVouchered ? (
-                              <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/70 border border-emerald-200 px-2 py-1 rounded-lg">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                <span>دارای سند هزینه</span>
-                              </div>
-                            ) : missingCount > 0 ? (
+                      <tbody>
+                        {annualSummary.rows.map((row) => (
+                          <tr
+                            key={row.emp.id}
+                            className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors"
+                          >
+                            <td className="p-2.5 sticky right-0 bg-white z-10 border-l border-slate-100">
                               <button
-                                onClick={async () => {
-                                  if(!onSaveTransactions)return;
-                                  const batch:FinancialTransaction[]=[];
-                                  // ثبت سند برای موارد فاقد سند در این ماه
-                                  activeEmps.filter(s => !s.hasTransactions).forEach((s, i) => {
-                                    const emp = employees.find(e => e.id === s.cell?.employeeId);
-                                    if (!emp) return;
-                                    const pMonth = month.num < 12 ? (month.num + 1) as PersianMonthNumber : 12;
-                                    const pDay = month.num < 12 ? 2 : 29;
-                                    const payMonthName = PERSIAN_MONTHS.find(m => m.num === pMonth)?.name;
-                                    const dateString = `${selectedYear}/${String(pMonth).padStart(2, '0')}/${String(pDay).padStart(2, '0')}`;
-                                    const regDt = getCurrentJalaliDateTime().fullString;
-
-                                    if (onSaveTransaction) {
-                                      const tx: FinancialTransaction = {
-                                        id: `tx-sal-${emp.id}-${selectedYear}-${month.num}-${Date.now()}-${i}`,
-                                        type: 'expense',
-                                        category: 'salary',
-                                        amount: s.amt,
-                                        year: selectedYear,
-                                        month: pMonth,
-                                        day: pDay,
-                                        dateString,
-                                        salaryMonth: month.num,
-                                        salaryYear: selectedYear,
-                                        title: month.num !== pMonth
-                                          ? `حقوق ${emp.name} - کارکرد ${month.name} (پرداخت در ${payMonthName})`
-                                          : `حقوق ${emp.name} - ماه ${month.name}`,
-                                        description: `پرداخت حقوق کارمند ${emp.name} بابت کارکرد ماه ${month.name} سال ${selectedYear}`,
-                                        recipientOrPayer: emp.name,
-                                        relatedEmployeeId: emp.id,
-                                        trackingCode: `SAL-${selectedYear}-${String(month.num).padStart(2, '0')}-${emp.id.slice(-4)}`,
-                                        createdBy: currentUser?.email || 'admin@ayandeh.com',
-                                        createdByName: currentUser?.fullName || 'مسئول مالی',
-                                        createdAt: regDt,
-                                      };
-                                      batch.push(tx);
-                                    }
-                                  });
-                                  if(!(await onSaveTransactions(batch)))return;
-                                  if (onShowToast) onShowToast(`اسناد هزینه برای ${toPersianDigits(missingCount)} نفر در ماه ${month.name} ثبت گردید.`);
-                                }}
-                                className="text-[10px] px-2 py-1 rounded-lg font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-colors cursor-pointer"
-                                title="ثبت سند هزینه فقط برای پرسنلی که هنوز سند هزینه ندارند"
+                                type="button"
+                                onClick={() =>
+                                  setSelectedPersonForHistory({
+                                    id: row.emp.id,
+                                    name: row.emp.name,
+                                    type: 'employee',
+                                    role: row.emp.role,
+                                    baseSalary: row.emp.baseSalary,
+                                    hasInsurance: row.emp.hasInsurance,
+                                    phone: row.emp.phone,
+                                    nationalId: row.emp.nationalId,
+                                    notes: row.emp.notes,
+                                  })
+                                }
+                                className="text-right cursor-pointer group"
+                                title={`مشاهده تاریخچه مالی ${row.emp.name}`}
                               >
-                                ثبت سند ({toPersianDigits(missingCount)} نفر)
+                                <span className="block font-extrabold text-slate-900 group-hover:text-indigo-700 group-hover:underline">
+                                  {row.emp.name}
+                                </span>
+                                <span className="block text-[9px] text-slate-500 font-normal mt-0.5">
+                                  {row.emp.role}
+                                </span>
                               </button>
-                            ) : null}
+                            </td>
+
+                            {row.months.map((data, index) => {
+                              const amount = data.totalCell;
+                              const tooltip = data.hasTransactions
+                                ? `${toPersianDigits(data.transactionsCount)} سند هزینه — ${formatCurrency(amount, currencyMode)}`
+                                : data.isManualOnly
+                                  ? `ثبت دستی بدون سند — ${formatCurrency(amount, currencyMode)}`
+                                  : 'بدون مبلغ';
+                              return (
+                                <td
+                                  key={index}
+                                  className={`p-2 text-center border-l border-slate-100 ${
+                                    data.hasTransactions
+                                      ? 'bg-emerald-50/40'
+                                      : data.isManualOnly
+                                        ? 'bg-amber-50/60'
+                                        : ''
+                                  }`}
+                                  title={tooltip}
+                                >
+                                  <span
+                                    className={`font-mono ${
+                                      amount > 0 ? 'text-slate-800 font-bold' : 'text-slate-300'
+                                    }`}
+                                  >
+                                    {amount > 0 ? formatNumber(amount) : '—'}
+                                  </span>
+                                  <div className="flex items-center justify-center gap-0.5 mt-0.5 h-3">
+                                    {data.hasTransactions && (
+                                      <FileCheck className="w-2.5 h-2.5 text-emerald-600" />
+                                    )}
+                                    {data.isManualOnly && (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                                    )}
+                                    {data.bonus > 0 && (
+                                      <span className="text-[8px] text-amber-700 font-bold">پاداش</span>
+                                    )}
+                                  </div>
+                                </td>
+                              );
+                            })}
+
+                            <td className="p-2.5 text-center font-mono font-black text-slate-900 bg-slate-50/70">
+                              {formatNumber(row.total)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+
+                      <tfoot>
+                        <tr className="bg-slate-900 text-white font-bold">
+                          <td className="p-2.5 text-right sticky right-0 bg-slate-900 z-20 border-l border-slate-700">
+                            جمع ماه
+                          </td>
+                          {annualSummary.monthTotals.map((total, index) => (
+                            <td
+                              key={index}
+                              className="p-2 text-center font-mono text-[10px] text-slate-200 border-l border-slate-800"
+                            >
+                              {formatNumber(total)}
+                            </td>
+                          ))}
+                          <td className="p-2.5 text-center font-mono text-emerald-300 bg-slate-950">
+                            {formatNumber(annualSummary.grandTotal)}
                           </td>
                         </tr>
-                      );
-                    })}
+                      </tfoot>
+                    </table>
+                  </div>
 
-                    {/* Total Summary Row */}
-                    <tr className="bg-slate-800 text-white font-extrabold border-t-2 border-slate-900">
-                      <td className="p-3.5 text-center border-l border-slate-700 bg-slate-900 sticky right-0 z-10 shadow-xs">
-                        جمع کل سال
-                      </td>
-                      {employees.map(emp => (
-                        <td 
-                          key={emp.id} 
-                          onClick={() => setSelectedPersonForHistory({
-                            id: emp.id,
-                            name: emp.name,
-                            type: 'employee',
-                            role: emp.role,
-                            baseSalary: emp.baseSalary,
-                            hasInsurance: emp.hasInsurance,
-                            phone: emp.phone,
-                            nationalId: emp.nationalId,
-                            notes: emp.notes,
-                          })}
-                          className="p-3.5 text-center border-l border-slate-700 text-emerald-300 cursor-pointer hover:bg-slate-700/80 transition-colors group"
-                          title={`کلیک برای مشاهده کامل تاریخچه دریافتی و پرداختی‌های ${emp.name}`}
-                        >
-                          <span className="block text-sm font-black group-hover:text-white transition-colors">
-                            {formatCurrency(columnGrandTotals[emp.id] || 0, currencyMode)}
-                          </span>
-                          <span className="text-[10px] text-slate-300 font-normal group-hover:underline">کل دریافتی سال 🔍</span>
-                        </td>
-                      ))}
-                      <td className="p-3.5 text-center bg-slate-950 text-emerald-400 text-sm font-black">
-                        {formatCurrency(totalAllSalariesYear, currencyMode)}
-                      </td>
-                      <td className="p-3.5 text-center bg-slate-950 text-slate-400 text-[11px]">
-                        مجموع شرکت
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+                  <div className="p-3 bg-slate-50/70 border-t border-slate-100 text-[10px] text-slate-500 leading-relaxed flex items-start gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                    <span>
+                      عدد هر خانه = جمع اسناد هزینهٔ همان ماه + پاداش. نشان سبز یعنی سند رسمی دارد؛
+                      نقطهٔ زرد یعنی فقط در جدول ثبت شده و سند ندارد. برای ثبت یا اصلاح، از تب
+                      «حقوق این ماه» استفاده کنید.
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
+
 
           {/* Edit Cell Modal: با تفکیک کامل اسناد هزینه و جلوگیری از ثبت تکراری */}
           {editingCell && (() => {
