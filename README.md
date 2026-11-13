@@ -81,7 +81,7 @@ The interface is fully right-to-left, uses Persian digits and Jalali dates, and 
 - **Atomic multi-record writes** with row versioning and optimistic concurrency; stale updates return a conflict instead of silently overwriting data.
 - **Recent-auth requirement** for sensitive actions such as backup downloads and restores.
 - **Rate limiting, origin checks, security headers**, and a strict 3 MB restore limit.
-- **229 automated tests** covering SQL/RLS behavior with PGlite, HTTP flows, financial math, payroll, security regressions, and the Vercel entry point.
+- **230+ automated tests** covering SQL/RLS behavior with PGlite, HTTP flows, financial math, payroll, security regressions, and the Vercel entry point.
 
 ---
 
@@ -298,6 +298,9 @@ No paid Gemini calls or live Supabase connections are made during tests.
 ├── supabase-*.sql               # Schema, hardening, and access-management SQL
 ├── tests/                       # Node test suite with PGlite
 ├── docs/                        # Security design and rollout documents
+├── assets/                      # Brand assets and Open Graph / social preview
+├── CONTRIBUTING.md              # Contribution workflow and PR checklist
+├── SECURITY.md                  # Vulnerability disclosure and hardening notes
 └── vercel.json                  # Build and rewrite configuration
 ```
 
@@ -316,13 +319,13 @@ No paid Gemini calls or live Supabase connections are made during tests.
 
 ## Contributing
 
-Contributions, bug reports, and security reviews are welcome.
+Contributions, bug reports, and security reviews are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
 1. Fork the repository and create a topic branch.
 2. Keep changes focused and follow the existing TypeScript/React style.
 3. Run `npm run lint` and `npm run test:security` before opening a pull request.
 4. Describe the problem, the approach, and any security implications in the PR.
-5. **Do not** open a public issue for a vulnerability. Use GitHub's private security advisory instead.
+5. **Do not** open a public issue for a vulnerability. Follow [SECURITY.md](SECURITY.md) and use GitHub's private security advisory instead.
 
 Please avoid committing real financial data, customer information, `.env` files, or production keys. The repository intentionally ships only synthetic fixtures.
 

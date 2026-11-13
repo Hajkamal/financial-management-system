@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Financial Management System — Social Preview</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    width: 1280px;
+    height: 640px;
+    overflow: hidden;
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    background: #060e14;
+    color: #e8f4f2;
+  }
+  #card {
+    position: relative;
+    width: 1280px;
+    height: 640px;
+    overflow: hidden;
+    background:
+      radial-gradient(900px 520px at 78% 18%, rgba(45, 212, 191, 0.18), transparent 62%),
+      radial-gradient(700px 500px at 8% 92%, rgba(251, 191, 36, 0.10), transparent 60%),
+      linear-gradient(135deg, #071018 0%, #0a1b22 52%, #07151a 100%);
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(148, 210, 205, 0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 210, 205, 0.07) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: linear-gradient(180deg, rgba(0,0,0,0.9), rgba(0,0,0,0.35));
+  }
+  .glow {
+    position: absolute;
+    width: 420px; height: 420px; border-radius: 50%;
+    border: 1px solid rgba(45, 212, 191, 0.20);
+    right: -80px; top: -120px;
+    box-shadow: 0 0 120px rgba(45, 212, 191, 0.10) inset;
+  }
+  .glow.two { width: 620px; height: 620px; right: -180px; top: -220px; border-color: rgba(45,212,191,0.10); }
+
+  .topbar {
+    position: absolute; top: 46px; left: 80px; right: 80px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .mark {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: linear-gradient(135deg, #2dd4bf, #0f766e);
+    display: grid; place-items: center;
+    box-shadow: 0 8px 24px rgba(45, 212, 191, 0.25);
+  }
+  .mark svg { width: 26px; height: 26px; }
+  .brand-text { font-size: 15px; letter-spacing: 3.2px; font-weight: 700; color: #cfe9e5; }
+  .tag {
+    font-size: 13px; letter-spacing: 2.4px; font-weight: 600;
+    color: #8fd8cf; border: 1px solid rgba(45,212,191,0.35);
+    padding: 9px 16px; border-radius: 999px;
+    background: rgba(45, 212, 191, 0.07);
+  }
+
+  .content { position: absolute; left: 80px; top: 146px; width: 690px; }
+  .eyebrow {
+    font-size: 15px; font-weight: 700; letter-spacing: 3.6px;
+    color: #5eead4; margin-bottom: 18px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 68px;
+    line-height: 1.02;
+    letter-spacing: -1.6px;
+    font-weight: 800;
+    color: #f4fffd;
+  }
+  h1 .accent { color: #5eead4; }
+  .fa {
+    margin-top: 18px;
+    font-size: 34px;
+    font-weight: 700;
+    color: #f7d78a;
+    direction: rtl;
+    text-align: left;
+    font-family: Tahoma, "Segoe UI", sans-serif;
+  }
+  .sub {
+    margin-top: 16px;
+    font-size: 18px;
+    line-height: 1.55;
+    color: #9fb9b6;
+    max-width: 620px;
+  }
+
+  .chips { position: absolute; left: 80px; bottom: 56px; display: flex; gap: 10px; }
+  .chip {
+    font-size: 14px; font-weight: 600; color: #b9dcd7;
+    padding: 9px 15px; border-radius: 9px;
+    background: rgba(255,255,255,0.045);
+    border: 1px solid rgba(255,255,255,0.10);
+  }
+  .chip.teal { color: #5eead4; border-color: rgba(45,212,191,0.30); background: rgba(45,212,191,0.08); }
+
+  .panel {
+    position: absolute;
+    right: 72px; top: 152px;
+    width: 402px;
+    padding: 24px 24px 20px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(14, 35, 42, 0.94), rgba(9, 24, 30, 0.94));
+    border: 1px solid rgba(94, 234, 212, 0.18);
+    box-shadow: 0 30px 70px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.02) inset;
+    transform: rotate(-1.4deg);
+  }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; }
+  .panel-title { font-size: 13px; letter-spacing: 1.6px; color: #7fa9a4; font-weight: 700; }
+  .live { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #5eead4; font-weight: 700; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #2dd4bf; box-shadow: 0 0 10px #2dd4bf; }
+  .amount { margin-top: 14px; font-size: 34px; font-weight: 800; letter-spacing: -0.5px; color: #f2fffc; }
+  .amount small { font-size: 14px; font-weight: 600; color: #7fa9a4; letter-spacing: 0; }
+  .bars {
+    margin-top: 26px; height: 150px;
+    display: flex; align-items: flex-end; gap: 13px;
+  }
+  .bar { flex: 1; height: 100%; border-radius: 7px 7px 3px 3px; background: rgba(45,212,191,0.16); position: relative; }
+  .bar span {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    border-radius: 7px 7px 3px 3px;
+    background: linear-gradient(180deg, #5eead4, #0f766e);
+  }
+  .bar:nth-child(1) span { height: 44%; }
+  .bar:nth-child(2) span { height: 63%; }
+  .bar:nth-child(3) span { height: 52%; }
+  .bar:nth-child(4) span { height: 78%; background: linear-gradient(180deg, #f7d78a, #b7791f); }
+  .bar:nth-child(5) span { height: 68%; }
+  .bar:nth-child(6) span { height: 90%; }
+  .axis { display: flex; justify-content: space-between; margin-top: 10px; font-size: 11px; color: #5f807c; letter-spacing: 1px; }
+
+  .badge {
+    position: absolute; right: 80px; bottom: 54px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 18px; border-radius: 12px;
+    background: rgba(8, 20, 25, 0.88);
+    border: 1px solid rgba(251, 191, 36, 0.22);
+    color: #f7d78a; font-size: 13px; font-weight: 700; letter-spacing: 0.4px;
+    transform: rotate(1.4deg);
+  }
+  .badge svg { width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+  <div id="card">
+    <div class="grid"></div>
+    <div class="glow"></div>
+    <div class="glow two"></div>
+
+    <div class="topbar">
+      <div class="brand">
+        <div class="mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#04211d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 15v-4"/><path d="M12 15V8"/><path d="M16 15v-6"/><path d="M20 15V6"/>
+          </svg>
+        </div>
+        <div class="brand-text">FINANCIAL MANAGEMENT</div>
+      </div>
+      <div class="tag">OPEN SOURCE · MIT</div>
+    </div>
+
+    <div class="content">
+      <div class="eyebrow">PERSIAN-FIRST FINANCE PLATFORM</div>
+      <h1>Financial<br/><span class="accent">Management</span><br/>System</h1>
+      <div class="fa">سامانه مدیریت مالی</div>
+      <div class="sub">Double-entry accounting, payroll, VAT, loans and Jalali fiscal years — with encrypted backups and AI-assisted reporting.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">OPERATING RESULT</div>
+        <div class="live"><span class="dot"></span>LIVE</div>
+      </div>
+      <div class="amount">۱۲,۴۸۰,۰۰۰ <small>IRR</small></div>
+      <div class="bars">
+        <div class="bar"><span></span></div>
+        <div class="bar"><span></span></div>
+        <div class="bar"><span></span></div>
+        <div class="bar"><span></span></div>
+        <div class="bar"><span></span></div>
+        <div class="bar"><span></span></div>
+      </div>
+      <div class="axis"><span>FAR</span><span>ORD</span><span>KHO</span><span>TIR</span><span>MOR</span><span>SHA</span></div>
+    </div>
+
+    <div class="badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>
+      </svg>
+      AES-256-GCM encrypted backups
+    </div>
+
+    <div class="chips">
+      <div class="chip teal">React 19</div>
+      <div class="chip">TypeScript</div>
+      <div class="chip">Supabase</div>
+      <div class="chip">PostgreSQL</div>
+      <div class="chip">Vercel</div>
+    </div>
+  </div>
+</body>
+</html>
